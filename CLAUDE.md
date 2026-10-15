@@ -47,7 +47,9 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Data audit (synthetic diversity, train→test near-dups, subject shortcut) | `make data-audit` → `results/data_audit/report.md` |
 | Bundle splits for the GPU PC | `make export-splits` → `datasets/export/groundedtriage-splits-<test hash>.tar.gz` |
 | Regenerate synthetic meeting emails (Groq; cached, resumable) | `make synthetic-meetings` |
-| Evaluate | not implemented yet (Phase 2/7) |
+| Install the SCRIBE baseline extra (torch + transformers) | `make setup-baseline` |
+| SCRIBE baseline CLI (own process; ~2 GB of weights download on first run) | `make baseline ARGS="classify --split test --limit 10"` / `ARGS="classify --csv ../datasets/sample_emails.csv"` / `ARGS="draft --csv ../datasets/sample_emails.csv --limit 2"` |
+| Evaluate | not implemented yet (P2.3/P7) |
 
 ## 3. Status board
 
@@ -160,10 +162,18 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `train_urgency.parquet` (16,260 uncapped labelled train rows) for the urgency model;
   - `docs/model_artifacts.md`: class-weighted CE for the deep tier, val macro-F1 checkpoint selection for both models;
   - `make data-audit` → `results/data_audit/` (synthetic samples and diversity, train→test near-duplicates, subject-shortcut check).
-  - Commit: see `git log --grep "P2.1g"` (hash backfilled next commit).
+  - Commit `e710c9f`.
+- P2.2 SCRIBE baseline (`ml-service/baseline/`, optional `[baseline]` extra, its own CLI):
+  - regex rules for Spam and Meeting Scheduling, combined by noisy-OR and accepted at ≥ 0.95;
+  - BART-MNLI zero-shot fallback over the `taxonomy.yaml` descriptions;
+  - twitter-roberta sentiment → −1/0/+1 → urgency;
+  - ungrounded draft→refine via gpt-oss-120b;
+  - shared `app/interfaces.py` (`TicketClassifier`, `ReplyDrafter`, `CategoryPrediction`, `DraftResult`).
+  - Slow tests pass end to end on 10 sample emails (classify and draft).
+  - Commit: see `git log --grep "P2.2"` (hash backfilled next commit).
 
 ### In progress
-- none. P2.1 is complete (incl. P2.1g). Next is P2.2 (SCRIBE baseline). P2.3 waits on the near-duplicate leakage decision (see Blocked).
+- none. P2.2 is done. P2.3 (baseline evaluation on test) waits on the near-duplicate leakage decision (see Blocked), because that decision may change the test split.
   - Downloaded `Tobi-Bueck/customer-support-tickets` (HF, CC-BY-NC-4.0) to `datasets/raw/tobi_bueck/train.parquet` (gitignored).
   - Profile of the English rows (28,261 of 61,765):
     - only 10 support queues; Tech/Product/IT/Outage queues total about 17.9k;
@@ -174,7 +184,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
     - the text is LLM-generated and the queue labels are weakly tied to content.
 
 ### To do
-- P2.2 SCRIBE baseline
 - P2.3 Baseline evaluation snapshot
 - P3.1 Fast tier
 - P3.2 Deep-tier inference loader (no training)
@@ -298,6 +307,14 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Synthetic diversity: 0 exact duplicate bodies, 0 near-duplicate pairs within the 400 rows, 316 unique subjects (172 exact duplicate-subject pairs). The top subject opening is "request to" (25 rows).
   - **Leakage:** 436 of 3,774 test rows (11.6%) have a near-duplicate in the training pool (capped train ∪ train_urgency). That's Spam 19.6%, Billing 14.0%, Feature Request 14.2%, Technical Issue 10.6%, General Inquiry 9.3%, synthetic Meeting 0%. The nearest neighbour is always the same category. These are genuine paraphrases in Tobi-Bueck (LLM-generated variants of one ticket). With 1–2-gram TF-IDF, 93 rows are above 0.9 and 373 above 0.8. The splits are unchanged pending Arya's decision.
   - **Shortcut:** TF-IDF+LR on val gives Meeting Scheduling F1 0.99 from the subject alone, and 1.00 from the body alone or the full text. The class is trivially separable from either field, so neutralising subjects wouldn't make it harder. 202 real val tickets mention a meeting word, and none were predicted Meeting. Spam is also near 1.0 (subject 0.95). Model macro-F1 on val: subject-only 0.72, body-only 0.82, full text 0.82.
+- 2026-10-15 (P2.2): SCRIBE baseline design:
+  - **Rules:** each regex cue has a weight. A category's confidence is the noisy-OR `1 − Π(1 − w)` of its matched cues, and a decision is accepted only at ≥ 0.95 (SCRIBE's fixed cutoff). One strong cue (pharma/casino, advance-fee, weight 0.95) is enough; weak cues (Zoom, "click here") must co-occur. The rules cover only Spam and Meeting Scheduling, per the taxonomy decision. The cue lists are generic vocabulary, written before any evaluation run and **not tuned on val/test**. The noisy-OR scoring is our interpretation of "regex rules with a fixed ~95% cutoff".
+  - **Zero-shot:** `facebook/bart-large-mnli`, hypothesis `"This email is {}."` over the six `taxonomy.yaml` descriptions (single-label softmax). Input is `model_input(subject, body)`, the same text the other models see. Long inputs are truncated by the pipeline.
+  - **Sentiment:** `cardiffnlp/twitter-roberta-base-sentiment-latest` → −1/0/+1 → urgency high/medium/low (SCRIBE prioritises by sentiment). This gives the baseline urgency predictions for P7, compared on low/medium/high.
+  - **Draft:** two gpt-oss-120b calls (draft, then refine), temperature 0, no retrieval. The prompts are in `baseline/scribe.py`.
+  - The baseline sits behind `app/interfaces.py` (`TicketClassifier.classify(list[TicketText]) → list[CategoryPrediction]`, `ReplyDrafter.draft → DraftResult`). The P3.4 cascade and P5.3 generator implement the same protocols. These are evaluation-level types; the persisted `Classification` keeps tier `fast|deep`.
+  - The extra is `torch>=2.4` + `transformers>=4.44` (installed: torch 2.14.1, transformers 5.19.0, MPS available). It's not part of `make setup`; `make setup-baseline` installs it.
+  - First observations (sample CSV, 22 rows, *not an evaluation*): 19/22 correct, 1 rule-handled. Zero-shot takes about 0.8 s/ticket on MPS, including model load. An ungrounded draft for the double-charge email claimed "I've processed a refund" and left `[Your Name]` placeholders. That's the failure mode grounding targets.
 - 2026-10-15 (P2.1g, review): **Reporting rule.** Macro-F1 is the headline classification metric. Accuracy is secondary, because Technical Issue is 53% of test. Every classification result is also reported with and without synthetic rows (overall / real only), plus per origin.
 - 2026-10-15 (P2.1g): scikit-learn is in the `[data]` extra for the audit. P3.1 moves it to the core deps when the fast tier serves from the ml-service.
 - 2026-10-15 (P2.1 D4): urgency is trained and evaluated on low/medium/high only; "critical" comes only from documented heuristic/escalation rules (P3.3). Neither dataset has English critical rows.
@@ -407,6 +424,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - **Kaggle token check:** Kaggle answers 404 to the token check for an invalid token, and the SDK reports that as "Authentication required". `python -m data.kaggle_auth` names the likely cause.
 - **Integration test cost:** each package pays a one-off setup (create, migrate, drop its schema), which takes a few seconds since the move to Mumbai (it was about 26s in Sydney).
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
+- **HF downloads:** the baseline's first run downloads about 2 GB to `~/.cache/huggingface`. The "unauthenticated requests" warning is harmless; set `HF_TOKEN` for faster downloads. transformers 5 prints an UNEXPECTED `pooler` keys load report for twitter-roberta, which is expected (the classification head doesn't use the pooler).
 - **Groq models change:** `llama-3.3-70b-versatile` isn't available on the current key. Run `GET {GROQ_BASE_URL}/models` to see which models are live.
 - **Tests vs `.env`:** the pytest conftest loads `.env` into the environment. Tests that check settings defaults must clear those variables (see `test_build_llm_roles`).
 - **pytest warning:** a StarletteDeprecationWarning from TestClient asks for `httpx2`. It's harmless and left as is (review decision).

@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: setup dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status seed data data-audit synthetic-meetings export-splits
+.PHONY: setup setup-baseline baseline dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status seed data data-audit synthetic-meetings export-splits
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -22,6 +22,12 @@ setup: ## Create the Python venv, install deps, fetch Go modules
 	cd $(ML_DIR) && $(VPY) -m pip install -e ".[dev,data]"
 	go mod download
 	mkdir -p models/fast_tier models/deep_tier models/urgency datasets/raw datasets/processed
+
+setup-baseline: ## Install the optional SCRIBE baseline extra (torch + transformers; models download on first run)
+	cd $(ML_DIR) && $(VPY) -m pip install -e ".[dev,data,baseline]"
+
+baseline: ## SCRIBE baseline CLI, e.g. make baseline ARGS="classify --split test --limit 10"
+	cd $(ML_DIR) && $(VPY) -m baseline $(ARGS)
 
 dev: ## Start api, worker and ml-service together (honcho + Procfile)
 	$(VBIN)/honcho start

@@ -30,6 +30,13 @@ data = [
     "tabulate>=0.9",
     "scikit-learn>=1.5",
 ]
+# SCRIBE baseline (P2.2): BART-MNLI zero-shot + twitter-roberta sentiment.
+# Heavy (~2 GB of weights at first run); runs as its own CLI, never in the
+# always-on ml-service.
+baseline = [
+    "torch>=2.4",
+    "transformers>=4.44",
+]
 dev = [
     "ruff>=0.6",
     "pytest>=8",
