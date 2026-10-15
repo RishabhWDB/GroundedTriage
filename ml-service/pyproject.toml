@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "ml-service for GroundedTriage: classification cascade, retrieval, grounded drafting, faithfulness gate, SCRIBE baseline and evaluation."
 requires-python = ">=3.11,<3.12"
 # Runtime dependencies are added by the part that first needs them.
-dependencies = []
+dependencies = [
+    "python-dotenv>=1.0",
+]
 
 [project.optional-dependencies]
 dev = [

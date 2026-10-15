@@ -42,7 +42,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 ## 3. Status board
 
 ### Done
-- P0.1 Repo scaffold: Go module, Python package, Makefile, Procfile, `.env.example`, CLAUDE.md, README stub. Commit: see `git log --grep "P0.1"`. The hash gets backfilled in the next commit, because a commit can't contain its own hash.
+- P0.1 Repo scaffold: Go module, Python package, Makefile, Procfile, `.env.example`, CLAUDE.md, README stub. Commit `886482d`.
+- P0.1a Review fixes: `.env` is no longer included by make; programs load it themselves; python-dotenv is used in the pytest conftest; ignore rules re-verified. Commit: see `git log --grep "P0.1a"` (hash backfilled next commit).
 
 ### In progress
 - none. Next up is P0.2.
@@ -107,7 +108,12 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15: Slow tests are skipped unless `RUN_SLOW=1`. Integration tests are skipped when `TEST_DATABASE_URL` is unset. Both rules live in `ml-service/tests/conftest.py`.
 - 2026-10-15: `make migrate` and `make seed` exit 1 with a "not implemented" message until their parts land, so they can't silently look like they succeeded.
 - 2026-10-15: `.idea/` is gitignored (PyCharm local state). `BUILDPROMPT.md` is committed as the spec of record.
-- 2026-10-15: The Makefile `include`s `.env` when it exists, so `.env` values must be make-safe (no `$`, or escape them as `$$`).
+- 2026-10-15 (P0.1a, review feedback): the Makefile no longer `include`s `.env`. Make parsed it as Makefile syntax, which breaks on `$`, `#` and URL-encoded passwords. Each program loads `.env` itself instead:
+  - Go uses godotenv (added in P0.2 with the first config code);
+  - Python uses python-dotenv, and pydantic-settings from P0.3; pytest's conftest already loads it;
+  - honcho reads `.env` for `make dev`.
+  - The review suggested `set -a; . ./.env; set +a` in recipes. I didn't adopt it: shell sourcing also expands unquoted `$` and breaks on `&`/`;`, and it's redundant once each program loads `.env` itself. So no recipe sources `.env`. Values containing `$` go in single quotes, which godotenv, python-dotenv and the shell all treat literally.
+  - `ML_PORT` for `make ml` is a make variable (default 8001; override with `make ml ML_PORT=...`).
 - 2026-10-15: The Done entry's commit hash is backfilled in the following part's commit (no amending, per the no-history-rewrite rule).
 
 ## 6. Conventions
@@ -131,6 +137,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - **Supabase connection mode:** use the **Session pooler** connection string (IPv4, port 5432). The Transaction pooler (6543) breaks prepared statements in pgx/psycopg.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
 - **Database safety:** never run destructive SQL (DROP, TRUNCATE, down-migrations) against `DATABASE_URL` without asking Arya. Tests only use `TEST_DATABASE_URL`, with a per-run schema.
+- **`.env` quoting:** put any value containing `$` in single quotes. Make never reads `.env` (see the decisions log).
 - **Dev machine:** an M1 MacBook Air with 8 GB RAM. Avoid holding several large models in memory.
 
 ## 8. Results so far

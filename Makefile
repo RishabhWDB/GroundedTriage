@@ -7,11 +7,11 @@ VENV := $(ML_DIR)/.venv
 VPY := $(abspath $(VENV))/bin/python
 VBIN := $(abspath $(VENV))/bin
 
-# Load .env if present so make targets see DATABASE_URL etc.
-ifneq (,$(wildcard .env))
-include .env
-export
-endif
+ML_PORT ?= 8001
+
+# .env is NOT included here: make would parse it as Makefile syntax and break on
+# `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
+# Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
 .PHONY: setup dev api worker ml test test-go test-py test-integration lint fmt migrate seed
 
@@ -33,7 +33,7 @@ worker:
 	go run ./cmd/worker
 
 ml:
-	cd $(ML_DIR) && $(VBIN)/uvicorn app.main:app --host 127.0.0.1 --port $${ML_PORT:-8001} --reload
+	cd $(ML_DIR) && $(VBIN)/uvicorn app.main:app --host 127.0.0.1 --port $(ML_PORT) --reload
 
 test: test-go test-py ## Unit tests (slow + integration skipped)
 
@@ -43,8 +43,7 @@ test-go:
 test-py:
 	cd $(ML_DIR) && $(VBIN)/pytest -q
 
-test-integration: ## Integration tests against TEST_DATABASE_URL (never DATABASE_URL)
-	@test -n "$$TEST_DATABASE_URL" || { echo "TEST_DATABASE_URL is unset"; exit 1; }
+test-integration: ## Integration tests against TEST_DATABASE_URL (never DATABASE_URL); tests load .env and skip if unset
 	go test -tags integration ./...
 	cd $(ML_DIR) && $(VBIN)/pytest -q -m integration
 
