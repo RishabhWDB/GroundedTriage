@@ -76,7 +76,8 @@ func main() {
 		failed := false
 		for name, r := range poller.PollOnce(ctx) {
 			slog.Info("worker: result", "source", name, "fetched", r.Fetched, "inserted", r.Stats.Inserted,
-				"dup_id", r.Stats.DuplicateID, "dup_content", r.Stats.DuplicateContent, "skipped", r.Stats.Skipped, "err", r.Err)
+				"inserted_skipped", r.Stats.InsertedSkipped, "dup_id", r.Stats.DuplicateID,
+				"dup_content", r.Stats.DuplicateContent, "dropped", r.Stats.Dropped, "err", r.Err)
 			failed = failed || r.Err != nil
 		}
 		if failed {

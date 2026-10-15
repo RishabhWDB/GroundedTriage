@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/mail"
 	"regexp"
 	"strings"
 	"unicode"
@@ -40,6 +41,23 @@ func NormalizeWhitespace(s string) string {
 	return tidyLines(s)
 }
 
+var angleAddr = regexp.MustCompile(`<([^<>@\s]+@[^<>\s]+)>`)
+
+// NormalizeSender reduces a sender to a bare, lower-cased email address:
+// display names, angle brackets, quotes and "mailto:" are stripped. Values
+// that contain no address (e.g. "zendesk-user:42") are trimmed and lower-cased.
+func NormalizeSender(s string) string {
+	s = strings.TrimSpace(s)
+	if a, err := mail.ParseAddress(s); err == nil {
+		return strings.ToLower(a.Address)
+	}
+	if m := angleAddr.FindStringSubmatch(s); m != nil {
+		return strings.ToLower(m[1])
+	}
+	s = strings.TrimPrefix(strings.ToLower(s), "mailto:")
+	return strings.Trim(s, "<>\"' ")
+}
+
 // NormalizeSubject collapses all whitespace in a subject to single spaces.
 func NormalizeSubject(s string) string {
 	return strings.Join(strings.Fields(norm.NFC.String(zeroWidth.Replace(s))), " ")
@@ -61,7 +79,7 @@ func CleanBody(body string) string {
 func ContentHash(sender, subject, body string) string {
 	subj := replyPrefixes.ReplaceAllString(strings.ToLower(subject), "")
 	parts := []string{
-		strings.ToLower(strings.TrimSpace(sender)),
+		NormalizeSender(sender),
 		strings.Join(strings.Fields(subj), " "),
 		strings.Join(strings.Fields(strings.ToLower(body)), " "),
 	}
@@ -87,10 +105,12 @@ func DetectLanguage(text string) (lang string, nonEnglish bool) {
 	return lang, info.Lang != whatlanggo.Eng && info.IsReliable()
 }
 
-// Normalize cleans t and sets its ContentHash. It returns a non-empty skip
-// reason (and a human-readable detail) when the ticket must not be stored.
+// Normalize cleans t, sets its ContentHash and IngestStatus. skip is
+// SkipEmpty (the ticket must be dropped) or SkipNonEnglish (stored with
+// IngestStatus "skipped" so it stays visible but is never classified).
 func Normalize(t model.Ticket) (out model.Ticket, skip, detail string) {
-	t.Sender = strings.ToLower(strings.TrimSpace(t.Sender))
+	t.Sender = NormalizeSender(t.Sender)
+	t.IngestStatus, t.SkipReason = model.IngestAccepted, ""
 	t.Subject = NormalizeSubject(t.Subject)
 	t.Body = CleanBody(t.Body)
 	t.ContentHash = ContentHash(t.Sender, t.Subject, t.Body)
@@ -98,6 +118,7 @@ func Normalize(t model.Ticket) (out model.Ticket, skip, detail string) {
 		return t, SkipEmpty, "no subject and no body after cleaning"
 	}
 	if lang, non := DetectLanguage(t.Subject + "\n" + t.Body); non {
+		t.IngestStatus, t.SkipReason = model.IngestSkipped, SkipNonEnglish
 		return t, SkipNonEnglish, fmt.Sprintf("detected language %s", lang)
 	}
 	return t, "", ""

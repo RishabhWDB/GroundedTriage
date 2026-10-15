@@ -40,6 +40,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Migrate (goose, up only, idempotent; SQL in `migrations/`, embedded) | `make migrate` / `make migrate-status` |
 | One Go integration test | `go test -tags integration -count=1 ./internal/store -run TestTicketInsertAndGet` |
 | Seed | `make seed` (not implemented until P8.1) |
+| DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Worker: one poll / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s) |
 | Evaluate | not implemented yet (Phase 2/7) |
 
@@ -113,10 +114,15 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `pipeline.Poller` stores per-source checkpoints (`ingest_checkpoints`, migration 00003) with a 10-minute overlap and writes `audit_log` `ingest.poll`/`ingest.error` entries;
   - graceful shutdown.
   - Verified on Supabase: run 1 inserted 20 tickets, run 2 inserted 0.
-  - Commit: see `git log --grep "P1.6"` (hash backfilled next commit).
+  - Commit `f73048c`.
+- P1.7 Phase 1 review fixes:
+  - `cmd/dbping` latency diagnostic;
+  - sender normalised to a bare lower-cased address before hashing;
+  - non-English tickets stored with `ingest_status='skipped'`, `skip_reason='non_english'` (migration 00004).
+  - Commit: see `git log --grep "P1.7"` (hash backfilled next commit).
 
 ### In progress
-- none. Phase 1 is complete and waiting for the Phase 1 review; next is P2.1.
+- none. Next is P2.1.
 
 ### To do
 - P2.1 Dataset builders
@@ -187,6 +193,11 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P1.7, review): The sender is normalised by `preprocess.NormalizeSender` before hashing and storing: `net/mail` parse → bare address, lower-cased; display names, angle brackets, quotes and `mailto:` stripped. Values with no address (`zendesk-user:42`) are trimmed and lower-cased. `ContentHash` normalises internally too, so a display name never changes the hash.
+- 2026-10-15 (P1.7, review): Non-English tickets are **stored**, not dropped, with `tickets.ingest_status='skipped'` and `skip_reason='non_english'` (migration 00004; default `accepted`). Empty tickets are still dropped (nothing to show).
+  - The column is named `ingest_status` rather than `status`, so it isn't confused with route/draft statuses.
+  - **P3.5 must only classify `ingest_status='accepted'` tickets. P4 must route skipped tickets to a human queue.**
+- 2026-10-15 (P1.7): Migrations containing `DO $$ … $$` blocks need `-- +goose StatementBegin/End`, because goose splits on semicolons. A failed migration rolls back, since each file runs in a transaction.
 - 2026-10-15 (P1.6): Each poll fetches with `since = checkpoint − 10 min` (the overlap) and then sets the checkpoint to the max `ReceivedAt` it fetched (never "now", which avoids clock-skew gaps).
   - The overlap re-reads late arrivals, and dedupe drops the repeats.
   - A failing source is logged and audited (`ingest.error`). It doesn't stop the other sources, and its checkpoint isn't advanced.
@@ -272,7 +283,14 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
 - **Zendesk is only tested against an `httptest` mock**, since no Zendesk account is configured. The incremental export also requires an admin API token.
 - **Email adapter not tested against a real mailbox:** IMAP_*/SMTP_* aren't configured. `IMAPClient` is untested beyond compiling. `SMTPMailer` is tested against an in-process fake SMTP server (no TLS, no auth). Gmail needs an app password, plus IMAP enabled.
-- **Ingestion DB round-trips:** `Ingestor.Process` makes 2 queries per ticket, at roughly 0.6s per round-trip through the Supabase pooler from this Mac. That's about 28s for the 22-row sample. Batch it (one hash lookup with `= any($1)` plus a batch insert) before ingesting real datasets.
+- **DB latency is network-bound (measured 2026-10-15 with `cmd/dbping`).** The Supabase project is in **ap-southeast-2 (Sydney)**:
+  - TCP connect p50 is 396ms;
+  - warm-pool `SELECT 1` p50 is 395ms (p95 492ms);
+  - a fresh connection plus `SELECT 1` takes about 2.85s (TLS and auth round-trips).
+  - The pool is reused: 41 queries went over 1 connection.
+  - Arya is considering recreating the project in ap-south-1 (Mumbai).
+  - Ingestion does 2 queries per ticket; batching is deferred to P6/P8 volume (review decision).
+- **Zendesk is first-message-only (accepted limitation).** Follow-up comments on an existing ticket are not ingested. The incremental export is per ticket, and the `(source, external_id)` key drops repeats.
 - **Invisible characters in generated Go files:** `\u` escapes written by Claude can land in files as literal BOM/nbsp/zero-width characters, and Go rejects a mid-file BOM. Fix with a small script that rewrites them as `\uXXXX` escapes. Check `go vet` after writing any file containing such escapes.
 - **Integration test cost:** each package pays about 26s once, to create, migrate and drop its schema through the Supabase pooler. Each test after that takes about 2–3s.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.

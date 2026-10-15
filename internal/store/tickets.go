@@ -21,14 +21,18 @@ type Tickets struct{ Pool *pgxpool.Pool }
 
 // Insert stores t and returns its generated id.
 func (r Tickets) Insert(ctx context.Context, t model.Ticket) (string, error) {
+	status := t.IngestStatus
+	if status == "" {
+		status = model.IngestAccepted
+	}
 	var id string
 	err := r.Pool.QueryRow(ctx, `
 		insert into tickets (source, external_id, sender, subject, body, received_at,
-		                     thread_id, raw_ref, content_hash)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		                     thread_id, raw_ref, content_hash, ingest_status, skip_reason)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		returning id::text`,
 		t.Source, t.ExternalID, t.Sender, t.Subject, t.Body, t.ReceivedAt,
-		t.ThreadID, t.RawRef, t.ContentHash,
+		t.ThreadID, t.RawRef, t.ContentHash, status, t.SkipReason,
 	).Scan(&id)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -45,10 +49,10 @@ func (r Tickets) Get(ctx context.Context, id string) (model.Ticket, error) {
 	var t model.Ticket
 	err := r.Pool.QueryRow(ctx, `
 		select id::text, source, external_id, sender, subject, body, received_at,
-		       thread_id, raw_ref, content_hash
+		       thread_id, raw_ref, content_hash, ingest_status, skip_reason
 		from tickets where id = $1`, id,
 	).Scan(&t.ID, &t.Source, &t.ExternalID, &t.Sender, &t.Subject, &t.Body,
-		&t.ReceivedAt, &t.ThreadID, &t.RawRef, &t.ContentHash)
+		&t.ReceivedAt, &t.ThreadID, &t.RawRef, &t.ContentHash, &t.IngestStatus, &t.SkipReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return t, err
 	}

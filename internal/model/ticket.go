@@ -11,6 +11,13 @@ const (
 	SourceCSV     = "csv"
 )
 
+// Ingest statuses for Ticket.IngestStatus. Skipped tickets are stored for
+// visibility (and routed to a human) but never classified.
+const (
+	IngestAccepted = "accepted"
+	IngestSkipped  = "skipped"
+)
+
 // Ticket is one inbound message from any ingestion source.
 type Ticket struct {
 	ID          string    `json:"id"`
@@ -23,4 +30,8 @@ type Ticket struct {
 	ThreadID    *string   `json:"thread_id,omitempty"`
 	RawRef      string    `json:"raw_ref"`
 	ContentHash string    `json:"content_hash"`
+	// IngestStatus is "accepted" (default when empty) or "skipped";
+	// SkipReason explains a skip (e.g. "non_english").
+	IngestStatus string `json:"ingest_status"`
+	SkipReason   string `json:"skip_reason,omitempty"`
 }

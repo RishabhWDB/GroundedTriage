@@ -112,17 +112,19 @@ func (p *Poller) pollSource(ctx context.Context, name string, src ingest.Source)
 
 	var inserted []string
 	for _, r := range results {
-		if r.Outcome == preprocess.OutcomeInserted && len(inserted) < maxAuditIDs {
+		stored := r.Outcome == preprocess.OutcomeInserted || r.Outcome == preprocess.OutcomeInsertedSkipped
+		if stored && len(inserted) < maxAuditIDs {
 			inserted = append(inserted, r.Ticket.ID)
 		}
 	}
 	p.log().Info("ingest: polled", "source", name, "since", since, "fetched", len(tickets),
-		"inserted", stats.Inserted, "dup_id", stats.DuplicateID, "dup_content", stats.DuplicateContent,
-		"skipped", stats.Skipped, "checkpoint", next)
+		"inserted", stats.Inserted, "inserted_skipped", stats.InsertedSkipped, "dup_id", stats.DuplicateID,
+		"dup_content", stats.DuplicateContent, "dropped", stats.Dropped, "checkpoint", next)
 	p.audit(ctx, store.AuditEntry{EntityType: "source", EntityID: name, Action: "ingest.poll", Details: map[string]any{
 		"since": since, "checkpoint": next, "fetched": len(tickets),
 		"inserted": stats.Inserted, "duplicate_external_id": stats.DuplicateID,
-		"duplicate_content": stats.DuplicateContent, "skipped": stats.Skipped,
+		"duplicate_content": stats.DuplicateContent, "inserted_skipped": stats.InsertedSkipped,
+		"dropped":             stats.Dropped,
 		"inserted_ticket_ids": inserted,
 	}})
 	return SourceResult{Fetched: len(tickets), Stats: stats}

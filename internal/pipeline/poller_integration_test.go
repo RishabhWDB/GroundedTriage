@@ -56,7 +56,7 @@ func TestWorkerPollWithCSVIsIdempotent(t *testing.T) {
 	_ = pool.QueryRow(ctx, `select count(*) from tickets`).Scan(&tickets)
 	_ = pool.QueryRow(ctx, `select count(*) from audit_log where action = 'ingest.poll' and entity_id = 'csv'`).Scan(&polls)
 	_ = pool.QueryRow(ctx, `select since from ingest_checkpoints where source = 'csv'`).Scan(&cp)
-	if tickets != 20 || polls != 3 || !cp.Equal(time.Date(2026, 10, 9, 6, 0, 0, 0, time.UTC)) {
+	if tickets != 21 || polls != 3 || !cp.Equal(time.Date(2026, 10, 9, 6, 0, 0, 0, time.UTC)) {
 		t.Fatalf("tickets=%d polls=%d checkpoint=%v", tickets, polls, cp)
 	}
 }

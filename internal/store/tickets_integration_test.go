@@ -39,6 +39,7 @@ func TestTicketInsertAndGet(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 	in.ID = id
+	in.IngestStatus = model.IngestAccepted // default applied on insert
 	if got.ThreadID == nil || *got.ThreadID != thread {
 		t.Fatalf("thread_id = %v, want %q", got.ThreadID, thread)
 	}

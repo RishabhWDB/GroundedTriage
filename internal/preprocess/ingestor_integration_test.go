@@ -33,8 +33,8 @@ func TestIngestorRejectsDuplicatesInDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 22 rows: 1 Portuguese skipped, 1 repeated complaint caught by content hash.
-	if first != (preprocess.Stats{Inserted: 20, DuplicateContent: 1, Skipped: 1}) {
+	// 22 rows: 1 Portuguese stored as skipped, 1 repeated complaint caught by content hash.
+	if first != (preprocess.Stats{Inserted: 20, InsertedSkipped: 1, DuplicateContent: 1}) {
 		t.Fatalf("first run = %+v", first)
 	}
 
@@ -42,7 +42,7 @@ func TestIngestorRejectsDuplicatesInDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Inserted != 0 || second.Skipped != 1 || second.DuplicateContent+second.DuplicateID != 21 {
+	if second.Inserted+second.InsertedSkipped != 0 || second.DuplicateContent+second.DuplicateID != 22 {
 		t.Fatalf("second run = %+v", second)
 	}
 
@@ -58,8 +58,13 @@ func TestIngestorRejectsDuplicatesInDB(t *testing.T) {
 	}
 
 	var n int
-	if err := pool.QueryRow(ctx, `select count(*) from tickets`).Scan(&n); err != nil || n != 20 {
-		t.Fatalf("tickets in db = %d (%v), want 20", n, err)
+	if err := pool.QueryRow(ctx, `select count(*) from tickets`).Scan(&n); err != nil || n != 21 {
+		t.Fatalf("tickets in db = %d (%v), want 21", n, err)
+	}
+	var status, reason string
+	if err := pool.QueryRow(ctx, `select ingest_status, skip_reason from tickets where subject like 'Problema%'`).Scan(&status, &reason); err != nil ||
+		status != "skipped" || reason != "non_english" {
+		t.Fatalf("non-English row: status=%q reason=%q err=%v", status, reason, err)
 	}
 	var body string
 	if err := pool.QueryRow(ctx, `select body from tickets where subject = 'Mobile app crashes on startup'`).Scan(&body); err != nil {

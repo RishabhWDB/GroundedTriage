@@ -18,21 +18,23 @@ type TicketStore interface {
 
 // Outcome of processing one ticket.
 const (
-	OutcomeInserted         = "inserted"
+	OutcomeInserted         = "inserted"         // stored, accepted for classification
+	OutcomeInsertedSkipped  = "inserted_skipped" // stored with ingest_status=skipped (non-English)
 	OutcomeDuplicateID      = "duplicate_external_id"
 	OutcomeDuplicateContent = "duplicate_content"
+	OutcomeDropped          = "dropped" // not stored (empty)
 )
 
 // Result describes what happened to one ticket.
 type Result struct {
 	Ticket  model.Ticket // normalised; ID set when inserted
-	Outcome string       // inserted | duplicate_* | skipped
-	Reason  string       // skip reason / duplicate detail
+	Outcome string       // one of the Outcome* constants
+	Reason  string       // skip/drop reason or duplicate detail
 }
 
 // Stats summarises a batch.
 type Stats struct {
-	Inserted, DuplicateID, DuplicateContent, Skipped int
+	Inserted, InsertedSkipped, DuplicateID, DuplicateContent, Dropped int
 }
 
 // Ingestor normalises tickets and persists the new ones.
@@ -49,8 +51,10 @@ func (in *Ingestor) log() *slog.Logger {
 }
 
 // Process normalises and stores each ticket. Duplicates are rejected by
-// (source, external_id) and by content_hash; empty and non-English tickets are
-// skipped with a logged reason. The batch stops only on a storage error.
+// (source, external_id) and by content_hash. Non-English tickets are stored
+// with ingest_status "skipped" (never classified); empty tickets are dropped.
+// Skips and drops are logged with a reason. The batch stops only on a storage
+// error.
 //
 // The content-hash check-then-insert is not atomic; it assumes one ingestion
 // worker. Concurrent workers could store the same content twice.
@@ -60,11 +64,15 @@ func (in *Ingestor) Process(ctx context.Context, tickets []model.Ticket) ([]Resu
 	for _, raw := range tickets {
 		t, skip, detail := Normalize(raw)
 		res := Result{Ticket: t}
+		if skip != "" {
+			res.Reason = skip + ": " + detail
+			in.log().Info("ingest: ticket not accepted for classification", "source", t.Source,
+				"external_id", t.ExternalID, "reason", res.Reason, "stored", skip != SkipEmpty)
+		}
 		switch {
-		case skip != "":
-			res.Outcome, res.Reason = "skipped", skip+": "+detail
-			stats.Skipped++
-			in.log().Info("ingest: skipped ticket", "source", t.Source, "external_id", t.ExternalID, "reason", res.Reason)
+		case skip == SkipEmpty:
+			res.Outcome = OutcomeDropped
+			stats.Dropped++
 		default:
 			exists, err := in.Store.ContentHashExists(ctx, t.ContentHash)
 			if err != nil {
@@ -82,6 +90,9 @@ func (in *Ingestor) Process(ctx context.Context, tickets []model.Ticket) ([]Resu
 				stats.DuplicateID++
 			case err != nil:
 				return results, stats, fmt.Errorf("store ticket %s/%s: %w", t.Source, t.ExternalID, err)
+			case t.IngestStatus == model.IngestSkipped:
+				res.Ticket.ID, res.Outcome = id, OutcomeInsertedSkipped
+				stats.InsertedSkipped++
 			default:
 				res.Ticket.ID, res.Outcome = id, OutcomeInserted
 				stats.Inserted++

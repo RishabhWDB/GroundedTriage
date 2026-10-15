@@ -9,6 +9,7 @@ SourceName = Literal["email", "zendesk", "csv"]
 Tier = Literal["fast", "deep"]
 Urgency = Literal["low", "medium", "high", "critical"]
 UrgencySource = Literal["model", "heuristic"]
+IngestStatus = Literal["accepted", "skipped"]
 Action = Literal["mute", "queue", "reply", "schedule"]
 DraftStatus = Literal["grounded", "abstained", "approved", "sent", "rejected"]
 
@@ -26,6 +27,9 @@ class Ticket(BaseModel):
     thread_id: str | None = None
     raw_ref: str = ""
     content_hash: str
+    # "skipped" tickets (e.g. non-English) are stored but never classified.
+    ingest_status: IngestStatus = "accepted"
+    skip_reason: str = ""
 
 
 class ModelsLoaded(BaseModel):

@@ -32,6 +32,33 @@ func TestNormalizeWhitespace(t *testing.T) {
 	}
 }
 
+func TestNormalizeSender(t *testing.T) {
+	cases := map[string]string{
+		"priya.n@acme-corp.com":                    "priya.n@acme-corp.com",
+		"  Priya.N@Acme-Corp.com ":                 "priya.n@acme-corp.com",
+		"Priya N <Priya.N@Acme-Corp.com>":          "priya.n@acme-corp.com",
+		`"N, Priya" <priya.n@acme-corp.com>`:       "priya.n@acme-corp.com",
+		"<priya.n@acme-corp.com>":                  "priya.n@acme-corp.com",
+		"mailto:Priya.N@acme-corp.com":             "priya.n@acme-corp.com",
+		"Priya (Acme) <priya.n@acme-corp.com> x y": "priya.n@acme-corp.com", // unparseable, angle fallback
+		"zendesk-user:42":                          "zendesk-user:42",
+		"":                                         "",
+	}
+	for in, want := range cases {
+		if got := NormalizeSender(in); got != want {
+			t.Errorf("NormalizeSender(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// The display name must not change the content hash.
+	if ContentHash("Priya N <priya.n@acme-corp.com>", "s", "b") != ContentHash("priya.n@ACME-corp.com", "s", "b") {
+		t.Fatal("display name changed the content hash")
+	}
+	out, _, _ := Normalize(model.Ticket{Sender: "Priya N <Priya.N@Acme-Corp.com>", Subject: "Hi", Body: "Question about my invoice."})
+	if out.Sender != "priya.n@acme-corp.com" {
+		t.Fatalf("Normalize sender = %q", out.Sender)
+	}
+}
+
 func TestCleanBodyIsIdempotentAndHandlesHTML(t *testing.T) {
 	in := "<p>App <b>crashes</b>.</p><blockquote>old</blockquote>"
 	once := CleanBody(in)
@@ -114,8 +141,12 @@ func TestNormalize(t *testing.T) {
 			if tc.skip == "" && (out.Body != tc.wantBody || out.Sender != "priya@acme.com" || out.Subject != "Help") {
 				t.Fatalf("out = %+v", out)
 			}
-			if tc.skip == SkipNonEnglish && !strings.Contains(detail, "por") {
-				t.Fatalf("detail = %q", detail)
+			if tc.skip == SkipNonEnglish && (!strings.Contains(detail, "por") ||
+				out.IngestStatus != model.IngestSkipped || out.SkipReason != SkipNonEnglish) {
+				t.Fatalf("detail = %q out = %+v", detail, out)
+			}
+			if tc.skip == "" && out.IngestStatus != model.IngestAccepted {
+				t.Fatalf("status = %q", out.IngestStatus)
 			}
 		})
 	}
@@ -165,17 +196,21 @@ func TestIngestorOutcomes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{OutcomeInserted, OutcomeDuplicateID, OutcomeDuplicateContent, OutcomeInserted, "skipped", "skipped"}
+	want := []string{OutcomeInserted, OutcomeDuplicateID, OutcomeDuplicateContent, OutcomeInserted, OutcomeDropped, OutcomeInsertedSkipped}
 	for i, w := range want {
 		if res[i].Outcome != w {
 			t.Errorf("ticket %d outcome = %q (%s), want %q", i, res[i].Outcome, res[i].Reason, w)
 		}
 	}
-	if stats != (Stats{Inserted: 2, DuplicateID: 1, DuplicateContent: 1, Skipped: 2}) {
+	if stats != (Stats{Inserted: 2, InsertedSkipped: 1, DuplicateID: 1, DuplicateContent: 1, Dropped: 1}) {
 		t.Fatalf("stats = %+v", stats)
 	}
-	if res[0].Ticket.ID == "" {
+	if res[0].Ticket.ID == "" || res[5].Ticket.ID == "" {
 		t.Fatal("inserted ticket id not set")
+	}
+	if res[5].Ticket.IngestStatus != model.IngestSkipped || res[5].Ticket.SkipReason != SkipNonEnglish ||
+		res[0].Ticket.IngestStatus != model.IngestAccepted {
+		t.Fatalf("ingest status: %+v / %+v", res[0].Ticket, res[5].Ticket)
 	}
 
 	ms.failErr = errors.New("db down")
