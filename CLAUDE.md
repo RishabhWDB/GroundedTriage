@@ -44,6 +44,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
 | Worker: one poll / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s) |
 | Build splits + dataset card (downloads raw data on first run) | `make data` |
+| Data audit (synthetic diversity, train→test near-dups, subject shortcut) | `make data-audit` → `results/data_audit/report.md` |
 | Bundle splits for the GPU PC | `make export-splits` → `datasets/export/groundedtriage-splits-<test hash>.tar.gz` |
 | Regenerate synthetic meeting emails (Groq; cached, resumable) | `make synthetic-meetings` |
 | Evaluate | not implemented yet (Phase 2/7) |
@@ -153,10 +154,16 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `make export-splits` writes a deterministic archive for the PC;
   - `docs/model_artifacts.md` holds the export and artifact contract.
   - Rebuild is verified identical.
-  - Commit: see `git log --grep "P2.1f"` (hash backfilled next commit).
+  - Commit `d089b39`.
+- P2.1g Review fixes + data audit:
+  - train cap now 5× the smallest **real** class (Spam 1,076 → 5,380/class): train 13,651 rows; val/test unchanged (same file and content hashes);
+  - `train_urgency.parquet` (16,260 uncapped labelled train rows) for the urgency model;
+  - `docs/model_artifacts.md`: class-weighted CE for the deep tier, val macro-F1 checkpoint selection for both models;
+  - `make data-audit` → `results/data_audit/` (synthetic samples and diversity, train→test near-duplicates, subject-shortcut check).
+  - Commit: see `git log --grep "P2.1g"` (hash backfilled next commit).
 
 ### In progress
-- none. P2.1 is complete. Next is P2.2 (SCRIBE baseline).
+- none. P2.1 is complete (incl. P2.1g). Next is P2.2 (SCRIBE baseline). P2.3 waits on the near-duplicate leakage decision (see Blocked).
   - Downloaded `Tobi-Bueck/customer-support-tickets` (HF, CC-BY-NC-4.0) to `datasets/raw/tobi_bueck/train.parquet` (gitignored).
   - Profile of the English rows (28,261 of 61,765):
     - only 10 support queues; Tech/Product/IT/Outage queues total about 17.9k;
@@ -196,7 +203,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P8.3 Docs
 
 ### Blocked / needs input
-- none.
+- Arya: whether to remove train↔test near-duplicates (11.6% of test rows have a train neighbour at cosine > 0.9) with a group-aware split. This would change the val/test hashes, so P2.3 waits for the answer. Also whether Meeting Scheduling needs harder data (see `results/data_audit/report.md`).
 
 ## 4. Model artifacts
 
@@ -283,6 +290,16 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - val/test are not resampled (Technical Issue is 2,002 of 3,774 in test).
   - The test split's content sha256 is `db976b05…009b`, which is also the export tag. A rebuild gives identical file and content hashes.
   - The `text` column (`app/textinput.model_input`: subject + blank line + body) is the model input for every model; serving must use the same function.
+- 2026-10-15 (P2.1g, review Q1 = (b)+(c)): **The train cap is 5× the smallest *real* class**, so synthetic rows never set it. Spam has 1,076 train rows, so the cap is 5,380, and only Technical Issue is cut (9,345 → 5,380, 3,965 removed). Train is 13,651 rows. This supersedes the P2.1f cap of 1,400.
+  - `train_urgency.parquet` is every uncapped train row with an urgency label (16,260: high 6,318 / medium 6,675 / low 3,267). It comes from the same pre-cap pool as `train`, so it shares no rows with val/test. The export picks it up automatically (it's in the manifest).
+  - The remaining imbalance is handled by **class weighting, not more downsampling**. The fast tier uses `class_weight="balanced"`. The deep tier must use class-weighted cross-entropy (`w_c = N/(K·n_c)` from train frequencies). Both select checkpoints on **val macro-F1**. All of this is in `docs/model_artifacts.md`.
+  - The rebuild left val and test byte-identical (file and content sha256). Test content is still `db976b05…009b`, so the export tag is unchanged.
+- 2026-10-15 (P2.1g): Data audit (`make data-audit`, `results/data_audit/`). Near-duplicate = cosine > 0.9 on word-unigram TF-IDF (sublinear tf). Unigrams ignore word order, so it's an upper bound. Findings:
+  - Synthetic diversity: 0 exact duplicate bodies, 0 near-duplicate pairs within the 400 rows, 316 unique subjects (172 exact duplicate-subject pairs). The top subject opening is "request to" (25 rows).
+  - **Leakage:** 436 of 3,774 test rows (11.6%) have a near-duplicate in the training pool (capped train ∪ train_urgency). That's Spam 19.6%, Billing 14.0%, Feature Request 14.2%, Technical Issue 10.6%, General Inquiry 9.3%, synthetic Meeting 0%. The nearest neighbour is always the same category. These are genuine paraphrases in Tobi-Bueck (LLM-generated variants of one ticket). With 1–2-gram TF-IDF, 93 rows are above 0.9 and 373 above 0.8. The splits are unchanged pending Arya's decision.
+  - **Shortcut:** TF-IDF+LR on val gives Meeting Scheduling F1 0.99 from the subject alone, and 1.00 from the body alone or the full text. The class is trivially separable from either field, so neutralising subjects wouldn't make it harder. 202 real val tickets mention a meeting word, and none were predicted Meeting. Spam is also near 1.0 (subject 0.95). Model macro-F1 on val: subject-only 0.72, body-only 0.82, full text 0.82.
+- 2026-10-15 (P2.1g, review): **Reporting rule.** Macro-F1 is the headline classification metric. Accuracy is secondary, because Technical Issue is 53% of test. Every classification result is also reported with and without synthetic rows (overall / real only), plus per origin.
+- 2026-10-15 (P2.1g): scikit-learn is in the `[data]` extra for the audit. P3.1 moves it to the core deps when the fast tier serves from the ml-service.
 - 2026-10-15 (P2.1 D4): urgency is trained and evaluated on low/medium/high only; "critical" comes only from documented heuristic/escalation rules (P3.3). Neither dataset has English critical rows.
 - 2026-10-15: Supabase was recreated in **ap-south-1 (Mumbai)**. Migrations 1–4 applied, and the sample CSV was re-seeded by the worker (21 tickets incl. the Portuguese one as skipped). The Portuguese backfill question is moot.
 - 2026-10-15 (P2.1a): Kaggle uses a new-style API token (`KGAT_…`) in `KAGGLE_API_TOKEN`. `kaggle` 2.2.4 reads it natively via `kagglesdk` (verified in the package source).
@@ -365,6 +382,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - results in `results/` (committed);
   - `models/`, `datasets/raw|processed|export` gitignored.
 - **Shared contracts** (Ticket, Classification, Route, RetrievedChunk, ReplyDraft) are defined once per language: Go structs in `internal/` and Pydantic in `ml-service/app/schemas.py`. Keep them in sync.
+- **Reporting:** the headline classification metric is **macro-F1**. Accuracy is secondary (Technical Issue is 53% of test). Always report overall, real-only (without synthetic rows) and per origin.
 - **Test markers:** `@pytest.mark.slow` for tests that load large models, `@pytest.mark.integration` for tests that need the DB.
   - Go integration tests use the `//go:build integration` tag. Each package has one `TestMain` calling `storetest.Run(m, &testDB)`, and tests call `testDB.Require(t)`, which skips when `TEST_DATABASE_URL` is unset.
 - **DB connections:** always go through `store.OpenPool`/`store.OpenSQL`, which set an explicit search_path. Python must `SET search_path TO public, extensions` on connect.
@@ -399,4 +417,6 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 ## 8. Results so far
 
-None yet.
+- Data audit (P2.1g, `results/data_audit/report.md`):
+  - TF-IDF+LR (1–2-gram, balanced) trained on capped train and scored on val: macro-F1 0.82 / accuracy 0.76 on full text, 0.72 / 0.66 on the subject alone. This is a data diagnostic, not the P3.1 fast tier.
+  - 11.6% of test rows have a train near-duplicate (cosine > 0.9).

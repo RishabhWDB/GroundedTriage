@@ -42,13 +42,14 @@ def test_stratified_split_proportions_disjoint_and_deterministic():
         assert got["val"] == round(n * 0.15) and got["test"] == round(n * 0.15)
 
 
-def test_cap_train_only_limits_large_classes():
+def test_cap_train_uses_smallest_real_class():
     train = pd.concat(frames(), ignore_index=True)
     capped, cap, removed = cap_train(train, ratio=5)
-    assert cap == 200  # 5 x 40 meeting rows
+    assert cap == 500  # 5 x 100 spam rows; the 40 synthetic meeting rows don't set the cap
     counts = capped["category"].value_counts()
-    assert counts["Technical Issue"] == 200 and counts["Billing"] == 200 and counts["Spam"] == 100
-    assert removed == {"Technical Issue": 800}
+    assert counts["Technical Issue"] == 500 and counts["Billing"] == 200
+    assert counts["Spam"] == 100 and counts["Meeting Scheduling"] == 40
+    assert removed == {"Technical Issue": 500}
     assert cap_train(train, ratio=5)[0]["id"].tolist() == capped["id"].tolist()  # seeded
 
 
@@ -69,6 +70,16 @@ def test_assemble_dedupes_caps_and_formats():
     r = tr.iloc[0]
     assert r["text"] == model_input(r["subject"], r["body"])
     assert splits["test"].query("category == 'Spam'")["urgency"].isna().all()
+
+
+def test_train_urgency_is_uncapped_labelled_train():
+    splits, info = assemble(frames())
+    tu = splits["train_urgency"]
+    assert tu["urgency"].notna().all()
+    assert set(tu["category"]) == {"Technical Issue", "Billing"}  # spam/synthetic unlabelled
+    assert (tu["category"] == "Technical Issue").sum() == 700  # uncapped (cap is 5 x 70 spam)
+    assert info["train_cap"] == 350
+    assert not set(tu["id"]) & (set(splits["val"]["id"]) | set(splits["test"]["id"]))
 
 
 def test_assemble_rejects_unknown_category():

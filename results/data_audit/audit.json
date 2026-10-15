@@ -1,0 +1,254 @@
+{
+  "synthetic": {
+    "rows": 400,
+    "exact_duplicate_body_pairs": 0,
+    "exact_duplicate_subject_pairs": 172,
+    "unique_subjects": 316,
+    "near_duplicate_pairs": 0,
+    "near_duplicate_examples": [],
+    "subject_openings_top10": [
+      [
+        "request to",
+        25
+      ],
+      [
+        "confirmation of",
+        23
+      ],
+      [
+        "contract renewal",
+        17
+      ],
+      [
+        "rescheduling our",
+        16
+      ],
+      [
+        "quarterly business",
+        15
+      ],
+      [
+        "data migration",
+        14
+      ],
+      [
+        "post incident",
+        12
+      ],
+      [
+        "onboarding session",
+        12
+      ],
+      [
+        "escalation call",
+        12
+      ],
+      [
+        "need to",
+        10
+      ]
+    ],
+    "median_body_chars": 260,
+    "sample_ids": [
+      "syn-meet-0033",
+      "syn-meet-0084",
+      "syn-meet-0093",
+      "syn-meet-0094",
+      "syn-meet-0209",
+      "syn-meet-0210",
+      "syn-meet-0280",
+      "syn-meet-0329"
+    ]
+  },
+  "leakage": {
+    "per_stratum": [
+      {
+        "category": "Billing",
+        "origin": "real",
+        "test_rows": 493,
+        "test_rows_with_near_dup": 69,
+        "share": 0.14,
+        "near_dup_pairs": 81,
+        "nearest_same_category": 69
+      },
+      {
+        "category": "Feature Request",
+        "origin": "real",
+        "test_rows": 374,
+        "test_rows_with_near_dup": 53,
+        "share": 0.1417,
+        "near_dup_pairs": 65,
+        "nearest_same_category": 53
+      },
+      {
+        "category": "General Inquiry",
+        "origin": "real",
+        "test_rows": 615,
+        "test_rows_with_near_dup": 57,
+        "share": 0.0927,
+        "near_dup_pairs": 67,
+        "nearest_same_category": 57
+      },
+      {
+        "category": "Meeting Scheduling",
+        "origin": "synthetic",
+        "test_rows": 60,
+        "test_rows_with_near_dup": 0,
+        "share": 0.0,
+        "near_dup_pairs": 0,
+        "nearest_same_category": 0
+      },
+      {
+        "category": "Spam",
+        "origin": "real",
+        "test_rows": 230,
+        "test_rows_with_near_dup": 45,
+        "share": 0.1957,
+        "near_dup_pairs": 116,
+        "nearest_same_category": 45
+      },
+      {
+        "category": "Technical Issue",
+        "origin": "real",
+        "test_rows": 2002,
+        "test_rows_with_near_dup": 212,
+        "share": 0.1059,
+        "near_dup_pairs": 254,
+        "nearest_same_category": 212
+      }
+    ],
+    "total_test_rows_with_near_dup": 436,
+    "total_pairs": 583,
+    "max_similarity_quantiles": {
+      "0.5": 0.6868,
+      "0.9": 0.9079,
+      "0.99": 0.9735
+    }
+  },
+  "shortcut": {
+    "subject": {
+      "accuracy": 0.655,
+      "macro_f1": 0.7207,
+      "per_class": {
+        "Technical Issue": {
+          "precision": 0.7581,
+          "recall": 0.6808,
+          "f1": 0.7174
+        },
+        "Billing": {
+          "precision": 0.5641,
+          "recall": 0.5355,
+          "f1": 0.5494
+        },
+        "Feature Request": {
+          "precision": 0.674,
+          "recall": 0.7353,
+          "f1": 0.7033
+        },
+        "General Inquiry": {
+          "precision": 0.3636,
+          "recall": 0.4878,
+          "f1": 0.4167
+        },
+        "Spam": {
+          "precision": 0.9813,
+          "recall": 0.913,
+          "f1": 0.9459
+        },
+        "Meeting Scheduling": {
+          "precision": 0.9836,
+          "recall": 1.0,
+          "f1": 0.9917
+        }
+      },
+      "meeting_f1": 0.9917,
+      "other_classes_mean_f1": 0.6665
+    },
+    "body": {
+      "accuracy": 0.7552,
+      "macro_f1": 0.8193,
+      "per_class": {
+        "Technical Issue": {
+          "precision": 0.8534,
+          "recall": 0.7358,
+          "f1": 0.7902
+        },
+        "Billing": {
+          "precision": 0.666,
+          "recall": 0.6836,
+          "f1": 0.6747
+        },
+        "Feature Request": {
+          "precision": 0.8687,
+          "recall": 0.9733,
+          "f1": 0.918
+        },
+        "General Inquiry": {
+          "precision": 0.4634,
+          "recall": 0.6276,
+          "f1": 0.5331
+        },
+        "Spam": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "Meeting Scheduling": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      },
+      "meeting_f1": 1.0,
+      "other_classes_mean_f1": 0.7832
+    },
+    "text": {
+      "accuracy": 0.7602,
+      "macro_f1": 0.8245,
+      "per_class": {
+        "Technical Issue": {
+          "precision": 0.8557,
+          "recall": 0.7433,
+          "f1": 0.7955
+        },
+        "Billing": {
+          "precision": 0.6915,
+          "recall": 0.6775,
+          "f1": 0.6844
+        },
+        "Feature Request": {
+          "precision": 0.8963,
+          "recall": 0.9706,
+          "f1": 0.932
+        },
+        "General Inquiry": {
+          "precision": 0.4597,
+          "recall": 0.6407,
+          "f1": 0.5353
+        },
+        "Spam": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "Meeting Scheduling": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      },
+      "meeting_f1": 1.0,
+      "other_classes_mean_f1": 0.7894
+    },
+    "hard_negative_probe": {
+      "real_val_rows": 3714,
+      "real_val_rows_mentioning_meeting_words": 202,
+      "predicted_meeting_by_subject_model": 0,
+      "predicted_meeting_by_text_model": 0,
+      "pattern": "\\b(?:meeting|call|zoom|teams|webex|schedul\\w*|reschedul\\w*|calendar|appointment)\\b"
+    },
+    "empty_subject_share_val": 0.1166
+  },
+  "train_pool_rows": 17616,
+  "test_rows": 3774
+}

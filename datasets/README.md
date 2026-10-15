@@ -20,7 +20,8 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 - SpamAssassin: 1896 messages → 27 too short, 69 non-English, 247 duplicates → 1553 (127 truncated to 4000 chars).
 - Cross-source duplicate bodies removed: 17.
 - Split: 70/15/15 stratified by category × origin, seed 42.
-- Train only: classes capped at 5× the smallest class = 1400 rows; removed {'Billing': 903, 'Feature Request': 343, 'General Inquiry': 1469, 'Technical Issue': 7945}. val/test are not resampled.
+- Train only: classes capped at 5× the smallest real class = 5380 rows; removed {'Technical Issue': 3965}. val/test are not resampled. Remaining imbalance is handled with class weights at training time (docs/model_artifacts.md).
+- `train_urgency`: the uncapped train rows with an urgency label (16260 rows). Same row pool as `train` before the cap, so it shares no rows with val/test.
 - Model input (`text` column): subject + blank line + body (body only when subject is empty) (`app/textinput.py`).
 - Urgency: only Tobi-Bueck rows are labelled (low, medium, high); spam and synthetic rows have none. No English 'critical' rows exist.
 
@@ -28,29 +29,30 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 
 |                                     |   train |   val |   test |
 |:------------------------------------|--------:|------:|-------:|
-| ('Billing', 'real')                 |    1400 |   493 |    493 |
-| ('Feature Request', 'real')         |    1400 |   374 |    374 |
-| ('General Inquiry', 'real')         |    1400 |   615 |    615 |
+| ('Billing', 'real')                 |    2303 |   493 |    493 |
+| ('Feature Request', 'real')         |    1743 |   374 |    374 |
+| ('General Inquiry', 'real')         |    2869 |   615 |    615 |
 | ('Meeting Scheduling', 'synthetic') |     280 |    60 |     60 |
 | ('Spam', 'real')                    |    1076 |   230 |    230 |
-| ('Technical Issue', 'real')         |    1400 |  2002 |   2002 |
+| ('Technical Issue', 'real')         |    5380 |  2002 |   2002 |
 
-## Urgency labels per split
+## Urgency labels per split (`train_urgency` is the urgency model's train file)
 
-| urgency   |   train |   val |   test |
-|:----------|--------:|------:|-------:|
-| (none)    |    1356 |   290 |    290 |
-| high      |    1832 |  1366 |   1387 |
-| low       |    1317 |   684 |    662 |
-| medium    |    2451 |  1434 |   1435 |
+| urgency   |   train |   val |   test |   train_urgency |
+|:----------|--------:|------:|-------:|----------------:|
+| (none)    |    1356 |   290 |    290 |               0 |
+| high      |    4382 |  1366 |   1387 |            6318 |
+| low       |    2717 |   684 |    662 |            3267 |
+| medium    |    5196 |  1434 |   1435 |            6675 |
 
 ## Split files
 
 | split | rows | file sha256 | content sha256 |
 |---|---|---|---|
-| train | 6956 | `6593e532bb3ff948b28d45ad777b7753ade3d0bdfb33c4072a4e7ae66d863d33` | `f55fb6af18a5a862ec563b3ba73ef9c4afe9e32281ae66fddc38c9dc8a874739` |
+| train | 13651 | `33e970d1ca180fafae36e6f54832201104b3e8fcdd71132d568825fce418a3be` | `071282f66664dc287562bc4e30a25211cf878b2f6d8c80ce7061ce4285f8971c` |
 | val | 3774 | `0253fbaaaec58875f57e821a3060b0a14cafcb5bd75fcc3798b9d50091d8e9e0` | `0b10a47432039184a8bc16adb7eace45679f7e8040a649a185b6c6478b25e7f6` |
 | test | 3774 | `4489f336523aa6b1d33996e419e5dee9689da2cfecdea7ba70929b13f30f176d` | `db976b0585b261b859af07dd74eeecfd77af0a4b10af92712a98455647f0009b` |
+| train_urgency | 16260 | `857ec89b2e355d3ab4f80d7e850ee84c02f2954a104b652542bed875cd3ca765` | `38cd0c7aa0fcabadf11b11764f39a12142c2393de88c60c71a0c7dc4b75c0f13` |
 
 The content hash is independent of the parquet library version; compare it on the PC
 to confirm the test split is identical.
