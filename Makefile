@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: setup setup-baseline baseline dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings export-splits
+.PHONY: setup setup-baseline baseline dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -79,6 +79,9 @@ synthetic-meetings: ## (Re)generate synthetic meeting emails via Groq; cached, r
 
 data-audit: ## Synthetic diversity, train/test leakage and subject-shortcut checks -> results/data_audit/
 	cd $(ML_DIR) && $(VPY) -m data.audit
+
+stress-set: ## Generate the hard Meeting Scheduling stress-test CSV (eval only; needs human review)
+	cd $(ML_DIR) && $(VPY) -m data.stress_meetings
 
 export-splits: ## Bundle splits + taxonomy + card for the GPU PC (datasets/export/)
 	cd $(ML_DIR) && $(VPY) -m data.export

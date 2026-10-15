@@ -45,6 +45,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Worker: one poll / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s) |
 | Build splits + dataset card (downloads raw data on first run) | `make data` |
 | Data audit (synthetic diversity, train→test near-dups, subject shortcut) | `make data-audit` → `results/data_audit/report.md` |
+| Hard Meeting stress-test CSV (Groq; refuses to overwrite a reviewed file without `--force`) | `make stress-set` → `datasets/stress/meeting_stress.csv` |
 | Bundle splits for the GPU PC | `make export-splits` → `datasets/export/groundedtriage-splits-<test hash>.tar.gz` |
 | Regenerate synthetic meeting emails (Groq; cached, resumable) | `make synthetic-meetings` |
 | Install the SCRIBE baseline extra (torch + transformers) | `make setup-baseline` |
@@ -181,7 +182,11 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `stratified_split` keeps every group in exactly one split, stratified by category × origin;
   - the audit checks every split pair with the build's vectorizer: **0 cross-split pairs**;
   - new hashes (test content `c6539fff…2daf3`); export `groundedtriage-splits-c6539fff94a1.tar.gz` is **final**.
-  - Commit: see `git log --grep "P2.1h"` (hash backfilled next commit).
+  - Commit `760b230`.
+- P2.1i Hard Meeting Scheduling stress set (eval only, never trained on):
+  - `data/stress_meetings.py` (seed 1337, its own prompt) → `datasets/stress/meeting_stress.csv` (100 rows, committed);
+  - every row is `needs_review=true` until Arya hand-checks it; `load_reviewed()` returns None until all rows are reviewed.
+  - Commit: see `git log --grep "P2.1i"` (hash backfilled next commit).
 
 ### In progress
 - P2.1i hard stress-test set, then P2.3 baseline evaluation.
@@ -323,8 +328,15 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Per category × origin stratum: shuffle the groups (seed 42), put the largest first, and assign each to the split furthest below its target row count. Singletons hit round(n·0.15) exactly. The split is input-order independent (groups are keyed by their smallest id).
   - The audit refits the same vectorizer on the same corpus (checked against the manifest) and finds **0 near-duplicate pairs for train-pool~val, train-pool~test and val~test**. Before the re-split, 436 test rows (11.6%) leaked.
   - New sizes: train 13,651 (cap still 5,380 = 5 × 1,076 Spam; Technical lost 3,963) / val 3,775 / test 3,775 / train_urgency 16,258.
-  - **This supersedes the P2.1f/P2.1g hashes.** Test content sha256 is now `c6539fff94a18757de5017c2ad60a0ff29baf9c01473b80d85ed7d4328e2daf3`, and the export is `datasets/export/groundedtriage-splits-c6539fff94a1.tar.gz` (sha256 `1bcbe081…641a`). The rebuild is byte-identical. The old `…db976b0585b2.tar.gz` archive in `datasets/export/` is stale and must not be used.
+  - **This supersedes the P2.1f/P2.1g hashes.** Test content sha256 is now `c6539fff94a18757de5017c2ad60a0ff29baf9c01473b80d85ed7d4328e2daf3`, and the export is `datasets/export/groundedtriage-splits-c6539fff94a1.tar.gz`. The archive also bundles `docs/model_artifacts.md`, the card and `taxonomy.yaml`, so its own sha256 changes whenever those docs change. **Identify the data by the test content hash in the name, not the archive hash.** The rebuild is byte-identical. The old `…db976b0585b2.tar.gz` archive in `datasets/export/` is stale and must not be used.
   - Effect: the audit's diagnostic TF-IDF+LR val macro-F1 dropped from 0.825 to 0.802 (accuracy 0.760 to 0.735), so leaked near-duplicates had been inflating scores.
+- 2026-10-15 (P2.1i, review Q2 = b): **Hard stress-test set for Meeting Scheduling.**
+  - 100 rows from gpt-oss-120b (temperature 0.9, JSON mode), seed 1337 and a separate prompt (the training generator uses 42). 21 calls, 24,729 tokens; 1 batch retried.
+  - 50 `embedded_meeting` rows: a technical (25) or billing (25) problem whose main ask is a meeting (intended label Meeting Scheduling).
+  - 50 `call_mention` rows: Technical 15 / Billing 12 / Feature 12 / General 11 that mention calls, demos, Zoom or calendars but don't ask for a meeting.
+  - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
+  - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
+  - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
 - 2026-10-15 (P2.2): SCRIBE baseline design:
   - **Rules:** each regex cue has a weight. A category's confidence is the noisy-OR `1 − Π(1 − w)` of its matched cues, and a decision is accepted only at ≥ 0.95 (SCRIBE's fixed cutoff). One strong cue (pharma/casino, advance-fee, weight 0.95) is enough; weak cues (Zoom, "click here") must co-occur. The rules cover only Spam and Meeting Scheduling, per the taxonomy decision. The cue lists are generic vocabulary, written before any evaluation run and **not tuned on val/test**. The noisy-OR scoring is our interpretation of "regex rules with a fixed ~95% cutoff".
   - **Zero-shot:** `facebook/bart-large-mnli`, hypothesis `"This email is {}."` over the six `taxonomy.yaml` descriptions (single-label softmax). Input is `model_input(subject, body)`, the same text the other models see. Long inputs are truncated by the pipeline.
