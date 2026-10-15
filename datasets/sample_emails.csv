@@ -1,0 +1,31 @@
+Sender,Subject,Body,Label,Date
+priya.n@acme-corp.com,Charged twice for October invoice,"Hi, I was billed twice for invoice INV-2291 this month (two charges of $49 on Oct 3). Can you refund the duplicate charge? Thanks, Priya",Billing,2026-10-03T09:12:00Z
+tom.becker@fastmail.com,Cannot log in after password reset,"I reset my password yesterday and now the login page says ""invalid credentials"" every time. I've tried two browsers. My username is tbecker.",Account/Access,2026-10-03T10:40:00Z
+ops@northwind.io,API returning 500 errors since this morning,"Our integration has been getting HTTP 500 from /v2/orders since about 07:00 UTC. This is blocking all our order syncs. Please treat as urgent.
+
+--
+Lena Fischer
+Platform Ops, Northwind",Technical Issue,2026-10-03T11:05:00Z
+maria.gomez@example.org,Feature request: export reports to Excel,Would it be possible to add an option to export the monthly usage report as .xlsx? CSV works but our finance team prefers Excel.,Feature Request,2026-10-03T13:22:00Z
+d.okafor@brightlabs.co,Very disappointed with support response time,I opened a ticket five days ago about a broken webhook and nobody has replied. This is not acceptable for a paid plan. I'm considering cancelling.,Complaint,2026-10-04T08:01:00Z
+winner-notice@prizes-claim.biz,Congratulations! You have won a $1000 gift card,"Click here to claim your prize now!!! Limited time offer, act fast. Enter your bank details to receive your reward.",Spam,2026-10-04T08:30:00Z
+sarah.lee@acme-corp.com,Can we meet Thursday to review the Q4 rollout?,"Hi, could we schedule a 30-minute call on Thursday at 3pm to go over the Q4 rollout plan? Google Meet is fine.",Meeting Scheduling,2026-10-04T09:15:00Z
+james.w@gmail.com,Dinner on Saturday?,"Hey! Are you free for dinner on Saturday? Thinking of that new Thai place downtown. Let me know, James",Personal,2026-10-04T18:45:00Z
+raj.patel@acme-corp.com,Updated project timeline attached,"Team, please find the revised timeline for the data migration project. Milestone 2 moves to Nov 14. Let me know if this affects your work.",Work,2026-10-05T07:50:00Z
+info@citylibrary.org,Library hours during the holiday weekend,"The library will be closed on Monday, Oct 13. Regular hours resume Tuesday.",General,2026-10-05T10:00:00Z
+alerts@monitoring.acme-corp.com,CRITICAL: production database down,"Production database cluster db-prod-1 is unreachable. All customer-facing services are failing. Immediate action required.",Urgent,2026-10-05T02:14:00Z
+noreply@newsletter.saasweekly.com,This week in SaaS: 10 growth tactics,"Read our top stories this week. You are receiving this because you subscribed. Unsubscribe at any time.",General,2026-10-05T12:00:00Z
+kenji.sato@example.jp,Refund for annual plan downgrade,"I downgraded from the annual Pro plan to Basic on Oct 1. How much will be refunded, and when will I see it on my card?",Billing,2026-10-05T14:30:00Z
+anna.k@brightlabs.co,Two-factor codes not arriving,"I'm not receiving SMS codes for two-factor authentication, so I'm locked out of my account. Can you disable 2FA temporarily or send the code by email?",Account/Access,2026-10-06T08:05:00Z
+lucas.m@example.com.br,Problema com a fatura de setembro,"Olá, a fatura de setembro veio com um valor diferente do contratado. Podem verificar, por favor? Obrigado.",Billing,2026-10-06T09:40:00Z
+helpdesk-user@retailco.com,Mobile app crashes on startup,"<html><body><p>Hello,</p><p>Since the update to version 4.2 the iOS app <b>crashes immediately</b> on startup. iPhone 14, iOS 19.1.</p><p>Thanks,<br>Retail Co IT</p></body></html>",Technical Issue,2026-10-06T11:11:00Z
+priya.n@acme-corp.com,Re: Charged twice for October invoice,"Following up on this - I still see both charges on my statement.
+
+On Fri, Oct 3, 2026 at 9:12 AM Priya N <priya.n@acme-corp.com> wrote:
+> Hi, I was billed twice for invoice INV-2291 this month (two charges of $49 on Oct 3).
+> Can you refund the duplicate charge?",Billing,2026-10-07T09:00:00Z
+olivia.chen@designhub.io,Dark mode for the dashboard,Any plans to support dark mode in the web dashboard? Staring at the white screen late at night is rough.,Feature Request,2026-10-07T21:30:00Z
+m.rossi@example.it,Your onboarding call was fantastic,"Just wanted to say thanks to Elena for the onboarding session yesterday, it was really helpful.",General,2026-10-08T10:10:00Z
+ceo@acme-corp.com,Need the board deck numbers by 5pm today,"Please send me the final revenue and churn numbers for the board deck by 5pm today, this cannot slip.",Urgent,2026-10-08T11:00:00Z
+d.okafor@brightlabs.co,Very disappointed with support response time,I opened a ticket five days ago about a broken webhook and nobody has replied. This is not acceptable for a paid plan. I'm considering cancelling.,Complaint,2026-10-08T12:00:00Z
+support-bot@status.cloudhost.net,[Automated] Scheduled maintenance notification,"This is an automated message. Scheduled maintenance will occur on Oct 20 from 01:00 to 03:00 UTC. No action is required. Do not reply to this email.",General,2026-10-09T06:00:00Z

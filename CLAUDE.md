@@ -80,13 +80,18 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `ingest.Source` (Name/Fetch/Reply over `model.Ticket`);
   - `Registry` builds the enabled entries of `config/sources.yaml`;
   - `FakeSource` records replies and filters Fetch by `since`.
-  - Commit: see `git log --grep "P1.1"` (hash backfilled next commit).
+  - Commit `897ed7a`.
+- P1.2 CSV adapter:
+  - `ingest.CSVSource` reads Sender/Subject/Body plus optional Label/Date/Id, case-insensitive and BOM-tolerant;
+  - Reply appends to `datasets/out/replies.csv`;
+  - `ingest.DefaultRegistry()` registers the adapters;
+  - committed a hand-written 22-row `datasets/sample_emails.csv`.
+  - Commit: see `git log --grep "P1.2"` (hash backfilled next commit).
 
 ### In progress
-- none. Next is P1.2.
+- none. Next is P1.3.
 
 ### To do
-- P1.2 CSV adapter
 - P1.3 IMAP adapter
 - P1.4 Ticketing API adapter (Zendesk; Freshdesk optional)
 - P1.5 Preprocess & normalize
@@ -159,6 +164,15 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P1.2): CSV `external_id` is the `Id` column if present. Otherwise it's `csv-` plus the first 16 hex characters of sha256 over sender, subject, body and date. That's stable across reorders and re-reads, and two rows with the same text but different dates get distinct ids, so content-hash dedupe (P1.5) still sees them.
+  - `ReceivedAt` comes from the `Date` column (RFC 3339 / `YYYY-MM-DD[ HH:MM:SS]`, UTC), falling back to the file's mtime.
+  - `Label` isn't part of the Ticket contract. It's exposed via `CSVSource.ReadRows()` for evaluation tooling and not stored.
+- 2026-10-15 (P1.2): `datasets/sample_emails.csv` adds an optional `Date` column to SCRIBE's format. It deliberately includes edge cases for later parts:
+  - a repeated complaint with a different date (content-hash dedupe);
+  - a Portuguese billing email (the language check);
+  - `noreply@`, newsletter and automated senders (mute, P4.2);
+  - an HTML body;
+  - a quoted reply and a signature (stripping).
 - 2026-10-15 (P1.1): Each source's `Name()` is its type (`csv`/`email`/`zendesk`), which is also `Ticket.Source`. The registry allows at most one enabled source per type, so outbound (P6.3) can resolve the reply adapter from `Ticket.Source` alone. Multiple instances of one type (e.g. two IMAP inboxes) would need a `source_instance` column; that's out of scope.
 - 2026-10-15 (P1.1): Sources are configured in `config/sources.yaml`, which holds non-secret options only; adapters read credentials from env. Unknown YAML keys are rejected (`KnownFields`) to catch typos. Disabled entries need no registered factory.
 - 2026-10-15 (Phase 0 review): **Documented deviation from SCRIBE.** `openai/gpt-oss-120b` (Groq) is the LLM for BOTH the SCRIBE baseline's draft→refine and this system's generator. SCRIBE used LLaMA-3-70B, which isn't available on the Groq key (404). Using the same LLM on both sides isolates the effect of grounding in P7.2. This must also be stated in `results/REPORT.md`. An optional P7 extra: a LLaMA-70B baseline run via another OpenAI-compatible provider if one is free, which is why `GROQ_BASE_URL` is configurable.
