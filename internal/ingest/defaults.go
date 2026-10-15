@@ -9,5 +9,6 @@ func DefaultRegistry() *Registry {
 		}
 	}
 	must(r.Register("csv", NewCSVFactory))
+	must(r.Register("email", NewEmailFactory))
 	return r
 }

@@ -91,17 +91,18 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `preprocess.HTMLToText`, `StripQuoted`, `StripSignature`;
   - `ingest.ParseEmail`: multipart, charsets, threading headers;
   - 4 `.eml` fixtures in `internal/ingest/testdata/email/`.
-  - Commit: see `git log --grep "P1.3a"` (hash backfilled next commit).
+  - Commit `67c7027`.
+- P1.3b Email source:
+  - `EmailSource` over the `IMAPFetcher`/`Mailer` interfaces;
+  - real `IMAPClient` (go-imap v1, read-only, BODY.PEEK) and `SMTPMailer` (465 TLS / STARTTLS, PLAIN auth);
+  - threaded `BuildReply`;
+  - `email` registered in DefaultRegistry.
+  - Commit: see `git log --grep "P1.3b"` (hash backfilled next commit).
 
 ### In progress
-- P1.3 IMAP adapter. P1.3a (parser + cleaning) is done. Next is P1.3b:
-  - IMAP fetcher and SMTP mailer interfaces, with real implementations (go-imap v1, net/smtp);
-  - `EmailSource` Fetch/Reply;
-  - reply MIME building with In-Reply-To/References;
-  - factory from IMAP_*/SMTP_* env vars, registered in DefaultRegistry.
+- none. Next is P1.4.
 
 ### To do
-- P1.3 IMAP adapter
 - P1.4 Ticketing API adapter (Zendesk; Freshdesk optional)
 - P1.5 Preprocess & normalize
 - P1.6 Ingestion worker
@@ -173,6 +174,10 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P1.3b): The IMAP poll opens a connection per poll, SELECTs the mailbox read-only, and searches UNSEEN SINCE the day of `since`. It fetches `BODY.PEEK[]`, so **the user's inbox flags are never changed**. Repeat fetches are handled by `since` filtering on the server's INTERNALDATE plus the DB unique key `(source, external_id=Message-ID)`.
+  - `ReceivedAt` is INTERNALDATE (trusted), falling back to the `Date` header.
+  - Mail from our own `SMTP_FROM` address is skipped, to avoid reply loops. Unparseable messages are logged and skipped, without failing the batch.
+- 2026-10-15 (P1.3b): Replies are text/plain UTF-8 quoted-printable, with `In-Reply-To: <ExternalID>` and `References: <thread root> <ExternalID>`. Header values are stripped of CR/LF to prevent injection. Subjects already starting with "Re:" don't get a second one. Hash-based ids (`nomsgid-…`) are never used as In-Reply-To.
 - 2026-10-15 (P1.3a): HTML→text and quote/signature stripping live in `internal/preprocess` so every adapter shares them (P1.5 applies them to all sources); the email parser already uses them.
   - Quote stripping cuts at the first reply header: "On … wrote:" (also when it wraps onto two lines), Outlook `From:`+`Sent:/To:/Date:` blocks, underscore rules, or "-----Original Message-----". It also drops every `>` line.
   - Signature stripping cuts at the RFC 3676 `-- ` delimiter or a mobile footer ("Sent from my iPhone", "Get Outlook for iOS").
@@ -230,6 +235,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 - **Supabase connection mode:** use the **Session pooler** connection string (IPv4, port 5432). The Transaction pooler (6543) breaks prepared statements in pgx/psycopg.
 - **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
+- **Email adapter not tested against a real mailbox:** IMAP_*/SMTP_* aren't configured. `IMAPClient` is untested beyond compiling. `SMTPMailer` is tested against an in-process fake SMTP server (no TLS, no auth). Gmail needs an app password, plus IMAP enabled.
 - **Integration test cost:** each package pays about 26s once, to create, migrate and drop its schema through the Supabase pooler. Each test after that takes about 2–3s.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
 - **Groq models change:** `llama-3.3-70b-versatile` isn't available on the current key. Run `GET {GROQ_BASE_URL}/models` to see which models are live.
