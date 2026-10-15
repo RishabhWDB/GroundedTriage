@@ -27,7 +27,9 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 |---|---|
 | First-time setup (venv at `ml-service/.venv`, Python 3.11, Go modules, `models/` + `datasets/` dirs) | `make setup` |
 | Start api + worker + ml-service (honcho, `Procfile`) | `make dev` |
-| Single service | `make api` / `make worker` / `make ml` (uvicorn on `:8001`) |
+| Single service | `make api` (Gin on `:8080`, `API_PORT`) / `make worker` / `make ml` (uvicorn on `:8001`) |
+| Health checks | `curl localhost:8001/health` (ml-service), `curl localhost:8080/health` (api, includes ml-service) |
+| Live Go → ml-service test (needs `make dev` or `make ml` running) | `go test -tags live -count=1 ./internal/mlclient -run TestLiveHealth` |
 | Unit tests (Go + Python; slow/integration skipped) | `make test` |
 | One Go test | `go test ./internal/<pkg> -run TestName` |
 | One Python test | `cd ml-service && .venv/bin/pytest tests/test_x.py::test_name` |
@@ -61,15 +63,17 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `GroqLLM` (httpx, backoff) and `FakeLLM`;
   - lazy-torch `select_device`;
   - pydantic-settings config.
-  - Commit: see `git log --grep "P0.3a"` (hash backfilled next commit).
+  - Commit `eec9c9a`.
+- P0.3b Go side:
+  - all contract structs in `internal/model`;
+  - `internal/mlclient` (per-attempt timeout, retries on transport/429/5xx);
+  - Gin API stub whose `/health` includes ml-service health;
+  - an idle worker stub;
+  - `make dev` verified live.
+  - Commit: see `git log --grep "P0.3b"` (hash backfilled next commit).
 
 ### In progress
-- P0.3 ml-service skeleton + Go client. P0.3a (the Python side) is done. Next is P0.3b:
-  - Go contract structs;
-  - `internal/mlclient` (timeouts, retries) with its tests;
-  - Gin API stub with `/health`;
-  - a worker stub that blocks until a signal (so honcho keeps running);
-  - verify `make dev` and that a Go test reaches the live `/health` through mlclient.
+- none. Phase 0 is complete and waiting for the Phase 0 review; next is P1.1.
 
 ### To do
 - P1.1 Source interface + Ticket model
@@ -148,6 +152,8 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P0.3b): The worker stub blocks until SIGINT/SIGTERM, because honcho stops every process when one exits. The api's `/health` calls the ml-service with no retries and a 3s timeout, and reports `"unreachable"` rather than failing.
+- 2026-10-15 (P0.3b): The Go build tag `live` is for tests that need running services. They're excluded from `make test` and `make test-integration`.
 - 2026-10-15 (P0.3a): The `Classification` contract gains `low_confidence: bool`, which the cascade sets when it accepts the fast tier below τ without a deep tier. Routing reads it in P4.1, and it matches the `classifications.low_confidence` column.
 - 2026-10-15 (P0.2a, review): Integration tests share one migrated schema per package (`TestMain` → `storetest.Run`) and isolate rows with `storetest.UniqueID` or `testDB.Truncate` (truncate refuses non-`test_` schemas). This replaced the per-test schema.
 - 2026-10-15: The Done entry's commit hash is backfilled in the following part's commit (no amending, per the no-history-rewrite rule).
