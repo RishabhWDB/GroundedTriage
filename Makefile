@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: setup dev api worker ml test test-go test-py test-integration lint fmt migrate seed
+.PHONY: setup dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status seed
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -44,20 +44,23 @@ test-py:
 	cd $(ML_DIR) && $(VBIN)/pytest -q
 
 test-integration: ## Integration tests against TEST_DATABASE_URL (never DATABASE_URL); tests load .env and skip if unset
-	go test -tags integration ./...
-	cd $(ML_DIR) && $(VBIN)/pytest -q -m integration
+	go test -tags integration -count=1 ./...
+	cd $(ML_DIR) && { $(VBIN)/pytest -q -m integration; rc=$$?; [ $$rc -eq 5 ] && echo "(no Python integration tests yet)" && rc=0; exit $$rc; }
 
 lint: ## gofmt check, go vet, ruff check + format check
-	@out=$$(gofmt -l cmd internal); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
+	@out=$$(gofmt -l cmd internal migrations); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 	go vet ./...
 	cd $(ML_DIR) && $(VBIN)/ruff check . && $(VBIN)/ruff format --check .
 
 fmt:
-	gofmt -w cmd internal
+	gofmt -w cmd internal migrations
 	cd $(ML_DIR) && $(VBIN)/ruff format . && $(VBIN)/ruff check --fix .
 
-migrate: ## Apply migrations to DATABASE_URL (implemented in P0.2)
-	@echo "migrate: not implemented yet (P0.2)"; exit 1
+migrate: ## Apply pending migrations to DATABASE_URL (idempotent; up only)
+	go run ./cmd/migrate up
+
+migrate-status: ## Show applied/pending migrations on DATABASE_URL
+	go run ./cmd/migrate status
 
 seed: ## Seed demo data (implemented in P8.1)
 	@echo "seed: not implemented yet (P8.1)"; exit 1

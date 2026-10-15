@@ -35,7 +35,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Integration tests (needs `TEST_DATABASE_URL`) | `make test-integration` |
 | Lint (gofmt check, go vet, ruff check + format check) | `make lint` |
 | Auto-format | `make fmt` |
-| Migrate | `make migrate` (not implemented until P0.2) |
+| Migrate (goose, up only, idempotent; SQL in `migrations/`, embedded) | `make migrate` / `make migrate-status` |
+| One Go integration test | `go test -tags integration -count=1 ./internal/store -run TestTicketInsertAndGet` |
 | Seed | `make seed` (not implemented until P8.1) |
 | Evaluate | not implemented yet (Phase 2/7) |
 
@@ -43,13 +44,17 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### Done
 - P0.1 Repo scaffold: Go module, Python package, Makefile, Procfile, `.env.example`, CLAUDE.md, README stub. Commit `886482d`.
-- P0.1a Review fixes: `.env` is no longer included by make; programs load it themselves; python-dotenv is used in the pytest conftest; ignore rules re-verified. Commit: see `git log --grep "P0.1a"` (hash backfilled next commit).
+- P0.1a Review fixes: `.env` is no longer included by make; programs load it themselves; python-dotenv is used in the pytest conftest; ignore rules re-verified. Commit `69d82e5`.
+- P0.2 Database + migrations:
+  - goose migrations (`vector` extension plus 7 core tables, with an HNSW cosine index on `kb_chunks.embedding`), `cmd/migrate`, `store.Tickets`;
+  - `storetest.NewSchema` creates a migrated schema per test and drops it afterwards;
+  - applied to Supabase, and a second run was a no-op.
+  - Commit: see `git log --grep "P0.2"` (hash backfilled next commit).
 
 ### In progress
-- none. Next up is P0.2.
+- none. Next up is P0.3.
 
 ### To do
-- P0.2 Database + migrations (Supabase)
 - P0.3 ml-service skeleton + Go client
 - P1.1 Source interface + Ticket model
 - P1.2 CSV adapter
@@ -87,8 +92,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P8.3 Docs
 
 ### Blocked / needs input
-- P0.2 needs `DATABASE_URL` (Supabase **Session pooler** string) and `TEST_DATABASE_URL` in `.env`.
-- P0.3 live Groq calls need `GROQ_API_KEY`. Tests use `FakeLLM` and don't need it.
+- none. `.env` has `DATABASE_URL`, `TEST_DATABASE_URL` and `GROQ_API_KEY`.
 
 ## 4. Model artifacts
 
@@ -114,6 +118,16 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - honcho reads `.env` for `make dev`.
   - The review suggested `set -a; . ./.env; set +a` in recipes. I didn't adopt it: shell sourcing also expands unquoted `$` and breaks on `&`/`;`, and it's redundant once each program loads `.env` itself. So no recipe sources `.env`. Values containing `$` go in single quotes, which godotenv, python-dotenv and the shell all treat literally.
   - `ML_PORT` for `make ml` is a make variable (default 8001; override with `make ml ML_PORT=...`).
+- 2026-10-15 (P0.2): Migrations use goose v3, with SQL embedded via `migrations/embed.go` and run by `cmd/migrate`, so there's no CLI to install. Only `up` and `status` are exposed; down-migrations are not reachable from code.
+  - Alternative considered: golang-migrate. goose's embed + Provider API is simpler.
+- 2026-10-15 (P0.2): `go get` of current pgx v5.11, goose v3.29 and golang.org/x/* raised `go.mod` to `go 1.26.0`. This was accepted: Go ≥1.21 auto-downloads the toolchain (GOTOOLCHAIN=auto).
+- 2026-10-15 (P0.2): Go contract structs live in `internal/model` (Ticket so far; the rest come in P0.3). This avoids import cycles between ingest, store and pipeline.
+- 2026-10-15 (P0.2): Schema choices:
+  - kb ids are text (`kb_documents.id` is the source doc id; `kb_chunks.id` is a stable chunk id), so citations are `text[]`;
+  - every table has a uuid or identity primary key plus `created_at`;
+  - `classifications` keeps history (no unique `ticket_id`) and has a `low_confidence` column for the cascade flag;
+  - the embedding dimension is fixed at 384 in SQL, so changing the embedding model needs a new migration.
+- 2026-10-15 (P0.2): Per-test schemas pin `search_path` to `<test>, public, extensions`.
 - 2026-10-15: The Done entry's commit hash is backfilled in the following part's commit (no amending, per the no-history-rewrite rule).
 
 ## 6. Conventions
@@ -127,7 +141,8 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - results in `results/` (committed);
   - `models/`, `datasets/raw|processed|export` gitignored.
 - **Shared contracts** (Ticket, Classification, Route, RetrievedChunk, ReplyDraft) are defined once per language: Go structs in `internal/` and Pydantic in `ml-service/app/schemas.py`. Keep them in sync.
-- **Test markers:** `@pytest.mark.slow` for tests that load large models, `@pytest.mark.integration` for tests that need the DB. Go integration tests use the `integration` build tag.
+- **Test markers:** `@pytest.mark.slow` for tests that load large models, `@pytest.mark.integration` for tests that need the DB.
+  - Go integration tests use the `//go:build integration` tag and `storetest.NewSchema(t)`. They load `.env` and skip when `TEST_DATABASE_URL` is unset.
 - **External services** (Groq, IMAP/SMTP, Zendesk, Google Calendar) sit behind interfaces with fakes. Unit tests run offline.
 - **Env vars:** see `.env.example` (DATABASE_URL, TEST_DATABASE_URL, GROQ_*, ML_SERVICE_URL, ML_PORT, TORCH_DEVICE, API_KEY, IMAP_*, SMTP_*, ZENDESK_*, GOOGLE_*).
 - **Model RAM:** load models lazily. The SCRIBE baseline (BART-MNLI, about 1.6 GB) runs as its own CLI, never inside the always-on ml-service.
@@ -135,6 +150,8 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 ## 7. Known issues and gotchas
 
 - **Supabase connection mode:** use the **Session pooler** connection string (IPv4, port 5432). The Transaction pooler (6543) breaks prepared statements in pgx/psycopg.
+- **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
+- **Slow integration tests:** each test that calls `storetest.NewSchema` takes about 25s through the Supabase pooler, mostly running the migrations. Share one schema per package if the count grows.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
 - **Database safety:** never run destructive SQL (DROP, TRUNCATE, down-migrations) against `DATABASE_URL` without asking Arya. Tests only use `TEST_DATABASE_URL`, with a per-run schema.
 - **`.env` quoting:** put any value containing `$` in single quotes. Make never reads `.env` (see the decisions log).
