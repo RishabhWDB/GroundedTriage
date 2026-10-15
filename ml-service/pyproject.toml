@@ -20,6 +20,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Dataset builders and Kaggle downloads (P2.1). kaggle>=2.2 reads KAGGLE_API_TOKEN.
+data = [
+    "kaggle>=2.2.4,<3",
+    "pandas>=2.2",
+    "pyarrow>=17",
+]
 dev = [
     "ruff>=0.6",
     "pytest>=8",

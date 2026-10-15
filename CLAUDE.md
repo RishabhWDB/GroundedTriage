@@ -41,6 +41,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | One Go integration test | `go test -tags integration -count=1 ./internal/store -run TestTicketInsertAndGet` |
 | Seed | `make seed` (not implemented until P8.1) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
+| Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
 | Worker: one poll / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s) |
 | Evaluate | not implemented yet (Phase 2/7) |
 
@@ -119,10 +120,24 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `cmd/dbping` latency diagnostic;
   - sender normalised to a bare lower-cased address before hashing;
   - non-English tickets stored with `ingest_status='skipped'`, `skip_reason='non_english'` (migration 00004).
-  - Commit: see `git log --grep "P1.7"` (hash backfilled next commit).
+  - Commit `39ee538`.
+
+- P2.1a Kaggle token auth:
+  - `data.kaggle_auth` (`get_api`, `download_dataset`; `python -m data.kaggle_auth` checks auth);
+  - `kaggle>=2.2.4` with KAGGLE_API_TOKEN read from `.env`;
+  - a `[data]` extra (kaggle, pandas, pyarrow) installed by `make setup`.
+  - Commit: see `git log --grep "P2.1a"` (hash backfilled next commit).
 
 ### In progress
-- none. Next is P2.1.
+- P2.1 Dataset builders. Kaggle auth (P2.1a) is done. The builders themselves are waiting on Arya's decisions (see Blocked).
+  - Downloaded `Tobi-Bueck/customer-support-tickets` (HF, CC-BY-NC-4.0) to `datasets/raw/tobi_bueck/train.parquet` (gitignored).
+  - Profile of the English rows (28,261 of 61,765):
+    - only 10 support queues; Tech/Product/IT/Outage queues total about 17.9k;
+    - priority is only low 5,774 / medium 11,570 / high 10,917, with **0 critical**;
+    - 4,595 duplicate bodies (dedupe before splitting);
+    - 12.9% have no subject;
+    - some bodies contain `<br>`;
+    - the text is LLM-generated and the queue labels are weakly tied to content.
 
 ### To do
 - P2.1 Dataset builders
@@ -155,7 +170,12 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P8.3 Docs
 
 ### Blocked / needs input
-- Arya's local `.env` still has `GROQ_MODEL=llama-3.3-70b-versatile`, which overrides the new default. It needs changing to `openai/gpt-oss-120b`, or the line deleting.
+- **P2.1 decisions** (see the P2.1 decision request in the conversation):
+  - the exact slug of "Support Ticket Priority 50K";
+  - the taxonomy mapping for Tobi-Bueck;
+  - the data source for the SCRIBE classes (Spam/Personal/Meeting/Work/Urgent) and for Complaint/Account;
+  - the urgency `critical` level, which has no English examples.
+- **Supabase region:** Arya may recreate the project in ap-south-1. If so: new `.env` URLs, `make migrate`, `go run ./cmd/worker -once`, then `go run ./cmd/dbping`.
 
 ## 4. Model artifacts
 
@@ -193,6 +213,9 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P2.1a): Kaggle uses a new-style API token (`KGAT_…`) in `KAGGLE_API_TOKEN`. `kaggle` 2.2.4 reads it natively via `kagglesdk` (verified in the package source).
+  - `import kaggle` authenticates at import time, and `authenticate()` calls `exit(1)` on failure. `data.kaggle_auth` therefore loads `.env` first, imports lazily, silences the SDK's help text and raises `KaggleAuthError` with exact fix-it steps.
+  - It also diagnoses a malformed token (stray prefix characters, quotes, whitespace) without printing it.
 - 2026-10-15 (P1.7, review): The sender is normalised by `preprocess.NormalizeSender` before hashing and storing: `net/mail` parse → bare address, lower-cased; display names, angle brackets, quotes and `mailto:` stripped. Values with no address (`zendesk-user:42`) are trimmed and lower-cased. `ContentHash` normalises internally too, so a display name never changes the hash.
 - 2026-10-15 (P1.7, review): Non-English tickets are **stored**, not dropped, with `tickets.ingest_status='skipped'` and `skip_reason='non_english'` (migration 00004; default `accepted`). Empty tickets are still dropped (nothing to show).
   - The column is named `ingest_status` rather than `status`, so it isn't confused with route/draft statuses.
@@ -292,6 +315,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Ingestion does 2 queries per ticket; batching is deferred to P6/P8 volume (review decision).
 - **Zendesk is first-message-only (accepted limitation).** Follow-up comments on an existing ticket are not ingested. The incremental export is per ticket, and the `(source, external_id)` key drops repeats.
 - **Invisible characters in generated Go files:** `\u` escapes written by Claude can land in files as literal BOM/nbsp/zero-width characters, and Go rejects a mid-file BOM. Fix with a small script that rewrites them as `\uXXXX` escapes. Check `go vet` after writing any file containing such escapes.
+- **Kaggle token check:** Kaggle answers 404 to the token check for an invalid token, and the SDK reports that as "Authentication required". `python -m data.kaggle_auth` names the likely cause.
 - **Integration test cost:** each package pays about 26s once, to create, migrate and drop its schema through the Supabase pooler. Each test after that takes about 2–3s.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
 - **Groq models change:** `llama-3.3-70b-versatile` isn't available on the current key. Run `GET {GROQ_BASE_URL}/models` to see which models are live.

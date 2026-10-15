@@ -19,7 +19,7 @@ setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
 	test -d $(VENV) || $(PYTHON) -m venv $(VENV)
 	$(VPY) -m pip install --upgrade pip
-	cd $(ML_DIR) && $(VPY) -m pip install -e ".[dev]"
+	cd $(ML_DIR) && $(VPY) -m pip install -e ".[dev,data]"
 	go mod download
 	mkdir -p models/fast_tier models/deep_tier models/urgency datasets/raw datasets/processed
 
