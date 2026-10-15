@@ -11,9 +11,22 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", extra="ignore")
 
+    # Drafter (this system's generator AND the SCRIBE baseline's draft->refine;
+    # same model on both sides isolates the effect of grounding, see CLAUDE.md).
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
+    draft_reasoning_effort: str = "low"
+    # Generous so reasoning tokens can't truncate the JSON answer.
+    llm_max_tokens: int = 4096
+
+    # Faithfulness judge: a different model family from the drafter by default.
+    # Empty api key / base url fall back to the GROQ_* values.
+    judge_model: str = "qwen/qwen3.8-27b"
+    judge_base_url: str = ""
+    judge_api_key: str = ""
+    judge_reasoning_effort: str = "medium"
+    judge_max_tokens: int = 4096
     torch_device: str = ""
     ml_port: int = 8001
     models_dir: Path = REPO_ROOT / "models"

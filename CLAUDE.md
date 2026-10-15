@@ -70,10 +70,15 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - Gin API stub whose `/health` includes ml-service health;
   - an idle worker stub;
   - `make dev` verified live.
-  - Commit: see `git log --grep "P0.3b"` (hash backfilled next commit).
+  - Commit `732cc84`.
+- P0.3c LLM config after the Phase 0 review:
+  - drafter `openai/gpt-oss-120b` (reasoning low) and judge `qwen/qwen3.8-27b` (reasoning medium) via `build_llm(settings, role)`;
+  - `max_tokens` 4096, with a truncation error;
+  - per-call token-usage logging.
+  - Commit: see `git log --grep "P0.3c"` (hash backfilled next commit).
 
 ### In progress
-- none. Phase 0 is complete and waiting for the Phase 0 review; next is P1.1.
+- none. Phase 0 is approved; next is P1.1.
 
 ### To do
 - P1.1 Source interface + Ticket model
@@ -112,9 +117,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P8.3 Docs
 
 ### Blocked / needs input
-- **LLM model choice (needs Arya, before P2.2/P5.3).** `llama-3.3-70b-versatile` returns 404 `model_not_found` on this Groq key (checked 2026-10-15). The key's active text models are `openai/gpt-oss-120b`, `openai/gpt-oss-20b` and `qwen/qwen3.8-27b`. `gpt-oss-120b` was verified working with JSON mode.
-  - Options: (a) use `openai/gpt-oss-120b` via Groq for everything and document the deviation from SCRIBE's LLaMA-3-70B; (b) keep Groq for the system but run the SCRIBE baseline's LLaMA-3-70B elsewhere (another provider, OpenAI-compatible, needs a key); (c) something else.
-  - `.env.example` still says `llama-3.3-70b-versatile` until this is decided.
+- Arya's local `.env` still has `GROQ_MODEL=llama-3.3-70b-versatile`, which overrides the new default. It needs changing to `openai/gpt-oss-120b`, or the line deleting.
 
 ## 4. Model artifacts
 
@@ -152,6 +155,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (Phase 0 review): **Documented deviation from SCRIBE.** `openai/gpt-oss-120b` (Groq) is the LLM for BOTH the SCRIBE baseline's draft→refine and this system's generator. SCRIBE used LLaMA-3-70B, which isn't available on the Groq key (404). Using the same LLM on both sides isolates the effect of grounding in P7.2. This must also be stated in `results/REPORT.md`. An optional P7 extra: a LLaMA-70B baseline run via another OpenAI-compatible provider if one is free, which is why `GROQ_BASE_URL` is configurable.
+- 2026-10-15 (Phase 0 review): The faithfulness judge is configured separately (`JUDGE_MODEL`, `JUDGE_BASE_URL`, `JUDGE_API_KEY`, `JUDGE_REASONING_EFFORT`). It defaults to `qwen/qwen3.8-27b`, a different model family from the drafter, to reduce self-agreement bias.
+  - P7.2 adds judge validation: Arya hand-labels 60–100 claims with a labeling CSV/CLI to be built. Report judge-vs-human accuracy and Cohen's κ for qwen and gpt-oss-120b, then pick the better judge and log the choice. Until then, use qwen.
+- 2026-10-15 (P0.3c): Reasoning effort defaults are low for drafting and medium for judging. A live probe confirmed both models accept low/medium and return reasoning in a separate `reasoning` field, so `content` is clean JSON. qwen3 does no reasoning when the effort is omitted.
+  - `max_tokens` defaults to 4096 (`LLM_MAX_TOKENS`, `JUDGE_MAX_TOKENS`). `finish_reason=length` raises `LLMError` instead of returning truncated JSON.
+  - Usage is logged per call (prompt/completion/reasoning/total) and accumulated in `GroqLLM.usage`.
+- 2026-10-15 (Phase 0 review): Go integration setup of ~26s per package is accepted, so the design stays as it is. The TestClient deprecation warning is left alone; fixing it means installing the `httpx2` package, which isn't a one-line change.
 - 2026-10-15 (P0.3b): The worker stub blocks until SIGINT/SIGTERM, because honcho stops every process when one exits. The api's `/health` calls the ml-service with no retries and a 3s timeout, and reports `"unreachable"` rather than failing.
 - 2026-10-15 (P0.3b): The Go build tag `live` is for tests that need running services. They're excluded from `make test` and `make test-integration`.
 - 2026-10-15 (P0.3a): The `Classification` contract gains `low_confidence: bool`, which the cascade sets when it accepts the fast tier below τ without a deep tier. Routing reads it in P4.1, and it matches the `classifications.low_confidence` column.
@@ -182,7 +192,9 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
 - **Integration test cost:** each package pays about 26s once, to create, migrate and drop its schema through the Supabase pooler. Each test after that takes about 2–3s.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
-- **Groq models change:** `llama-3.3-70b-versatile` isn't available on the current key. Run `GET {GROQ_BASE_URL}/models` to see which models are live; see Blocked.
+- **Groq models change:** `llama-3.3-70b-versatile` isn't available on the current key. Run `GET {GROQ_BASE_URL}/models` to see which models are live.
+- **Tests vs `.env`:** the pytest conftest loads `.env` into the environment. Tests that check settings defaults must clear those variables (see `test_build_llm_roles`).
+- **pytest warning:** a StarletteDeprecationWarning from TestClient asks for `httpx2`. It's harmless and left as is (review decision).
 - **Render Go version:** `go.mod` declares `go 1.26.0`. At P8.2, check that Render's native Go runtime supports it, or pin a toolchain.
 - **Database safety:** never run destructive SQL (DROP, TRUNCATE, down-migrations) against `DATABASE_URL` without asking Arya. Tests only use `TEST_DATABASE_URL`, with a per-run schema.
 - **`.env` quoting:** put any value containing `$` in single quotes. Make never reads `.env` (see the decisions log).
