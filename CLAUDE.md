@@ -40,6 +40,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Migrate (goose, up only, idempotent; SQL in `migrations/`, embedded) | `make migrate` / `make migrate-status` |
 | One Go integration test | `go test -tags integration -count=1 ./internal/store -run TestTicketInsertAndGet` |
 | Seed | `make seed` (not implemented until P8.1) |
+| Worker: one poll / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s) |
 | Evaluate | not implemented yet (Phase 2/7) |
 
 ## 3. Status board
@@ -106,13 +107,18 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P1.5 Preprocess & normalize:
   - `preprocess.Normalize`: HTML→text, quote/signature stripping, whitespace/NFC, sender lower-casing, content hash, empty and non-English skips;
   - `preprocess.Ingestor` persists new tickets and rejects duplicates by `(source, external_id)` and by `content_hash`.
-  - Commit: see `git log --grep "P1.5"` (hash backfilled next commit).
+  - Commit `ba7404d`.
+- P1.6 Ingestion worker:
+  - `cmd/worker` polls the enabled sources in `config/sources.yaml` every `WORKER_POLL_INTERVAL` (or once, with `-once`);
+  - `pipeline.Poller` stores per-source checkpoints (`ingest_checkpoints`, migration 00003) with a 10-minute overlap and writes `audit_log` `ingest.poll`/`ingest.error` entries;
+  - graceful shutdown.
+  - Verified on Supabase: run 1 inserted 20 tickets, run 2 inserted 0.
+  - Commit: see `git log --grep "P1.6"` (hash backfilled next commit).
 
 ### In progress
-- none. Next is P1.6.
+- none. Phase 1 is complete and waiting for the Phase 1 review; next is P2.1.
 
 ### To do
-- P1.6 Ingestion worker
 - P2.1 Dataset builders
 - P2.2 SCRIBE baseline
 - P2.3 Baseline evaluation snapshot
@@ -181,6 +187,12 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P1.6): Each poll fetches with `since = checkpoint − 10 min` (the overlap) and then sets the checkpoint to the max `ReceivedAt` it fetched (never "now", which avoids clock-skew gaps).
+  - The overlap re-reads late arrivals, and dedupe drops the repeats.
+  - A failing source is logged and audited (`ingest.error`). It doesn't stop the other sources, and its checkpoint isn't advanced.
+  - Each source and poll gets one `ingest.poll` audit row with its counts and up to 100 inserted ticket ids. There's no per-ticket row, because each would cost a pooler round-trip.
+  - A poll in progress at SIGTERM runs to completion (bounded by `PollTimeout`, 5 min). The Poller lives in `internal/pipeline` because later phases extend it with classify/route/reply.
+- 2026-10-15 (P1.6): The 20 sample tickets (and their checkpoint and audit rows) now exist in the main Supabase DB from the P1.6 acceptance run. That's expected demo data; P8.1's seed uses the same CSV.
 - 2026-10-15 (P1.5): `content_hash` is sha256 over three parts: the lower-cased sender; the subject with Re:/Fwd:/AW:/WG: prefixes stripped, lower-cased, whitespace collapsed; and the lower-cased body with whitespace collapsed.
   - The sender is included so that two customers sending the same text are **not** merged. The goal is to catch the same message arriving twice (re-sends, or the same mail via email and Zendesk).
   - Tickets whose content hash is already stored are rejected as `duplicate_content`, even with a new external id. The check-then-insert isn't atomic, which is safe with a single ingestion worker (as now).
