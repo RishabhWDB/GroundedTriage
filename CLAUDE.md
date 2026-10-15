@@ -43,6 +43,9 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
 | Worker: one poll / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s) |
+| Build splits + dataset card (downloads raw data on first run) | `make data` |
+| Bundle splits for the GPU PC | `make export-splits` → `datasets/export/groundedtriage-splits-<test hash>.tar.gz` |
+| Regenerate synthetic meeting emails (Groq; cached, resumable) | `make synthetic-meetings` |
 | Evaluate | not implemented yet (Phase 2/7) |
 
 ## 3. Status board
@@ -144,11 +147,16 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P2.1e Synthetic meeting requests:
   - `data/synthetic_meetings.py` (seeded specs, fixed prompt, gpt-oss-120b, 5 per call, sha256-keyed response cache, validation and retry);
   - 400 rows committed in `datasets/synthetic/meeting_requests.jsonl`.
-  - Commit: see `git log --grep "P2.1e"` (hash backfilled next commit).
+  - Commit `2c54858`.
+- P2.1f Splits, card and export:
+  - `make data` builds 70/15/15 splits stratified by category × origin (seed 42), with a train-only 5× cap, a `text` model-input column, `manifest.json` (file + content SHA-256s) and the generated `datasets/README.md` card;
+  - `make export-splits` writes a deterministic archive for the PC;
+  - `docs/model_artifacts.md` holds the export and artifact contract.
+  - Rebuild is verified identical.
+  - Commit: see `git log --grep "P2.1f"` (hash backfilled next commit).
 
 ### In progress
-- P2.1 Dataset builders. a through e are done. `data/build.py`, `data/export.py`, their tests and `docs/model_artifacts.md` are written but uncommitted. Next:
-  - P2.1f: splits, dataset card, `make data`, `make export-splits`.
+- none. P2.1 is complete. Next is P2.2 (SCRIBE baseline).
   - Downloaded `Tobi-Bueck/customer-support-tickets` (HF, CC-BY-NC-4.0) to `datasets/raw/tobi_bueck/train.parquet` (gitignored).
   - Profile of the English rows (28,261 of 61,765):
     - only 10 support queues; Tech/Product/IT/Outage queues total about 17.9k;
@@ -159,7 +167,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
     - the text is LLM-generated and the queue labels are weakly tied to content.
 
 ### To do
-- P2.1 Dataset builders
 - P2.2 SCRIBE baseline
 - P2.3 Baseline evaluation snapshot
 - P3.1 Fast tier
@@ -265,10 +272,17 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P2.1e): How the synthetic Meeting Scheduling rows were made:
   - 400 rows from gpt-oss-120b (temperature 0.9, JSON mode, reasoning effort low), 5 emails per call (80 batches; 1 batch retried after returning 4 emails). Total 80,308 tokens.
   - Specs come from `random.Random(42)` over committed option lists: action × meeting type × sender role × product × time phrasing × duration × platform × tone × length. The prompt is in the module. Raw responses are cached in `datasets/raw/llm_cache/synthetic_meetings/` (gitignored).
-  - **The final rows are committed** (`datasets/synthetic/`, about 150 KB). They're our own generated data, not a downloaded dataset, and a re-run at temperature 0.9 wouldn't reproduce them byte-for-byte.
+  - **The final rows are committed** (`datasets/synthetic/`, 388 KB). They're our own generated data, not a downloaded dataset, and a re-run at temperature 0.9 wouldn't reproduce them byte-for-byte.
   - Quality check: 400 unique bodies; 0 bracket placeholders; 0 "finds you well"; 97% mention a meeting word; 323 unique subjects.
   - **Caveat for the report:** the emails are shorter than Tobi-Bueck's (median 260 vs 374 chars) and their subjects are keyword-heavy ("confirmation", "reschedule", "review"). The class is likely easier than the real ones, so report per-origin metrics.
   - Urgency is NA for these rows.
+- 2026-10-15 (P2.1f): Split build results:
+  - 17 cross-source duplicate bodies removed.
+  - Split sizes after the train cap: train 6,956 / val 3,774 / test 3,774.
+  - **The train cap is 5 × 280 (synthetic meeting rows in train) = 1,400 per class.** It removed 10,660 real rows from train: Technical Issue 7,945, General Inquiry 1,469, Billing 903, Feature Request 343. Spam (1,076) and Meeting (280) were below the cap.
+  - val/test are not resampled (Technical Issue is 2,002 of 3,774 in test).
+  - The test split's content sha256 is `db976b05…009b`, which is also the export tag. A rebuild gives identical file and content hashes.
+  - The `text` column (`app/textinput.model_input`: subject + blank line + body) is the model input for every model; serving must use the same function.
 - 2026-10-15 (P2.1 D4): urgency is trained and evaluated on low/medium/high only; "critical" comes only from documented heuristic/escalation rules (P3.3). Neither dataset has English critical rows.
 - 2026-10-15: Supabase was recreated in **ap-south-1 (Mumbai)**. Migrations 1–4 applied, and the sample CSV was re-seeded by the worker (21 tickets incl. the Portuguese one as skipped). The Portuguese backfill question is moot.
 - 2026-10-15 (P2.1a): Kaggle uses a new-style API token (`KGAT_…`) in `KAGGLE_API_TOKEN`. `kaggle` 2.2.4 reads it natively via `kagglesdk` (verified in the package source).
