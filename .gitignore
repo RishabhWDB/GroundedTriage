@@ -241,6 +241,7 @@ models/
 datasets/raw/
 datasets/processed/
 datasets/export/
+datasets/out/
 
 # Go build output
 /bin/

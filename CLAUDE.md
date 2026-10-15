@@ -75,13 +75,17 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - drafter `openai/gpt-oss-120b` (reasoning low) and judge `qwen/qwen3.8-27b` (reasoning medium) via `build_llm(settings, role)`;
   - `max_tokens` 4096, with a truncation error;
   - per-call token-usage logging.
-  - Commit: see `git log --grep "P0.3c"` (hash backfilled next commit).
+  - Commit `84f7d55`.
+- P1.1 Source interface and registry:
+  - `ingest.Source` (Name/Fetch/Reply over `model.Ticket`);
+  - `Registry` builds the enabled entries of `config/sources.yaml`;
+  - `FakeSource` records replies and filters Fetch by `since`.
+  - Commit: see `git log --grep "P1.1"` (hash backfilled next commit).
 
 ### In progress
-- none. Phase 0 is approved; next is P1.1.
+- none. Next is P1.2.
 
 ### To do
-- P1.1 Source interface + Ticket model
 - P1.2 CSV adapter
 - P1.3 IMAP adapter
 - P1.4 Ticketing API adapter (Zendesk; Freshdesk optional)
@@ -155,6 +159,8 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P1.1): Each source's `Name()` is its type (`csv`/`email`/`zendesk`), which is also `Ticket.Source`. The registry allows at most one enabled source per type, so outbound (P6.3) can resolve the reply adapter from `Ticket.Source` alone. Multiple instances of one type (e.g. two IMAP inboxes) would need a `source_instance` column; that's out of scope.
+- 2026-10-15 (P1.1): Sources are configured in `config/sources.yaml`, which holds non-secret options only; adapters read credentials from env. Unknown YAML keys are rejected (`KnownFields`) to catch typos. Disabled entries need no registered factory.
 - 2026-10-15 (Phase 0 review): **Documented deviation from SCRIBE.** `openai/gpt-oss-120b` (Groq) is the LLM for BOTH the SCRIBE baseline's draft→refine and this system's generator. SCRIBE used LLaMA-3-70B, which isn't available on the Groq key (404). Using the same LLM on both sides isolates the effect of grounding in P7.2. This must also be stated in `results/REPORT.md`. An optional P7 extra: a LLaMA-70B baseline run via another OpenAI-compatible provider if one is free, which is why `GROQ_BASE_URL` is configurable.
 - 2026-10-15 (Phase 0 review): The faithfulness judge is configured separately (`JUDGE_MODEL`, `JUDGE_BASE_URL`, `JUDGE_API_KEY`, `JUDGE_REASONING_EFFORT`). It defaults to `qwen/qwen3.8-27b`, a different model family from the drafter, to reduce self-agreement bias.
   - P7.2 adds judge validation: Arya hand-labels 60–100 claims with a labeling CSV/CLI to be built. Report judge-vs-human accuracy and Cohen's κ for qwen and gpt-oss-120b, then pick the better judge and log the choice. Until then, use qwen.
@@ -172,6 +178,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 - **Commits:** `<type>(<scope>): <summary>  [P<phase>.<part>]`, with a bullet body. Types are `feat|fix|test|docs|chore|refactor`. Commit once per part. Never push, branch or rewrite history; Arya pushes.
 - **Before committing:** `make lint` and `make test` must pass.
+- **Ingestion:** new adapters implement `ingest.Source` and register a `Factory` under their type. Use `ingest.FakeSource` in tests that need a source. Adapter output files go under `datasets/out/`, which is gitignored.
 - **Layout:** follows BUILDPROMPT §2:
   - Go entrypoints in `cmd/`, packages in `internal/`;
   - Python in `ml-service/{app,triage,rag,baseline,data,eval,tests}`;

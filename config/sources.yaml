@@ -1,0 +1,16 @@
+# Ingestion sources (Layer 1). The worker builds every enabled entry through
+# the ingest registry. At most one enabled source per type.
+# Options are non-secret; credentials come from env vars (see .env.example).
+sources:
+  - type: csv
+    enabled: true
+    options:
+      path: datasets/sample_emails.csv      # input (Sender, Subject, Body[, Label])
+      reply_path: datasets/out/replies.csv  # Reply() appends here (gitignored)
+  - type: email          # IMAP in / SMTP out; IMAP_* and SMTP_* env vars
+    enabled: false
+    options:
+      mailbox: INBOX
+  - type: zendesk        # ZENDESK_* env vars
+    enabled: false
+    options: {}
