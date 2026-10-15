@@ -126,10 +126,20 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `data.kaggle_auth` (`get_api`, `download_dataset`; `python -m data.kaggle_auth` checks auth);
   - `kaggle>=2.2.4` with KAGGLE_API_TOKEN read from `.env`;
   - a `[data]` extra (kaggle, pandas, pyarrow) installed by `make setup`.
-  - Commit: see `git log --grep "P2.1a"` (hash backfilled next commit).
+  - Commit `bb76324`.
+- P2.1b Taxonomy change to 6 categories:
+  - `config/taxonomy.yaml` (categories with zero-shot descriptions, urgency scale and trained levels, dropped categories, dataset mappings);
+  - `app/taxonomy.py`, with `Classification.category` validated against it;
+  - Go `model.Categories`, sync-tested against the YAML;
+  - the sample CSV relabelled.
+  - Commit: see `git log --grep "P2.1b"` (hash backfilled next commit).
 
 ### In progress
-- P2.1 Dataset builders. Kaggle auth (P2.1a) is done. The builders themselves are waiting on Arya's decisions (see Blocked).
+- P2.1 Dataset builders. Auth (a) and taxonomy (b) are done. Next:
+  - P2.1c: Tobi-Bueck builder (mapping, HTML strip, dedupe);
+  - P2.1d: spam corpus (licence check);
+  - P2.1e: synthetic meeting requests (gpt-oss-120b, cached);
+  - P2.1f: splits, dataset card, `make data`, `make export-splits`.
   - Downloaded `Tobi-Bueck/customer-support-tickets` (HF, CC-BY-NC-4.0) to `datasets/raw/tobi_bueck/train.parquet` (gitignored).
   - Profile of the English rows (28,261 of 61,765):
     - only 10 support queues; Tech/Product/IT/Outage queues total about 17.9k;
@@ -170,12 +180,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P8.3 Docs
 
 ### Blocked / needs input
-- **P2.1 decisions** (see the P2.1 decision request in the conversation):
-  - the exact slug of "Support Ticket Priority 50K";
-  - the taxonomy mapping for Tobi-Bueck;
-  - the data source for the SCRIBE classes (Spam/Personal/Meeting/Work/Urgent) and for Complaint/Account;
-  - the urgency `critical` level, which has no English examples.
-- **Supabase region:** Arya may recreate the project in ap-south-1. If so: new `.env` URLs, `make migrate`, `go run ./cmd/worker -once`, then `go run ./cmd/dbping`.
+- none.
 
 ## 4. Model artifacts
 
@@ -213,6 +218,28 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P2.1 review, **supersedes BUILD_PROMPT's 11 categories**): the taxonomy is now **6 support-triage categories**: Technical Issue, Billing, Feature Request, General Inquiry, Spam, Meeting Scheduling.
+  - Dropped: Work and Personal (not support topics, no clean labels); Urgent (urgency is its own axis); Complaint (a tone/escalation signal, not a topic); Account/Access (no clean labels; folded into Technical Issue).
+  - Rationale: avoid evaluating mostly on synthetic data.
+  - The SCRIBE baseline is evaluated on the same 6 classes via the zero-shot descriptions in `taxonomy.yaml`, and its regex rules still cover Spam and Meeting Scheduling. **The report must state this.**
+  - The sample CSV labels were remapped (Account/Access→Technical Issue; Complaint, Personal, Work and General→General Inquiry; Urgent→Technical Issue for the DB-down alert, otherwise General Inquiry).
+  - P4.1 routing defaults must use these 6 categories, plus `ingest_status=skipped` → human queue.
+- 2026-10-15 (P2.1 D1): `albertobircoci/support-ticket-priority-dataset-50k` is **dropped**. It has no text column (50,000 × 33 tabular features; only `description_length`). Its priority is exactly 50/35/15% low/medium/high with no critical. The download was deleted.
+- 2026-10-15 (P2.1 D2): Tobi-Bueck (EN only) mapping rules, first match wins (in `taxonomy.yaml`):
+  - type=Change → Feature Request;
+  - Billing and Payments, Returns and Exchanges → Billing;
+  - Technical/Product/IT Support, Service Outages and Maintenance → Technical Issue;
+  - General Inquiry, Sales and Pre-Sales, Customer Service → General Inquiry;
+  - Human Resources → dropped.
+  - Because Change comes first, HR rows with type=Change (39) become Feature Request; only the remaining HR rows are dropped. Priority maps very_low/low→low, medium, high, critical.
+- 2026-10-15 (P2.1 D3):
+  - Spam = a real public spam corpus, spam rows only (picked in P2.1d after a licence check).
+  - Meeting Scheduling = about 400 synthetic support-context meeting requests from gpt-oss-120b, with fixed seed and prompt committed, generated once and cached.
+  - Every row carries `origin` (real|synthetic), and all metrics must be reportable overall and split by origin.
+  - Train only: cap any class at about 5× the smallest class. val/test are never resampled.
+  - Splits are stratified by category × origin: 70/15/15, seed 42.
+- 2026-10-15 (P2.1 D4): urgency is trained and evaluated on low/medium/high only; "critical" comes only from documented heuristic/escalation rules (P3.3). Neither dataset has English critical rows.
+- 2026-10-15: Supabase was recreated in **ap-south-1 (Mumbai)**. Migrations 1–4 applied, and the sample CSV was re-seeded by the worker (21 tickets incl. the Portuguese one as skipped). The Portuguese backfill question is moot.
 - 2026-10-15 (P2.1a): Kaggle uses a new-style API token (`KGAT_…`) in `KAGGLE_API_TOKEN`. `kaggle` 2.2.4 reads it natively via `kagglesdk` (verified in the package source).
   - `import kaggle` authenticates at import time, and `authenticate()` calls `exit(1)` on failure. `data.kaggle_auth` therefore loads `.env` first, imports lazily, silences the SDK's help text and raises `KaggleAuthError` with exact fix-it steps.
   - It also diagnoses a malformed token (stray prefix characters, quotes, whitespace) without printing it.
@@ -306,17 +333,16 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
 - **Zendesk is only tested against an `httptest` mock**, since no Zendesk account is configured. The incremental export also requires an admin API token.
 - **Email adapter not tested against a real mailbox:** IMAP_*/SMTP_* aren't configured. `IMAPClient` is untested beyond compiling. `SMTPMailer` is tested against an in-process fake SMTP server (no TLS, no auth). Gmail needs an app password, plus IMAP enabled.
-- **DB latency is network-bound (measured 2026-10-15 with `cmd/dbping`).** The Supabase project is in **ap-southeast-2 (Sydney)**:
-  - TCP connect p50 is 396ms;
-  - warm-pool `SELECT 1` p50 is 395ms (p95 492ms);
-  - a fresh connection plus `SELECT 1` takes about 2.85s (TLS and auth round-trips).
-  - The pool is reused: 41 queries went over 1 connection.
-  - Arya is considering recreating the project in ap-south-1 (Mumbai).
-  - Ingestion does 2 queries per ticket; batching is deferred to P6/P8 volume (review decision).
+- **DB latency (`cmd/dbping`, 2026-10-15):** after the move to ap-south-1 (Mumbai):
+  - warm-pool `SELECT 1` p50 is 28ms (was 395ms in Sydney);
+  - TCP connect is 31ms;
+  - a fresh connection is 212ms.
+  - The integration suite takes about 9s.
+  - Ingestion still does 2 queries per ticket; batching is deferred to P6/P8 volume.
 - **Zendesk is first-message-only (accepted limitation).** Follow-up comments on an existing ticket are not ingested. The incremental export is per ticket, and the `(source, external_id)` key drops repeats.
 - **Invisible characters in generated Go files:** `\u` escapes written by Claude can land in files as literal BOM/nbsp/zero-width characters, and Go rejects a mid-file BOM. Fix with a small script that rewrites them as `\uXXXX` escapes. Check `go vet` after writing any file containing such escapes.
 - **Kaggle token check:** Kaggle answers 404 to the token check for an invalid token, and the SDK reports that as "Authentication required". `python -m data.kaggle_auth` names the likely cause.
-- **Integration test cost:** each package pays about 26s once, to create, migrate and drop its schema through the Supabase pooler. Each test after that takes about 2–3s.
+- **Integration test cost:** each package pays a one-off setup (create, migrate, drop its schema), which takes a few seconds since the move to Mumbai (it was about 26s in Sydney).
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
 - **Groq models change:** `llama-3.3-70b-versatile` isn't available on the current key. Run `GET {GROQ_BASE_URL}/models` to see which models are live.
 - **Tests vs `.env`:** the pytest conftest loads `.env` into the environment. Tests that check settings defaults must clear those variables (see `test_build_llm_roles`).

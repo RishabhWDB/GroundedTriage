@@ -29,6 +29,8 @@ def test_classification_rejects_unknown_urgency():
     assert Classification(urgency="high", **base).low_confidence is False
     with pytest.raises(ValidationError):
         Classification(urgency="urgent", **base)
+    with pytest.raises(ValidationError, match="unknown category"):
+        Classification(urgency="high", **{**base, "category": "Complaint"})
 
 
 def test_reply_draft_status_enum():

@@ -3,7 +3,9 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.taxonomy import categories as taxonomy_categories
 
 SourceName = Literal["email", "zendesk", "csv"]
 Tier = Literal["fast", "deep"]
@@ -50,6 +52,13 @@ class Classification(BaseModel):
     urgency_source: UrgencySource
     models_loaded: ModelsLoaded
     model_versions: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("category")
+    @classmethod
+    def _known_category(cls, v: str) -> str:
+        if v not in taxonomy_categories():
+            raise ValueError(f"unknown category {v!r}; see config/taxonomy.yaml")
+        return v
 
 
 class Route(BaseModel):

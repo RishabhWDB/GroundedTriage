@@ -1,0 +1,73 @@
+# Category taxonomy and dataset label mappings — the single source of truth.
+# Read by ml-service (app/taxonomy.py, data builders, SCRIBE baseline) and by Go
+# (internal/model, sync-tested). Bundled into `make export-splits` for the PC
+# that fine-tunes the deep tier: its label_map.json must use exactly these names.
+version: 2
+
+# Six support-triage categories (2026-10-15 review decision; supersedes the
+# spec's 11). Order is the canonical label order.
+categories:
+  - name: Technical Issue
+    description: >-
+      a technical problem with a product or service: errors, bugs, crashes,
+      outages, slow performance, failed integrations, or login and account
+      access problems
+  - name: Billing
+    description: >-
+      a question or problem about billing, invoices, charges, payments,
+      refunds, subscriptions, returns or exchanges
+  - name: Feature Request
+    description: >-
+      a request to add, change or improve a product feature, configuration or
+      integration
+  - name: General Inquiry
+    description: >-
+      a general question or request for information, sales or pre-sales
+      enquiry, or feedback that is not about a technical problem or billing
+  - name: Spam
+    description: >-
+      unsolicited bulk or promotional email, scams, phishing, or prize and
+      lottery messages
+  - name: Meeting Scheduling
+    description: >-
+      a request to schedule, reschedule or confirm a meeting, call, demo or
+      onboarding session
+
+# Categories from SCRIBE / the original spec that were dropped, with reasons.
+dropped_categories:
+  Work: not a support-ticket topic; no clean labelled source
+  Personal: not a support-ticket topic; would be mostly synthetic
+  Urgent: urgency is a separate axis (low/medium/high/critical), not a topic
+  Complaint: a tone/escalation signal rather than a topic
+  Account/Access: no clean labels; folded into Technical Issue
+
+# Urgency axis (separate from category).
+urgency:
+  scale: [low, medium, high, critical]
+  # The urgency model is trained/evaluated on these levels only: the English
+  # training data has no "critical" rows. "critical" is produced solely by the
+  # documented heuristic/escalation rules (P3.3).
+  trained_levels: [low, medium, high]
+
+# Dataset label mappings. Rules are evaluated top to bottom; first match wins.
+mappings:
+  tobi_bueck:
+    source: Tobi-Bueck/customer-support-tickets (Hugging Face, CC-BY-NC-4.0)
+    filter: {language: en}
+    category_rules:
+      - {when: {type: [Change]}, category: Feature Request}
+      - {when: {queue: [Billing and Payments, Returns and Exchanges]}, category: Billing}
+      - when:
+          queue: [Technical Support, Product Support, IT Support, Service Outages and Maintenance]
+        category: Technical Issue
+      - when:
+          queue: [General Inquiry, Sales and Pre-Sales, Customer Service]
+        category: General Inquiry
+      # Human Resources content doesn't match the queue (review decision).
+      - {when: {queue: [Human Resources]}, drop: true}
+    urgency_map: {very_low: low, low: low, medium: medium, high: high, critical: critical}
+  spam:
+    # Spam rows only (no ham); corpus chosen in P2.1 — see datasets/README.md.
+    category: Spam
+  synthetic_meetings:
+    category: Meeting Scheduling
