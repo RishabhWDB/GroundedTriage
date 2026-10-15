@@ -1,0 +1,24 @@
+"""Service settings from the environment and the repo-root .env (via pydantic-settings)."""
+
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", extra="ignore")
+
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    torch_device: str = ""
+    ml_port: int = 8001
+    models_dir: Path = REPO_ROOT / "models"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

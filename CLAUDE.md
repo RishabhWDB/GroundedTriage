@@ -54,13 +54,24 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - an explicit `search_path` (`public, extensions`) on every Go connection;
   - one shared test schema per package via `TestMain` (`storetest.Run`);
   - a cosine-query regression test.
-  - Commit: see `git log --grep "P0.2a"` (hash backfilled next commit).
+  - Commit `9d3206c`.
+- P0.3a ml-service skeleton (Python):
+  - FastAPI `/health` (reports nothing loaded yet);
+  - Pydantic contracts in `app/schemas.py`;
+  - `GroqLLM` (httpx, backoff) and `FakeLLM`;
+  - lazy-torch `select_device`;
+  - pydantic-settings config.
+  - Commit: see `git log --grep "P0.3a"` (hash backfilled next commit).
 
 ### In progress
-- none. Next up is P0.3.
+- P0.3 ml-service skeleton + Go client. P0.3a (the Python side) is done. Next is P0.3b:
+  - Go contract structs;
+  - `internal/mlclient` (timeouts, retries) with its tests;
+  - Gin API stub with `/health`;
+  - a worker stub that blocks until a signal (so honcho keeps running);
+  - verify `make dev` and that a Go test reaches the live `/health` through mlclient.
 
 ### To do
-- P0.3 ml-service skeleton + Go client
 - P1.1 Source interface + Ticket model
 - P1.2 CSV adapter
 - P1.3 IMAP adapter
@@ -97,7 +108,9 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P8.3 Docs
 
 ### Blocked / needs input
-- none. `.env` has `DATABASE_URL`, `TEST_DATABASE_URL` and `GROQ_API_KEY`.
+- **LLM model choice (needs Arya, before P2.2/P5.3).** `llama-3.3-70b-versatile` returns 404 `model_not_found` on this Groq key (checked 2026-10-15). The key's active text models are `openai/gpt-oss-120b`, `openai/gpt-oss-20b` and `qwen/qwen3.8-27b`. `gpt-oss-120b` was verified working with JSON mode.
+  - Options: (a) use `openai/gpt-oss-120b` via Groq for everything and document the deviation from SCRIBE's LLaMA-3-70B; (b) keep Groq for the system but run the SCRIBE baseline's LLaMA-3-70B elsewhere (another provider, OpenAI-compatible, needs a key); (c) something else.
+  - `.env.example` still says `llama-3.3-70b-versatile` until this is decided.
 
 ## 4. Model artifacts
 
@@ -133,6 +146,9 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - `classifications` keeps history (no unique `ticket_id`) and has a `low_confidence` column for the cascade flag;
   - the embedding dimension is fixed at 384 in SQL, so changing the embedding model needs a new migration.
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
+- 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
+- 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P0.3a): The `Classification` contract gains `low_confidence: bool`, which the cascade sets when it accepts the fast tier below τ without a deep tier. Routing reads it in P4.1, and it matches the `classifications.low_confidence` column.
 - 2026-10-15 (P0.2a, review): Integration tests share one migrated schema per package (`TestMain` → `storetest.Run`) and isolate rows with `storetest.UniqueID` or `testDB.Truncate` (truncate refuses non-`test_` schemas). This replaced the per-test schema.
 - 2026-10-15: The Done entry's commit hash is backfilled in the following part's commit (no amending, per the no-history-rewrite rule).
 
@@ -160,6 +176,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
 - **Integration test cost:** each package pays about 26s once, to create, migrate and drop its schema through the Supabase pooler. Each test after that takes about 2–3s.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
+- **Groq models change:** `llama-3.3-70b-versatile` isn't available on the current key. Run `GET {GROQ_BASE_URL}/models` to see which models are live; see Blocked.
 - **Render Go version:** `go.mod` declares `go 1.26.0`. At P8.2, check that Render's native Go runtime supports it, or pin a toolchain.
 - **Database safety:** never run destructive SQL (DROP, TRUNCATE, down-migrations) against `DATABASE_URL` without asking Arya. Tests only use `TEST_DATABASE_URL`, with a per-run schema.
 - **`.env` quoting:** put any value containing `$` in single quotes. Make never reads `.env` (see the decisions log).
