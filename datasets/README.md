@@ -19,9 +19,10 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 - Tobi-Bueck: 61765 rows → 28261 English → 514 dropped by rule (Human Resources), 1 empty, 4518 duplicate bodies → 23228.
 - SpamAssassin: 1896 messages → 27 too short, 69 non-English, 247 duplicates → 1553 (127 truncated to 4000 chars).
 - Cross-source duplicate bodies removed: 17.
-- Split: 70/15/15 stratified by category × origin, seed 42.
-- Train only: classes capped at 5× the smallest real class = 5380 rows; removed {'Technical Issue': 3965}. val/test are not resampled. Remaining imbalance is handled with class weights at training time (docs/model_artifacts.md).
-- `train_urgency`: the uncapped train rows with an urgency label (16260 rows). Same row pool as `train` before the cap, so it shares no rows with val/test.
+- Near-duplicates: word-unigram TF-IDF cosine > 0.9 (`data/neardup.py`), linked into groups (connected components): 1706 groups of 2+ rows covering 3989 rows (largest 14; 2 groups mix categories and are stratified by their majority category). Each group lands in exactly one split.
+- Split: group-aware 70/15/15 stratified by category × origin, seed 42.
+- Train only: classes capped at 5× the smallest real class = 5380 rows; removed {'Technical Issue': 3963}. val/test are not resampled. Remaining imbalance is handled with class weights at training time (docs/model_artifacts.md).
+- `train_urgency`: the uncapped train rows with an urgency label (16258 rows). Same row pool as `train` before the cap, so it shares no rows with val/test.
 - Model input (`text` column): subject + blank line + body (body only when subject is empty) (`app/textinput.py`).
 - Urgency: only Tobi-Bueck rows are labelled (low, medium, high); spam and synthetic rows have none. No English 'critical' rows exist.
 
@@ -34,25 +35,25 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 | ('General Inquiry', 'real')         |    2869 |   615 |    615 |
 | ('Meeting Scheduling', 'synthetic') |     280 |    60 |     60 |
 | ('Spam', 'real')                    |    1076 |   230 |    230 |
-| ('Technical Issue', 'real')         |    5380 |  2002 |   2002 |
+| ('Technical Issue', 'real')         |    5380 |  2003 |   2003 |
 
 ## Urgency labels per split (`train_urgency` is the urgency model's train file)
 
 | urgency   |   train |   val |   test |   train_urgency |
 |:----------|--------:|------:|-------:|----------------:|
 | (none)    |    1356 |   290 |    290 |               0 |
-| high      |    4382 |  1366 |   1387 |            6318 |
-| low       |    2717 |   684 |    662 |            3267 |
-| medium    |    5196 |  1434 |   1435 |            6675 |
+| high      |    4459 |  1366 |   1357 |            6348 |
+| low       |    2716 |   690 |    680 |            3243 |
+| medium    |    5120 |  1429 |   1448 |            6667 |
 
 ## Split files
 
 | split | rows | file sha256 | content sha256 |
 |---|---|---|---|
-| train | 13651 | `33e970d1ca180fafae36e6f54832201104b3e8fcdd71132d568825fce418a3be` | `071282f66664dc287562bc4e30a25211cf878b2f6d8c80ce7061ce4285f8971c` |
-| val | 3774 | `0253fbaaaec58875f57e821a3060b0a14cafcb5bd75fcc3798b9d50091d8e9e0` | `0b10a47432039184a8bc16adb7eace45679f7e8040a649a185b6c6478b25e7f6` |
-| test | 3774 | `4489f336523aa6b1d33996e419e5dee9689da2cfecdea7ba70929b13f30f176d` | `db976b0585b261b859af07dd74eeecfd77af0a4b10af92712a98455647f0009b` |
-| train_urgency | 16260 | `857ec89b2e355d3ab4f80d7e850ee84c02f2954a104b652542bed875cd3ca765` | `38cd0c7aa0fcabadf11b11764f39a12142c2393de88c60c71a0c7dc4b75c0f13` |
+| train | 13651 | `b18b549aa276f9d1f909683acef5ed45d322b73a8e20dccaed988fc70355423b` | `6f7999dffc759ec1da5dc55e4e07b2a7eef3de13282ef828ec25625f384fbb18` |
+| val | 3775 | `93bac4d57ea2c24075c71bbae3033a39df8b85faeb500d1e30c8559fc109fed2` | `cac237f430e4d9378505d9226480c36817315890800a6eb764dff67396a21be7` |
+| test | 3775 | `3faf9091c0c03c0bc2782c7f004891a5588da3202057412b9e09885885f9fcd1` | `c6539fff94a18757de5017c2ad60a0ff29baf9c01473b80d85ed7d4328e2daf3` |
+| train_urgency | 16258 | `55daee85cca9fe3fc9d36820aa3c4a6aab6c41c393d24086041a8c03c8842556` | `2333268bcd60234da488ffcaeabe504e22366daed4673633a75891309ee015f5` |
 
 The content hash is independent of the parquet library version; compare it on the PC
 to confirm the test split is identical.

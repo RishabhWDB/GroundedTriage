@@ -146,39 +146,49 @@ Top 10 subject openings (first two words):
 | escalation call | 12 |
 | need to | 10 |
 
-## 3. Train → test leakage
+## 3. Leakage across splits
 
-Pool: every training row (capped `train` ∪ `train_urgency`, 17616 rows).
-Test rows with a near-duplicate in the pool: 436 of 3774; pairs: 583. Max-similarity quantiles: {0.5: 0.6868, 0.9: 0.9079, 0.99: 0.9735}.
+Vectorizer fitted on all 25164 rows (same corpus as the build: True). Near-duplicate pairs between splits:
+
+| splits | pairs | rows on each side |
+|---|---|---|
+| train_pool~val | 0 | train_pool_rows: 0, val_rows: 0 |
+| train_pool~test | 0 | train_pool_rows: 0, test_rows: 0 |
+| val~test | 0 | val_rows: 0, test_rows: 0 |
+
+### Train → test, per category × origin
+
+Pool: every training row (capped `train` ∪ `train_urgency`, 17614 rows).
+Test rows with a near-duplicate in the pool: 0 of 3775; pairs: 0. Max-similarity quantiles: {0.5: 0.6182, 0.9: 0.8555, 0.99: 0.8952}.
 
 | category | origin | test rows | with near-dup | share | pairs | nearest has same category |
 |---|---|---|---|---|---|---|
-| Billing | real | 493 | 69 | 14.00% | 81 | 69 |
-| Feature Request | real | 374 | 53 | 14.17% | 65 | 53 |
-| General Inquiry | real | 615 | 57 | 9.27% | 67 | 57 |
+| Billing | real | 493 | 0 | 0.00% | 0 | 0 |
+| Feature Request | real | 374 | 0 | 0.00% | 0 | 0 |
+| General Inquiry | real | 615 | 0 | 0.00% | 0 | 0 |
 | Meeting Scheduling | synthetic | 60 | 0 | 0.00% | 0 | 0 |
-| Spam | real | 230 | 45 | 19.57% | 116 | 45 |
-| Technical Issue | real | 2002 | 212 | 10.59% | 254 | 212 |
+| Spam | real | 230 | 0 | 0.00% | 0 | 0 |
+| Technical Issue | real | 2003 | 0 | 0.00% | 0 | 0 |
 
 ## 4. Shortcut check (TF-IDF 1–2-gram + LR, class_weight=balanced; train → val)
 
 | input | accuracy | macro-F1 | Meeting F1 | mean F1 of other classes |
 |---|---|---|---|---|
-| subject | 0.655 | 0.7207 | 0.9917 | 0.6665 |
-| body | 0.7552 | 0.8193 | 1.0 | 0.7832 |
-| text | 0.7602 | 0.8245 | 1.0 | 0.7894 |
+| subject | 0.6474 | 0.7086 | 1.0 | 0.6504 |
+| body | 0.7301 | 0.7958 | 1.0 | 0.755 |
+| text | 0.7354 | 0.802 | 1.0 | 0.7625 |
 
 Per-class F1:
 
 | class | subject | body | text |
 |---|---|---|---|
-| Technical Issue | 0.7174 | 0.7902 | 0.7955 |
-| Billing | 0.5494 | 0.6747 | 0.6844 |
-| Feature Request | 0.7033 | 0.918 | 0.932 |
-| General Inquiry | 0.4167 | 0.5331 | 0.5353 |
-| Spam | 0.9459 | 1.0 | 1.0 |
-| Meeting Scheduling | 0.9917 | 1.0 | 1.0 |
+| Technical Issue | 0.7195 | 0.7831 | 0.783 |
+| Billing | 0.5539 | 0.6082 | 0.6345 |
+| Feature Request | 0.7017 | 0.9126 | 0.9136 |
+| General Inquiry | 0.3749 | 0.4731 | 0.4834 |
+| Spam | 0.9018 | 0.9978 | 0.9978 |
+| Meeting Scheduling | 1.0 | 1.0 | 1.0 |
 
-Empty subjects in val: 11.7%.
+Empty subjects in val: 9.4%.
 
-Hard-negative probe: 202 of 3714 real val tickets mention a meeting word (`\b(?:meeting|call|zoom|teams|webex|schedul\w*|reschedul\w*|calendar|appointment)\b`); predicted Meeting Scheduling by the subject-only model: 0, by the full-text model: 0.
+Hard-negative probe: 173 of 3715 real val tickets mention a meeting word (`\b(?:meeting|call|zoom|teams|webex|schedul\w*|reschedul\w*|calendar|appointment)\b`); predicted Meeting Scheduling by the subject-only model: 0, by the full-text model: 0.

@@ -57,6 +57,10 @@ Rules for training:
   `model_card.json`.
 - The fast tier (trained in this repo, P3.1) uses `class_weight="balanced"`
   and the same macro-F1 selection rule.
+- **Use the splits as exported; don't re-split or merge them.** Near-duplicate
+  tickets (TF-IDF cosine > 0.9) are grouped and each group sits in exactly one
+  split, so train/val/test share no near-duplicates. A random re-split on the
+  PC would reintroduce leakage.
 - Confirm the test split is the one evaluated here: its `content_sha256` in
   `manifest.json` must match the value in `datasets/README.md` on the Mac.
 

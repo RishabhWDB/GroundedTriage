@@ -1,8 +1,18 @@
+import random
+
 import pandas as pd
 import pytest
 
 from app.textinput import model_input
 from data.build import assemble, cap_train, content_sha256, stratified_split
+
+_rng = random.Random(0)
+VOCAB = [f"w{k}" for k in range(5000)]
+
+
+def words(n=12):
+    """Random text, so fixture rows are not near-duplicates of each other."""
+    return " ".join(_rng.sample(VOCAB, n))
 
 
 def rows(category, origin, n, prefix, urgency="medium"):
@@ -11,8 +21,8 @@ def rows(category, origin, n, prefix, urgency="medium"):
             "id": [f"{prefix}-{i:04d}" for i in range(n)],
             "source_dataset": prefix,
             "origin": origin,
-            "subject": [f"subj {prefix} {i}" for i in range(n)],
-            "body": [f"body text {prefix} number {i}" for i in range(n)],
+            "subject": [words(3) for _ in range(n)],
+            "body": [words() for _ in range(n)],
             "category": category,
             "urgency": urgency if origin == "real" and category != "Spam" else None,
         }
@@ -98,3 +108,37 @@ def test_content_hash_is_stable():
 def test_model_input():
     assert model_input("Hi", "Body") == "Hi\n\nBody"
     assert model_input("", " Body ") == "Body" and model_input(None, None) == ""
+
+
+def test_split_keeps_groups_together_and_hits_targets():
+    df = pd.concat(frames(), ignore_index=True)
+    df["group"] = df["id"]
+    tech = df.index[df["category"] == "Technical Issue"]
+    for g in range(30):  # 30 groups of 5 technical rows
+        df.loc[tech[g * 5 : g * 5 + 5], "group"] = f"g{g}"
+    a = stratified_split(df)
+    b = stratified_split(df.sample(frac=1, random_state=1))
+    assert all(a[k]["id"].tolist() == b[k]["id"].tolist() for k in a)
+    where = {i: k for k, v in a.items() for i in v["id"]}
+    for g in range(30):
+        ids = df.loc[df["group"] == f"g{g}", "id"]
+        assert len({where[i] for i in ids}) == 1
+    tech_val = int((a["val"]["category"] == "Technical Issue").sum())
+    assert abs(tech_val - 150) <= 5  # within one group of the target
+    assert "group" not in a["train"].columns
+
+
+def test_assemble_puts_near_duplicates_in_one_split():
+    fr = frames()
+    base = fr[0].iloc[0]
+    para = pd.DataFrame(
+        [
+            {**base.to_dict(), "id": f"para-{k}", "body": base["body"] + f" extra{k}"}
+            for k in range(6)
+        ]
+    )
+    splits, info = assemble(fr + [para])
+    ids = {base["id"], *para["id"]}
+    homes = {k for k, v in splits.items() if k != "train_urgency" and ids & set(v["id"])}
+    assert len(homes) == 1
+    assert info["near_dup_groups"] >= 1 and info["near_dup_rows_in_groups"] >= 7

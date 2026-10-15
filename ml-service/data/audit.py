@@ -7,15 +7,16 @@ Four checks, written to results/data_audit/{report.md,audit.json}:
 1. A seeded sample of synthetic Meeting Scheduling emails, printed in full.
 2. Synthetic diversity: exact and near-duplicate pairs within the synthetic
    rows, and the most common subject openings.
-3. Leakage: test rows with a near-duplicate in the (uncapped) train pool, per
-   category x origin.
+3. Leakage: near-duplicate pairs across every pair of splits (train pool,
+   val, test), with the test side broken down per category x origin. The
+   group-aware split (data.build) should make every count 0.
 4. Shortcut check: a subject-only TF-IDF+LR classifier trained on train and
    scored on val, next to body-only and full-text models, plus a probe of real
    val tickets that mention a meeting or call.
 
-Near-duplicate = cosine > NEAR_DUP over word-unigram TF-IDF (sublinear tf,
-lower-cased). Unigrams ignore word order, so this flags more pairs than an
-n-gram measure would: an upper bound on duplication.
+Near-duplicate = cosine > NEAR_DUP over word-unigram TF-IDF (data.neardup).
+For the leakage check the vectorizer is fitted on all rows, as in the build,
+so the similarities are the ones the split used.
 """
 
 from __future__ import annotations
@@ -34,22 +35,18 @@ from sklearn.metrics import accuracy_score, f1_score, precision_recall_fscore_su
 from app.settings import REPO_ROOT
 from app.taxonomy import categories
 from data.build import OUT_DIR
+from data.neardup import NEAR_DUP, similar_pairs, vectorizer
 from data.textclean import dedupe_key
 
 logger = logging.getLogger(__name__)
 
 SEED = 42
-NEAR_DUP = 0.9
 N_SAMPLES = 8
 RESULTS_DIR = REPO_ROOT / "results" / "data_audit"
 MEETING = "Meeting Scheduling"
 MEETING_WORDS = re.compile(
     r"\b(?:meeting|call|zoom|teams|webex|schedul\w*|reschedul\w*|calendar|appointment)\b", re.I
 )
-
-
-def vectorizer() -> TfidfVectorizer:
-    return TfidfVectorizer(lowercase=True, sublinear_tf=True, dtype=np.float32)
 
 
 def exact_duplicate_pairs(texts: list[str]) -> int:
@@ -74,12 +71,16 @@ def subject_openings(subjects: list[str], words: int = 2, top: int = 10) -> list
 
 
 def cross_max_similarity(
-    pool: list[str], queries: list[str], threshold: float = NEAR_DUP, chunk: int = 500
+    pool: list[str],
+    queries: list[str],
+    threshold: float = NEAR_DUP,
+    chunk: int = 500,
+    corpus: list[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """For each query: the max cosine against the pool, the index of that pool
-    row, and how many pool rows exceed threshold. The vocabulary is fitted on
-    both sets."""
-    vec = vectorizer().fit(pool + queries)
+    row, and how many pool rows exceed threshold. The vectorizer is fitted on
+    ``corpus`` (default: both sets)."""
+    vec = vectorizer().fit(corpus if corpus is not None else pool + queries)
     p, q = vec.transform(pool), vec.transform(queries)
     best = np.zeros(len(queries), dtype=np.float32)
     arg = np.zeros(len(queries), dtype=np.int64)
@@ -92,8 +93,15 @@ def cross_max_similarity(
     return best, arg, over
 
 
-def leakage_table(pool: pd.DataFrame, test: pd.DataFrame, threshold: float = NEAR_DUP) -> dict:
-    best, arg, over = cross_max_similarity(pool["text"].tolist(), test["text"].tolist(), threshold)
+def leakage_table(
+    pool: pd.DataFrame,
+    test: pd.DataFrame,
+    threshold: float = NEAR_DUP,
+    corpus: list[str] | None = None,
+) -> dict:
+    best, arg, over = cross_max_similarity(
+        pool["text"].tolist(), test["text"].tolist(), threshold, corpus=corpus
+    )
     t = test[["category", "origin"]].copy()
     t["leaked"] = best > threshold
     t["pairs"] = over
@@ -121,6 +129,26 @@ def leakage_table(pool: pd.DataFrame, test: pd.DataFrame, threshold: float = NEA
             q: round(float(np.quantile(best, q)), 4) for q in (0.5, 0.9, 0.99)
         },
     }
+
+
+def cross_split_pairs(
+    parts: dict[str, pd.DataFrame], corpus: list[str], threshold: float = NEAR_DUP
+) -> dict:
+    """Near-duplicate pairs between every pair of splits, with a vectorizer
+    fitted on ``corpus``."""
+    vec = vectorizer().fit(corpus)
+    mats = {k: vec.transform(v["text"].tolist()) for k, v in parts.items()}
+    names = list(parts)
+    out = {}
+    for a_i, a in enumerate(names):
+        for b in names[a_i + 1 :]:
+            i, j = similar_pairs(mats[a], mats[b], threshold)
+            out[f"{a}~{b}"] = {
+                "pairs": len(i),
+                f"{a}_rows": len(set(i.tolist())),
+                f"{b}_rows": len(set(j.tolist())),
+            }
+    return out
 
 
 def fit_eval(train: pd.DataFrame, val: pd.DataFrame, col: str) -> tuple[dict, np.ndarray]:
@@ -229,7 +257,21 @@ def render(audit: dict, samples: pd.DataFrame) -> str:
     lines += [f"| {o} | {n} |" for o, n in s["subject_openings_top10"]]
     lines += [
         "",
-        "## 3. Train → test leakage",
+        "## 3. Leakage across splits",
+        "",
+        f"Vectorizer fitted on all {audit['corpus_rows']} rows (same corpus as the build: "
+        f"{audit['corpus_matches_build']}). Near-duplicate pairs between splits:",
+        "",
+        "| splits | pairs | rows on each side |",
+        "|---|---|---|",
+        *[
+            f"| {k} | {v['pairs']} | "
+            + ", ".join(f"{n}: {c}" for n, c in v.items() if n != "pairs")
+            + " |"
+            for k, v in audit["cross_split_pairs"].items()
+        ],
+        "",
+        "### Train → test, per category × origin",
         "",
         f"Pool: every training row (capped `train` ∪ `train_urgency`, {audit['train_pool_rows']} rows).",
         f"Test rows with a near-duplicate in the pool: {lk['total_test_rows_with_near_dup']} of "
@@ -285,9 +327,21 @@ def main() -> int:
     syn = splits["train"].pipe(lambda d: pd.concat([d, splits["val"], splits["test"]]))
     syn = syn[syn["origin"] == "synthetic"].sort_values("id").reset_index(drop=True)
     pool = train_pool(splits)
+    corpus_df = pd.concat([pool, splits["val"], splits["test"]]).sort_values("id")
+    corpus = corpus_df["text"].tolist()
+    manifest = json.loads((OUT_DIR / "manifest.json").read_text())
+    build_rows = sum(manifest["splits"][k]["rows"] for k in ("train", "val", "test")) + sum(
+        manifest["train_cap_removed"].values()
+    )
+    if build_rows != len(corpus):
+        logger.warning("audit corpus %d rows != build corpus %d", len(corpus), build_rows)
+    parts = {"train_pool": pool, "val": splits["val"], "test": splits["test"]}
     audit = {
         "synthetic": synthetic_section(syn),
-        "leakage": leakage_table(pool, splits["test"]),
+        "leakage": leakage_table(pool, splits["test"], corpus=corpus),
+        "cross_split_pairs": cross_split_pairs(parts, corpus),
+        "corpus_rows": len(corpus),
+        "corpus_matches_build": build_rows == len(corpus),
         "shortcut": shortcut_check(splits["train"], splits["val"]),
         "train_pool_rows": len(pool),
         "test_rows": len(splits["test"]),

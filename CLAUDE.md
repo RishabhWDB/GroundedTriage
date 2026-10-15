@@ -175,10 +175,16 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `cmd/migrate verify` / `make migrate-verify` is a read-only check of the vector extension, the 8 tables, the HNSW index and ticket counts;
   - Mumbai project verified: migrations up to date, 2 worker runs inserted 0, integration suite passes;
   - `results/examples/ungrounded_hallucination_01.md`.
-  - Commit: see `git log --grep "P2.2a"` (hash backfilled next commit).
+  - Commit `4e2be2c`.
+- P2.1h Group-aware re-split (review Q1 = a):
+  - `data/neardup.py` groups near-duplicates (cosine > 0.9, connected components over all rows);
+  - `stratified_split` keeps every group in exactly one split, stratified by category × origin;
+  - the audit checks every split pair with the build's vectorizer: **0 cross-split pairs**;
+  - new hashes (test content `c6539fff…2daf3`); export `groundedtriage-splits-c6539fff94a1.tar.gz` is **final**.
+  - Commit: see `git log --grep "P2.1h"` (hash backfilled next commit).
 
 ### In progress
-- none. P2.2 is done. P2.3 (baseline evaluation on test) waits on the near-duplicate leakage decision (see Blocked), because that decision may change the test split.
+- P2.1i hard stress-test set, then P2.3 baseline evaluation.
   - Downloaded `Tobi-Bueck/customer-support-tickets` (HF, CC-BY-NC-4.0) to `datasets/raw/tobi_bueck/train.parquet` (gitignored).
   - Profile of the English rows (28,261 of 61,765):
     - only 10 support queues; Tech/Product/IT/Outage queues total about 17.9k;
@@ -217,7 +223,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P8.3 Docs
 
 ### Blocked / needs input
-- Arya: whether to remove train↔test near-duplicates (11.6% of test rows have a train neighbour at cosine > 0.9) with a group-aware split. This would change the val/test hashes, so P2.3 waits for the answer. Also whether Meeting Scheduling needs harder data (see `results/data_audit/report.md`).
+- none.
 
 ## 4. Model artifacts
 
@@ -312,6 +318,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Synthetic diversity: 0 exact duplicate bodies, 0 near-duplicate pairs within the 400 rows, 316 unique subjects (172 exact duplicate-subject pairs). The top subject opening is "request to" (25 rows).
   - **Leakage:** 436 of 3,774 test rows (11.6%) have a near-duplicate in the training pool (capped train ∪ train_urgency). That's Spam 19.6%, Billing 14.0%, Feature Request 14.2%, Technical Issue 10.6%, General Inquiry 9.3%, synthetic Meeting 0%. The nearest neighbour is always the same category. These are genuine paraphrases in Tobi-Bueck (LLM-generated variants of one ticket). With 1–2-gram TF-IDF, 93 rows are above 0.9 and 373 above 0.8. The splits are unchanged pending Arya's decision.
   - **Shortcut:** TF-IDF+LR on val gives Meeting Scheduling F1 0.99 from the subject alone, and 1.00 from the body alone or the full text. The class is trivially separable from either field, so neutralising subjects wouldn't make it harder. 202 real val tickets mention a meeting word, and none were predicted Meeting. Spam is also near 1.0 (subject 0.95). Model macro-F1 on val: subject-only 0.72, body-only 0.82, full text 0.82.
+- 2026-10-15 (P2.1h, review Q1 = (a)): **Group-aware split.**
+  - All 25,164 rows (after exact dedupe) are linked by near-duplicate pairs (word-unigram TF-IDF fitted on all rows, cosine > 0.9) into connected components. That gives 1,706 groups of 2+ rows covering 3,989 rows; the largest has 14. 2 groups mix categories; each group is stratified by its majority category (ties: taxonomy order), and no group mixes origins.
+  - Per category × origin stratum: shuffle the groups (seed 42), put the largest first, and assign each to the split furthest below its target row count. Singletons hit round(n·0.15) exactly. The split is input-order independent (groups are keyed by their smallest id).
+  - The audit refits the same vectorizer on the same corpus (checked against the manifest) and finds **0 near-duplicate pairs for train-pool~val, train-pool~test and val~test**. Before the re-split, 436 test rows (11.6%) leaked.
+  - New sizes: train 13,651 (cap still 5,380 = 5 × 1,076 Spam; Technical lost 3,963) / val 3,775 / test 3,775 / train_urgency 16,258.
+  - **This supersedes the P2.1f/P2.1g hashes.** Test content sha256 is now `c6539fff94a18757de5017c2ad60a0ff29baf9c01473b80d85ed7d4328e2daf3`, and the export is `datasets/export/groundedtriage-splits-c6539fff94a1.tar.gz` (sha256 `1bcbe081…641a`). The rebuild is byte-identical. The old `…db976b0585b2.tar.gz` archive in `datasets/export/` is stale and must not be used.
+  - Effect: the audit's diagnostic TF-IDF+LR val macro-F1 dropped from 0.825 to 0.802 (accuracy 0.760 to 0.735), so leaked near-duplicates had been inflating scores.
 - 2026-10-15 (P2.2): SCRIBE baseline design:
   - **Rules:** each regex cue has a weight. A category's confidence is the noisy-OR `1 − Π(1 − w)` of its matched cues, and a decision is accepted only at ≥ 0.95 (SCRIBE's fixed cutoff). One strong cue (pharma/casino, advance-fee, weight 0.95) is enough; weak cues (Zoom, "click here") must co-occur. The rules cover only Spam and Meeting Scheduling, per the taxonomy decision. The cue lists are generic vocabulary, written before any evaluation run and **not tuned on val/test**. The noisy-OR scoring is our interpretation of "regex rules with a fixed ~95% cutoff".
   - **Zero-shot:** `facebook/bart-large-mnli`, hypothesis `"This email is {}."` over the six `taxonomy.yaml` descriptions (single-label softmax). Input is `model_input(subject, body)`, the same text the other models see. Long inputs are truncated by the pipeline.
@@ -449,5 +462,5 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 - Ungrounded hallucination example: `results/examples/ungrounded_hallucination_01.md`. The SCRIBE baseline told a customer "I've processed a refund … within 3–5 business days" with no grounding. P7.2 collects more automatically.
 - Data audit (P2.1g, `results/data_audit/report.md`):
-  - TF-IDF+LR (1–2-gram, balanced) trained on capped train and scored on val: macro-F1 0.82 / accuracy 0.76 on full text, 0.72 / 0.66 on the subject alone. This is a data diagnostic, not the P3.1 fast tier.
-  - 11.6% of test rows have a train near-duplicate (cosine > 0.9).
+  - After the P2.1h re-split, TF-IDF+LR (1–2-gram, balanced) trained on capped train and scored on val gives macro-F1 0.802 / accuracy 0.735 on full text and 0.709 / 0.647 on the subject alone. Meeting Scheduling F1 is 1.0 from either field. This is a data diagnostic, not the P3.1 fast tier.
+  - Cross-split near-duplicate pairs: 0. Before the re-split, 11.6% of test rows had a train near-duplicate.
