@@ -37,6 +37,7 @@ from app.taxonomy import categories
 from data.build import OUT_DIR
 from data.neardup import NEAR_DUP, similar_pairs, vectorizer
 from data.textclean import dedupe_key
+from eval.classification import MEETING_WORDS
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,6 @@ SEED = 42
 N_SAMPLES = 8
 RESULTS_DIR = REPO_ROOT / "results" / "data_audit"
 MEETING = "Meeting Scheduling"
-MEETING_WORDS = re.compile(
-    r"\b(?:meeting|call|zoom|teams|webex|schedul\w*|reschedul\w*|calendar|appointment)\b", re.I
-)
 
 
 def exact_duplicate_pairs(texts: list[str]) -> int:

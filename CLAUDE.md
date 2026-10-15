@@ -50,7 +50,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Regenerate synthetic meeting emails (Groq; cached, resumable) | `make synthetic-meetings` |
 | Install the SCRIBE baseline extra (torch + transformers) | `make setup-baseline` |
 | SCRIBE baseline CLI (own process; ~2 GB of weights download on first run) | `make baseline ARGS="classify --split test --limit 10"` / `ARGS="classify --csv ../datasets/sample_emails.csv"` / `ARGS="draft --csv ../datasets/sample_emails.csv --limit 2"` |
-| Evaluate | not implemented yet (P2.3/P7) |
+| Baseline evaluation on test (P2.3; ~40 min on M1 MPS; resumable) | `make baseline-eval` → `results/baseline/` (smoke: `make baseline ARGS="evaluate --limit 60 --out /tmp/x"`) |
+| Evaluate the proposed system | not implemented yet (P7) |
 
 ## 3. Status board
 
@@ -186,21 +187,17 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P2.1i Hard Meeting Scheduling stress set (eval only, never trained on):
   - `data/stress_meetings.py` (seed 1337, its own prompt) → `datasets/stress/meeting_stress.csv` (100 rows, committed);
   - every row is `needs_review=true` until Arya hand-checks it; `load_reviewed()` returns None until all rows are reviewed.
-  - Commit: see `git log --grep "P2.1i"` (hash backfilled next commit).
+  - Commit `72e6728`.
+- P2.3 SCRIBE baseline evaluation snapshot on test (3,775 rows):
+  - `eval/classification.py` (reporting-rule slices, confusion, ordinal urgency MAE, latency summaries, confusion plot), shared with P7.1;
+  - `baseline/evaluate.py` + `make baseline-eval` (resumable) → `results/baseline/{metrics.json, confusion_matrix.png, latency.md, predictions.jsonl}`;
+  - macro-F1 0.522 overall / 0.479 real-only and without Meeting Scheduling (see §8). Stress set reported as pending review.
+  - Commit: backfilled in the next commit.
 
 ### In progress
-- P2.1i hard stress-test set, then P2.3 baseline evaluation.
-  - Downloaded `Tobi-Bueck/customer-support-tickets` (HF, CC-BY-NC-4.0) to `datasets/raw/tobi_bueck/train.parquet` (gitignored).
-  - Profile of the English rows (28,261 of 61,765):
-    - only 10 support queues; Tech/Product/IT/Outage queues total about 17.9k;
-    - priority is only low 5,774 / medium 11,570 / high 10,917, with **0 critical**;
-    - 4,595 duplicate bodies (dedupe before splitting);
-    - 12.9% have no subject;
-    - some bodies contain `<br>`;
-    - the text is LLM-generated and the queue labels are weakly tied to content.
+- none. Phase 2 is done; waiting for Arya's Phase 2 review before starting P3.1.
 
 ### To do
-- P2.3 Baseline evaluation snapshot
 - P3.1 Fast tier
 - P3.2 Deep-tier inference loader (no training)
 - P3.3 Urgency inference loader + heuristic fallback (no training)
@@ -337,6 +334,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-16 (P2.3): Baseline evaluation design:
+  - Run on the full test split with batch size 4 on MPS (fastest in smoke tests: batch 1 = 0.72, 4 = 0.58, 16 = 0.77 s/ticket). Models are warmed up before timing; load time is reported separately.
+  - Slices (`eval.classification.sliced_metrics`): overall (6 labels), `origin_real`/`origin_synthetic` (labels present in that slice's gold), `without_meeting_scheduling` (gold Meeting rows dropped, 5 labels; a non-Meeting row predicted Meeting is an error), and `real_meeting_mentions` (real, non-Meeting rows matching `MEETING_WORDS`). Every Meeting row in test is synthetic, so origin_real and without_meeting_scheduling are the same rows and the same numbers.
+  - Latency is reported two ways: batched (batch time / batch size) and single-ticket (100 seeded random test tickets, one at a time). Swap in use is recorded with the run, because 8 GB RAM makes tail latency swap-bound (11.1 GB swap in use at the end; max single-ticket 73 s, batched max 97 s per ticket).
+  - SCRIBE urgency = sentiment → high/medium/low, scored on the 3,485 test rows with an urgency label (Spam and synthetic rows have none).
+  - The stress set is gated by `load_reviewed()`; `metrics.json` says "pending" until every row is reviewed. Re-run `make baseline-eval` after the review to fill it in (the main predictions take ~90 min; a stress-only rerun can be added if needed).
+  - `predictions.jsonl` is committed (790 KB) so P7.1 can compare per ticket without re-running the baseline.
 - 2026-10-15 (P2.2): SCRIBE baseline design:
   - **Rules:** each regex cue has a weight. A category's confidence is the noisy-OR `1 − Π(1 − w)` of its matched cues, and a decision is accepted only at ≥ 0.95 (SCRIBE's fixed cutoff). One strong cue (pharma/casino, advance-fee, weight 0.95) is enough; weak cues (Zoom, "click here") must co-occur. The rules cover only Spam and Meeting Scheduling, per the taxonomy decision. The cue lists are generic vocabulary, written before any evaluation run and **not tuned on val/test**. The noisy-OR scoring is our interpretation of "regex rules with a fixed ~95% cutoff".
   - **Zero-shot:** `facebook/bart-large-mnli`, hypothesis `"This email is {}."` over the six `taxonomy.yaml` descriptions (single-label softmax). Input is `model_input(subject, body)`, the same text the other models see. Long inputs are truncated by the pipeline.
@@ -473,6 +477,16 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 ## 8. Results so far
 
 - Ungrounded hallucination example: `results/examples/ungrounded_hallucination_01.md`. The SCRIBE baseline told a customer "I've processed a refund … within 3–5 business days" with no grounding. P7.2 collects more automatically.
+- **SCRIBE baseline on test (P2.3, `results/baseline/`, test content `c6539fff…`, n=3,775, MPS, 2026-10-16):**
+  - Overall macro-F1 **0.522**, accuracy 0.527 (weighted F1 0.557).
+  - Real only = without Meeting Scheduling (n=3,715, 5 classes): macro-F1 **0.479**, accuracy 0.521. Synthetic Meeting rows (n=60): recall 0.917.
+  - Per class F1: Technical 0.657 (P 0.83 / R 0.55), Billing 0.444 (R 0.32), Feature 0.573, General Inquiry 0.368 (P 0.25 / R 0.73), Spam 0.349 (P 0.96 / R 0.21), Meeting 0.738 (P 0.62 / R 0.92).
+  - Dominant error: zero-shot sends everything to General Inquiry (1,818 of 3,712 zero-shot predictions; 41% of Technical, 52% of Billing, 53% of Spam).
+  - Rules decided 1.67% of tickets (63: 48 Spam, 15 Meeting), all correct (precision 1.0). Zero-shot accuracy 0.519 on the rest.
+  - 34 real tickets were predicted Meeting Scheduling (false positives). Real tickets mentioning a meeting word (n=196): accuracy 0.418, 27 predicted Meeting.
+  - Sentiment-as-urgency (n=3,485, low/medium/high): macro-F1 0.357, accuracy 0.397, ordinal MAE 0.750.
+  - Latency (M1 8 GB, heavy swap): model load 16.5 s; batched 0.705 tickets/s (p50 911 ms/ticket); single ticket p50 640 ms, p95 1.9 s, max 73 s (swap).
+  - Stress set: pending Arya's review.
 - Data audit (P2.1g, `results/data_audit/report.md`):
   - After the P2.1h re-split, TF-IDF+LR (1–2-gram, balanced) trained on capped train and scored on val gives macro-F1 0.802 / accuracy 0.735 on full text and 0.709 / 0.647 on the subject alone. Meeting Scheduling F1 is 1.0 from either field. This is a data diagnostic, not the P3.1 fast tier.
   - Cross-split near-duplicate pairs: 0. Before the re-split, 11.6% of test rows had a train near-duplicate.

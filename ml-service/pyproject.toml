@@ -37,6 +37,10 @@ baseline = [
     "torch>=2.4",
     "transformers>=4.44",
 ]
+# Evaluation plots (P2.3, P7).
+eval = [
+    "matplotlib>=3.8",
+]
 dev = [
     "ruff>=0.6",
     "pytest>=8",

@@ -3,6 +3,7 @@
     python -m baseline classify --split test --limit 10
     python -m baseline classify --csv ../datasets/sample_emails.csv --out preds.jsonl
     python -m baseline draft --csv ../datasets/sample_emails.csv --limit 2
+    python -m baseline evaluate --split test     # P2.3 -> results/baseline/
 
 Needs the optional extra: pip install -e ".[baseline]" (make setup-baseline).
 """
@@ -88,6 +89,24 @@ def cmd_draft(args) -> int:
     return 0
 
 
+def cmd_evaluate(args) -> int:
+    from baseline.evaluate import RESULTS, evaluate
+
+    m = evaluate(
+        args.split,
+        limit=args.limit,
+        batch_size=args.batch_size,
+        latency_n=args.latency_n,
+        out=Path(args.out) if args.out else RESULTS,
+        device=args.device,
+    )
+    c = m["classification"]
+    print(json.dumps({k: {"macro_f1": v.get("macro_f1"), "accuracy": v.get("accuracy")}
+                      for k, v in c.items()}, indent=1))  # fmt: skip
+    print(f"rule-handled share: {m['stages']['rule_handled_share']}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m baseline", description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -101,6 +120,14 @@ def main(argv: list[str] | None = None) -> int:
         p.set_defaults(fn=fn)
         if name == "classify":
             p.add_argument("--out", help="write predictions as JSON lines")
+    p = sub.add_parser("evaluate", help="P2.3: metrics, confusion matrix, latency")
+    p.add_argument("--split", choices=["train", "val", "test"], default="test")
+    p.add_argument("--limit", type=int, default=None, help="first N rows (smoke runs)")
+    p.add_argument("--batch-size", type=int, default=4, help="4 was fastest on M1 MPS")
+    p.add_argument("--latency-n", type=int, default=100, help="single-ticket latency sample")
+    p.add_argument("--out", default=None, help="output dir (default results/baseline)")
+    p.add_argument("--device", default=None, help="cpu | mps (default: auto)")
+    p.set_defaults(fn=cmd_evaluate)
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     return args.fn(args)
