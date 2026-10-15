@@ -14,14 +14,14 @@ import (
 )
 
 func TestTicketInsertAndGet(t *testing.T) {
-	pool := storetest.NewSchema(t)
+	pool := testDB.Require(t)
 	ctx := context.Background()
 	repo := store.Tickets{Pool: pool}
 
 	thread := "thread-1"
 	in := model.Ticket{
 		Source:      model.SourceCSV,
-		ExternalID:  "row-1",
+		ExternalID:  storetest.UniqueID("row"),
 		Sender:      "alice@example.com",
 		Subject:     "Invoice question",
 		Body:        "Why was I charged twice?",

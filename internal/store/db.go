@@ -10,17 +10,30 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 )
 
-// Options configures a connection. Schema, when set, pins search_path to
-// "<schema>, public, extensions" on every connection (used by per-run test
-// schemas). public and extensions are kept so the pgvector type resolves:
-// Supabase pre-installs pgvector in "extensions"; plain Postgres puts it in
-// public. Nonexistent schemas in search_path are ignored by Postgres.
+// Options configures a connection.
 type Options struct {
+	// Schema, when set, is put first in search_path (per-run test schemas).
 	Schema string
 }
 
-func searchPathSQL(schema string) string {
-	return fmt.Sprintf("SET search_path TO %s, public, extensions", pgx.Identifier{schema}.Sanitize())
+// SearchPath returns the search_path every connection uses. It is always set
+// explicitly instead of relying on the Supabase role default: pgvector is
+// pre-installed in "extensions" on Supabase and in public on plain Postgres,
+// so both are listed (Postgres ignores schemas that don't exist).
+func SearchPath(schema string) string {
+	base := "public, extensions"
+	if schema == "" {
+		return base
+	}
+	return pgx.Identifier{schema}.Sanitize() + ", " + base
+}
+
+func afterConnect(schema string) func(context.Context, *pgx.Conn) error {
+	stmt := "SET search_path TO " + SearchPath(schema)
+	return func(ctx context.Context, c *pgx.Conn) error {
+		_, err := c.Exec(ctx, stmt)
+		return err
+	}
 }
 
 // OpenPool opens a pgx pool for application queries.
@@ -29,13 +42,7 @@ func OpenPool(ctx context.Context, url string, opts Options) (*pgxpool.Pool, err
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
-	if opts.Schema != "" {
-		stmt := searchPathSQL(opts.Schema)
-		cfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
-			_, err := c.Exec(ctx, stmt)
-			return err
-		}
-	}
+	cfg.AfterConnect = afterConnect(opts.Schema)
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -54,13 +61,5 @@ func OpenSQL(url string, opts Options) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
-	var options []stdlib.OptionOpenDB
-	if opts.Schema != "" {
-		stmt := searchPathSQL(opts.Schema)
-		options = append(options, stdlib.OptionAfterConnect(func(ctx context.Context, c *pgx.Conn) error {
-			_, err := c.Exec(ctx, stmt)
-			return err
-		}))
-	}
-	return stdlib.OpenDB(*cfg, options...), nil
+	return stdlib.OpenDB(*cfg, stdlib.OptionAfterConnect(afterConnect(opts.Schema))), nil
 }

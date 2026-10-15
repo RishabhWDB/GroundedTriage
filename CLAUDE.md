@@ -49,7 +49,12 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - goose migrations (`vector` extension plus 7 core tables, with an HNSW cosine index on `kb_chunks.embedding`), `cmd/migrate`, `store.Tickets`;
   - `storetest.NewSchema` creates a migrated schema per test and drops it afterwards;
   - applied to Supabase, and a second run was a no-op.
-  - Commit: see `git log --grep "P0.2"` (hash backfilled next commit).
+  - Commit `6c5a9f9`.
+- P0.2a Review fixes:
+  - an explicit `search_path` (`public, extensions`) on every Go connection;
+  - one shared test schema per package via `TestMain` (`storetest.Run`);
+  - a cosine-query regression test.
+  - Commit: see `git log --grep "P0.2a"` (hash backfilled next commit).
 
 ### In progress
 - none. Next up is P0.3.
@@ -127,7 +132,8 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - every table has a uuid or identity primary key plus `created_at`;
   - `classifications` keeps history (no unique `ticket_id`) and has a `low_confidence` column for the cascade flag;
   - the embedding dimension is fixed at 384 in SQL, so changing the embedding model needs a new migration.
-- 2026-10-15 (P0.2): Per-test schemas pin `search_path` to `<test>, public, extensions`.
+- 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
+- 2026-10-15 (P0.2a, review): Integration tests share one migrated schema per package (`TestMain` → `storetest.Run`) and isolate rows with `storetest.UniqueID` or `testDB.Truncate` (truncate refuses non-`test_` schemas). This replaced the per-test schema.
 - 2026-10-15: The Done entry's commit hash is backfilled in the following part's commit (no amending, per the no-history-rewrite rule).
 
 ## 6. Conventions
@@ -142,7 +148,8 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - `models/`, `datasets/raw|processed|export` gitignored.
 - **Shared contracts** (Ticket, Classification, Route, RetrievedChunk, ReplyDraft) are defined once per language: Go structs in `internal/` and Pydantic in `ml-service/app/schemas.py`. Keep them in sync.
 - **Test markers:** `@pytest.mark.slow` for tests that load large models, `@pytest.mark.integration` for tests that need the DB.
-  - Go integration tests use the `//go:build integration` tag and `storetest.NewSchema(t)`. They load `.env` and skip when `TEST_DATABASE_URL` is unset.
+  - Go integration tests use the `//go:build integration` tag. Each package has one `TestMain` calling `storetest.Run(m, &testDB)`, and tests call `testDB.Require(t)`, which skips when `TEST_DATABASE_URL` is unset.
+- **DB connections:** always go through `store.OpenPool`/`store.OpenSQL`, which set an explicit search_path. Python must `SET search_path TO public, extensions` on connect.
 - **External services** (Groq, IMAP/SMTP, Zendesk, Google Calendar) sit behind interfaces with fakes. Unit tests run offline.
 - **Env vars:** see `.env.example` (DATABASE_URL, TEST_DATABASE_URL, GROQ_*, ML_SERVICE_URL, ML_PORT, TORCH_DEVICE, API_KEY, IMAP_*, SMTP_*, ZENDESK_*, GOOGLE_*).
 - **Model RAM:** load models lazily. The SCRIBE baseline (BART-MNLI, about 1.6 GB) runs as its own CLI, never inside the always-on ml-service.
@@ -151,8 +158,9 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 - **Supabase connection mode:** use the **Session pooler** connection string (IPv4, port 5432). The Transaction pooler (6543) breaks prepared statements in pgx/psycopg.
 - **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
-- **Slow integration tests:** each test that calls `storetest.NewSchema` takes about 25s through the Supabase pooler, mostly running the migrations. Share one schema per package if the count grows.
+- **Integration test cost:** each package pays about 26s once, to create, migrate and drop its schema through the Supabase pooler. Each test after that takes about 2–3s.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
+- **Render Go version:** `go.mod` declares `go 1.26.0`. At P8.2, check that Render's native Go runtime supports it, or pin a toolchain.
 - **Database safety:** never run destructive SQL (DROP, TRUNCATE, down-migrations) against `DATABASE_URL` without asking Arya. Tests only use `TEST_DATABASE_URL`, with a per-run schema.
 - **`.env` quoting:** put any value containing `$` in single quotes. Make never reads `.env` (see the decisions log).
 - **Dev machine:** an M1 MacBook Air with 8 GB RAM. Avoid holding several large models in memory.
