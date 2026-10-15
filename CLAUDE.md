@@ -140,11 +140,14 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - Real run: 23,228 rows out.
   - Commit `a11e653`.
 - P2.1d Spam builder: `data/spamassassin.py` reads the SpamAssassin public corpus (spam sets only) from the tar stream in memory, parses with stdlib email, keeps English only (langdetect, seeded), cleans, dedupes and truncates. Real run: 1,553 rows.
-  - Commit: see `git log --grep "P2.1d"` (hash backfilled next commit).
+  - Commit `1153cfe`.
+- P2.1e Synthetic meeting requests:
+  - `data/synthetic_meetings.py` (seeded specs, fixed prompt, gpt-oss-120b, 5 per call, sha256-keyed response cache, validation and retry);
+  - 400 rows committed in `datasets/synthetic/meeting_requests.jsonl`.
+  - Commit: see `git log --grep "P2.1e"` (hash backfilled next commit).
 
 ### In progress
-- P2.1 Dataset builders. a through d are done. Next:
-  - P2.1e: synthetic meeting requests (gpt-oss-120b, cached);
+- P2.1 Dataset builders. a through e are done. `data/build.py`, `data/export.py`, their tests and `docs/model_artifacts.md` are written but uncommitted. Next:
   - P2.1f: splits, dataset card, `make data`, `make export-splits`.
   - Downloaded `Tobi-Bueck/customer-support-tickets` (HF, CC-BY-NC-4.0) to `datasets/raw/tobi_bueck/train.parquet` (gitignored).
   - Profile of the English rows (28,261 of 61,765):
@@ -259,6 +262,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Results: 1,896 messages → 27 too short (<20 chars) / 69 non-English / 247 duplicates removed → **1,553 rows**. 127 bodies were truncated to 4,000 chars.
   - Spam rows have **no urgency label** (NA) and are excluded from urgency training/eval.
   - Caveat: the spam is 2002–2005 era.
+- 2026-10-15 (P2.1e): How the synthetic Meeting Scheduling rows were made:
+  - 400 rows from gpt-oss-120b (temperature 0.9, JSON mode, reasoning effort low), 5 emails per call (80 batches; 1 batch retried after returning 4 emails). Total 80,308 tokens.
+  - Specs come from `random.Random(42)` over committed option lists: action × meeting type × sender role × product × time phrasing × duration × platform × tone × length. The prompt is in the module. Raw responses are cached in `datasets/raw/llm_cache/synthetic_meetings/` (gitignored).
+  - **The final rows are committed** (`datasets/synthetic/`, about 150 KB). They're our own generated data, not a downloaded dataset, and a re-run at temperature 0.9 wouldn't reproduce them byte-for-byte.
+  - Quality check: 400 unique bodies; 0 bracket placeholders; 0 "finds you well"; 97% mention a meeting word; 323 unique subjects.
+  - **Caveat for the report:** the emails are shorter than Tobi-Bueck's (median 260 vs 374 chars) and their subjects are keyword-heavy ("confirmation", "reschedule", "review"). The class is likely easier than the real ones, so report per-origin metrics.
+  - Urgency is NA for these rows.
 - 2026-10-15 (P2.1 D4): urgency is trained and evaluated on low/medium/high only; "critical" comes only from documented heuristic/escalation rules (P3.3). Neither dataset has English critical rows.
 - 2026-10-15: Supabase was recreated in **ap-south-1 (Mumbai)**. Migrations 1–4 applied, and the sample CSV was re-seeded by the worker (21 tickets incl. the Portuguese one as skipped). The Portuguese backfill question is moot.
 - 2026-10-15 (P2.1a): Kaggle uses a new-style API token (`KGAT_…`) in `KAGGLE_API_TOKEN`. `kaggle` 2.2.4 reads it natively via `kagglesdk` (verified in the package source).
