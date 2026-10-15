@@ -2,6 +2,7 @@
 //
 //	go run ./cmd/migrate up      # apply pending migrations (idempotent)
 //	go run ./cmd/migrate status  # list applied/pending migrations
+//	go run ./cmd/migrate verify  # read-only: vector extension, tables, HNSW index
 //
 // Down-migrations are deliberately not exposed.
 package main
@@ -57,7 +58,20 @@ func main() {
 		for _, l := range lines {
 			fmt.Println(l)
 		}
+	case "verify":
+		r, err := store.VerifySchema(ctx, db)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("vector extension: schema=%q version=%q\n", r.VectorSchema, r.VectorVersion)
+		fmt.Printf("tables: %d required, missing=%v\n", len(store.RequiredTables), r.MissingTables)
+		fmt.Printf("index %s: method=%q\n", store.HNSWIndex, r.HNSWMethod)
+		fmt.Printf("tickets: %v\n", r.TicketCounts)
+		if !r.OK() {
+			log.Fatal("verify: schema incomplete (run `make migrate`)")
+		}
+		fmt.Println("verify: OK")
 	default:
-		log.Fatalf("unknown command %q (use up|status)", cmd)
+		log.Fatalf("unknown command %q (use up|status|verify)", cmd)
 	}
 }

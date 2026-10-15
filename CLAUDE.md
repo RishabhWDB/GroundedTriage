@@ -37,7 +37,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Integration tests (needs `TEST_DATABASE_URL`) | `make test-integration` |
 | Lint (gofmt check, go vet, ruff check + format check) | `make lint` |
 | Auto-format | `make fmt` |
-| Migrate (goose, up only, idempotent; SQL in `migrations/`, embedded) | `make migrate` / `make migrate-status` |
+| Migrate (goose, up only, idempotent; SQL in `migrations/`, embedded) | `make migrate` / `make migrate-status` / `make migrate-verify` (read-only: vector ext, tables, HNSW index, ticket counts) |
 | One Go integration test | `go test -tags integration -count=1 ./internal/store -run TestTicketInsertAndGet` |
 | Seed | `make seed` (not implemented until P8.1) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
@@ -170,7 +170,12 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - ungrounded draft→refine via gpt-oss-120b;
   - shared `app/interfaces.py` (`TicketClassifier`, `ReplyDrafter`, `CategoryPrediction`, `DraftResult`).
   - Slow tests pass end to end on 10 sample emails (classify and draft).
-  - Commit: see `git log --grep "P2.2"` (hash backfilled next commit).
+  - Commit `33a51cd`.
+- P2.2a Supabase (Mumbai) checks and hallucination example:
+  - `cmd/migrate verify` / `make migrate-verify` is a read-only check of the vector extension, the 8 tables, the HNSW index and ticket counts;
+  - Mumbai project verified: migrations up to date, 2 worker runs inserted 0, integration suite passes;
+  - `results/examples/ungrounded_hallucination_01.md`.
+  - Commit: see `git log --grep "P2.2a"` (hash backfilled next commit).
 
 ### In progress
 - none. P2.2 is done. P2.3 (baseline evaluation on test) waits on the near-duplicate leakage decision (see Blocked), because that decision may change the test split.
@@ -318,6 +323,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P2.1g, review): **Reporting rule.** Macro-F1 is the headline classification metric. Accuracy is secondary, because Technical Issue is 53% of test. Every classification result is also reported with and without synthetic rows (overall / real only), plus per origin.
 - 2026-10-15 (P2.1g): scikit-learn is in the `[data]` extra for the audit. P3.1 moves it to the core deps when the fast tier serves from the ml-service.
 - 2026-10-15 (P2.1 D4): urgency is trained and evaluated on low/medium/high only; "critical" comes only from documented heuristic/escalation rules (P3.3). Neither dataset has English critical rows.
+- 2026-10-15 (P2.2a, review): Mumbai project verification:
+  - Both DATABASE_URL and TEST_DATABASE_URL use host `aws-0-ap-south-1.pooler.supabase.com:5432` (Session pooler).
+  - `make migrate` applied 0 migrations, so 00001–00004 were already applied. `migrate verify` found vector 0.8.2 in `extensions`, all 8 tables (incl. `ingest_checkpoints`) and `kb_chunks_embedding_hnsw_idx` using `hnsw`.
+  - `cmd/dbping` (n=20): warm-pool SELECT 1 p50 30ms / p95 31ms, against ~395ms p50 in Sydney (about 13× faster). TCP connect p50 32ms; fresh connection p50 211ms.
+  - `worker -once` twice: both runs inserted 0 (1 fetched, a content duplicate). The project was **already seeded** by the earlier Mumbai re-seed: 20 `csv/accepted` + 1 `csv/skipped/non_english` (the Portuguese ticket), and the csv checkpoint is 2026-10-09T06:00Z. A "first run inserts 21" demo would need deleting rows in DATABASE_URL, which wasn't done (destructive; Arya's call).
+  - `make test-integration` passes in about 15s.
+  - The old Sydney project was not touched; Arya deletes it.
 - 2026-10-15: Supabase was recreated in **ap-south-1 (Mumbai)**. Migrations 1–4 applied, and the sample CSV was re-seeded by the worker (21 tickets incl. the Portuguese one as skipped). The Portuguese backfill question is moot.
 - 2026-10-15 (P2.1a): Kaggle uses a new-style API token (`KGAT_…`) in `KAGGLE_API_TOKEN`. `kaggle` 2.2.4 reads it natively via `kagglesdk` (verified in the package source).
   - `import kaggle` authenticates at import time, and `authenticate()` calls `exit(1)` on failure. `data.kaggle_auth` therefore loads `.env` first, imports lazily, silences the SDK's help text and raises `KaggleAuthError` with exact fix-it steps.
@@ -414,7 +426,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - **Zendesk is only tested against an `httptest` mock**, since no Zendesk account is configured. The incremental export also requires an admin API token.
 - **Email adapter not tested against a real mailbox:** IMAP_*/SMTP_* aren't configured. `IMAPClient` is untested beyond compiling. `SMTPMailer` is tested against an in-process fake SMTP server (no TLS, no auth). Gmail needs an app password, plus IMAP enabled.
 - **DB latency (`cmd/dbping`, 2026-10-15):** after the move to ap-south-1 (Mumbai):
-  - warm-pool `SELECT 1` p50 is 28ms (was 395ms in Sydney);
+  - warm-pool `SELECT 1` p50 is 28–30ms, p95 31ms (was 395ms p50 in Sydney);
   - TCP connect is 31ms;
   - a fresh connection is 212ms.
   - The integration suite takes about 9s.
@@ -435,6 +447,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 ## 8. Results so far
 
+- Ungrounded hallucination example: `results/examples/ungrounded_hallucination_01.md`. The SCRIBE baseline told a customer "I've processed a refund … within 3–5 business days" with no grounding. P7.2 collects more automatically.
 - Data audit (P2.1g, `results/data_audit/report.md`):
   - TF-IDF+LR (1–2-gram, balanced) trained on capped train and scored on val: macro-F1 0.82 / accuracy 0.76 on full text, 0.72 / 0.66 on the subject alone. This is a data diagnostic, not the P3.1 fast tier.
   - 11.6% of test rows have a train near-duplicate (cosine > 0.9).

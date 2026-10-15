@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: setup setup-baseline baseline dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status seed data data-audit synthetic-meetings export-splits
+.PHONY: setup setup-baseline baseline dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings export-splits
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -67,6 +67,9 @@ migrate: ## Apply pending migrations to DATABASE_URL (idempotent; up only)
 
 migrate-status: ## Show applied/pending migrations on DATABASE_URL
 	go run ./cmd/migrate status
+
+migrate-verify: ## Read-only check: vector extension, all tables, HNSW index
+	go run ./cmd/migrate verify
 
 data: ## Build datasets/processed splits + manifest + dataset card (downloads raw data on first run)
 	cd $(ML_DIR) && $(VPY) -m data.build
