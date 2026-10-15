@@ -218,3 +218,29 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# GroundedTriage project-specific
+# ---------------------------------------------------------------------------
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Secrets / OAuth tokens (never commit)
+.env.*
+!.env.example
+token.json
+credentials.json
+
+# Model weights: fast_tier is trained locally; deep_tier/urgency are copied in
+models/
+
+# Datasets are downloaded by script; only datasets/README.md and the
+# hand-written sample CSV are committed
+datasets/raw/
+datasets/processed/
+datasets/export/
+
+# Go build output
+/bin/

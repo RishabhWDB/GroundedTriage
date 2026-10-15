@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grounded-triage-ml"
+version = "0.1.0"
+description = "ml-service for GroundedTriage: classification cascade, retrieval, grounded drafting, faithfulness gate, SCRIBE baseline and evaluation."
+requires-python = ">=3.11,<3.12"
+# Runtime dependencies are added by the part that first needs them.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8",
+    "honcho>=2.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "triage*", "rag*", "baseline*", "data*", "eval*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: downloads or loads large models; skipped unless RUN_SLOW=1",
+    "integration: needs TEST_DATABASE_URL; skipped when it is unset",
+]
