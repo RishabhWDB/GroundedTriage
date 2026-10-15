@@ -1,0 +1,30 @@
+From: Maria Gomez <maria.gomez@example.org>
+To: support@example.com
+Subject: Feature request: export reports to Excel
+Date: Fri, 03 Oct 2026 13:22:00 +0000
+Message-ID: <multi-003@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="outer"
+
+--outer
+Content-Type: multipart/alternative; boundary="inner"
+
+--inner
+Content-Type: text/plain; charset=utf-8
+
+Would it be possible to export the monthly usage report as .xlsx?
+Our finance team prefers Excel.
+
+Sent from my iPhone
+--inner
+Content-Type: text/html; charset=utf-8
+
+<p>Would it be possible to export the monthly usage report as <b>.xlsx</b>?</p><p>Our finance team prefers Excel.</p>
+--inner--
+--outer
+Content-Type: application/pdf; name="report.pdf"
+Content-Disposition: attachment; filename="report.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJcOkw7zDtsOfCg==
+--outer--

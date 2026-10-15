@@ -86,10 +86,19 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - Reply appends to `datasets/out/replies.csv`;
   - `ingest.DefaultRegistry()` registers the adapters;
   - committed a hand-written 22-row `datasets/sample_emails.csv`.
-  - Commit: see `git log --grep "P1.2"` (hash backfilled next commit).
+  - Commit `7640cb1`.
+- P1.3a Email parsing and shared text cleaning:
+  - `preprocess.HTMLToText`, `StripQuoted`, `StripSignature`;
+  - `ingest.ParseEmail`: multipart, charsets, threading headers;
+  - 4 `.eml` fixtures in `internal/ingest/testdata/email/`.
+  - Commit: see `git log --grep "P1.3a"` (hash backfilled next commit).
 
 ### In progress
-- none. Next is P1.3.
+- P1.3 IMAP adapter. P1.3a (parser + cleaning) is done. Next is P1.3b:
+  - IMAP fetcher and SMTP mailer interfaces, with real implementations (go-imap v1, net/smtp);
+  - `EmailSource` Fetch/Reply;
+  - reply MIME building with In-Reply-To/References;
+  - factory from IMAP_*/SMTP_* env vars, registered in DefaultRegistry.
 
 ### To do
 - P1.3 IMAP adapter
@@ -164,6 +173,16 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P1.3a): HTML→text and quote/signature stripping live in `internal/preprocess` so every adapter shares them (P1.5 applies them to all sources); the email parser already uses them.
+  - Quote stripping cuts at the first reply header: "On … wrote:" (also when it wraps onto two lines), Outlook `From:`+`Sent:/To:/Date:` blocks, underscore rules, or "-----Original Message-----". It also drops every `>` line.
+  - Signature stripping cuts at the RFC 3676 `-- ` delimiter or a mobile footer ("Sent from my iPhone", "Get Outlook for iOS").
+  - Sign-offs like "Thanks, Priya" are kept. They're too ambiguous to strip safely, and harmless for classification.
+  - If stripping would leave nothing, the original text is kept.
+  - HTML stripping also drops `<blockquote>`, `.gmail_quote` and Outlook `#appendonsend`/`#divRplyFwdMsg` containers.
+- 2026-10-15 (P1.3a): Email parsing uses `emersion/go-message`, which handles RFC 2047 headers, transfer encodings and non-UTF-8 charsets.
+  - A message's `ExternalID` is its Message-ID without brackets, falling back to a `nomsgid-` content hash.
+  - `ThreadID` is the thread root: References[0], else In-Reply-To, else its own Message-ID.
+  - text/plain is preferred over text/html, and attachments are ignored.
 - 2026-10-15 (P1.2): CSV `external_id` is the `Id` column if present. Otherwise it's `csv-` plus the first 16 hex characters of sha256 over sender, subject, body and date. That's stable across reorders and re-reads, and two rows with the same text but different dates get distinct ids, so content-hash dedupe (P1.5) still sees them.
   - `ReceivedAt` comes from the `Date` column (RFC 3339 / `YYYY-MM-DD[ HH:MM:SS]`, UTC), falling back to the file's mtime.
   - `Label` isn't part of the Ticket contract. It's exposed via `CSVSource.ReadRows()` for evaluation tooling and not stored.
