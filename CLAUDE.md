@@ -132,11 +132,16 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `app/taxonomy.py`, with `Classification.category` validated against it;
   - Go `model.Categories`, sync-tested against the YAML;
   - the sample CSV relabelled.
-  - Commit: see `git log --grep "P2.1b"` (hash backfilled next commit).
+  - Commit `2831375`. Follow-up `c5389cd` removed a stray Kaggle metadata file.
+- P2.1c Tobi-Bueck builder:
+  - `data/tobi_bueck.py` (cached HF parquet download, EN filter, `taxonomy.yaml` rules, urgency map, cleaning, dedupe);
+  - `data/mapping.py` (ordered-rule engine);
+  - `data/textclean.py` (mirrors the Go preprocess cleaning).
+  - Real run: 23,228 rows out.
+  - Commit: see `git log --grep "P2.1c"` (hash backfilled next commit).
 
 ### In progress
-- P2.1 Dataset builders. Auth (a) and taxonomy (b) are done. Next:
-  - P2.1c: Tobi-Bueck builder (mapping, HTML strip, dedupe);
+- P2.1 Dataset builders. a, b and c are done. Next:
   - P2.1d: spam corpus (licence check);
   - P2.1e: synthetic meeting requests (gpt-oss-120b, cached);
   - P2.1f: splits, dataset card, `make data`, `make export-splits`.
@@ -238,6 +243,14 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Every row carries `origin` (real|synthetic), and all metrics must be reportable overall and split by origin.
   - Train only: cap any class at about 5× the smallest class. val/test are never resampled.
   - Splits are stratified by category × origin: 70/15/15, seed 42.
+- 2026-10-15 (P2.1c): Results of the real Tobi-Bueck build (raw parquet sha256 `1e2de97c…71a9`):
+  - 61,765 rows → 28,261 EN;
+  - 514 dropped by the HR rule, 0 unmapped, 1 empty body, 4,518 duplicate bodies removed → **23,228 rows**;
+  - categories: Technical Issue 13,349, General Inquiry 4,099, Billing 3,289, Feature Request 2,491;
+  - urgency: medium 9,544, high 9,071, low 4,613.
+  - The dedupe key is the lower-cased, whitespace-collapsed body, keeping the first occurrence.
+  - The dataset's anonymisation placeholders (`<tel_num>`, `<acc_num>`, `<name>`, …) are kept as is.
+  - Literal `\n` sequences in bodies become newlines.
 - 2026-10-15 (P2.1 D4): urgency is trained and evaluated on low/medium/high only; "critical" comes only from documented heuristic/escalation rules (P3.3). Neither dataset has English critical rows.
 - 2026-10-15: Supabase was recreated in **ap-south-1 (Mumbai)**. Migrations 1–4 applied, and the sample CSV was re-seeded by the worker (21 tickets incl. the Portuguese one as skipped). The Portuguese backfill question is moot.
 - 2026-10-15 (P2.1a): Kaggle uses a new-style API token (`KGAT_…`) in `KAGGLE_API_TOKEN`. `kaggle` 2.2.4 reads it natively via `kagglesdk` (verified in the package source).
