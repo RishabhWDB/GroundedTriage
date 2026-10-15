@@ -57,3 +57,13 @@ func (r Tickets) Get(ctx context.Context, id string) (model.Ticket, error) {
 	}
 	return t, nil
 }
+
+// ContentHashExists reports whether any stored ticket has this content hash.
+func (r Tickets) ContentHashExists(ctx context.Context, hash string) (bool, error) {
+	var exists bool
+	err := r.Pool.QueryRow(ctx, `select exists (select 1 from tickets where content_hash = $1)`, hash).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("content hash lookup: %w", err)
+	}
+	return exists, nil
+}

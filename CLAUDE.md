@@ -102,13 +102,16 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `ZendeskSource` uses the cursor-based incremental export with users sideloaded and pagination capped by `MaxPages`;
   - replies are a public comment via PUT;
   - 429 retries honour `Retry-After`.
-  - Commit: see `git log --grep "P1.4"` (hash backfilled next commit).
+  - Commit `17e198d`.
+- P1.5 Preprocess & normalize:
+  - `preprocess.Normalize`: HTML→text, quote/signature stripping, whitespace/NFC, sender lower-casing, content hash, empty and non-English skips;
+  - `preprocess.Ingestor` persists new tickets and rejects duplicates by `(source, external_id)` and by `content_hash`.
+  - Commit: see `git log --grep "P1.5"` (hash backfilled next commit).
 
 ### In progress
-- none. Next is P1.5.
+- none. Next is P1.6.
 
 ### To do
-- P1.5 Preprocess & normalize
 - P1.6 Ingestion worker
 - P2.1 Dataset builders
 - P2.2 SCRIBE baseline
@@ -178,6 +181,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P1.5): `content_hash` is sha256 over three parts: the lower-cased sender; the subject with Re:/Fwd:/AW:/WG: prefixes stripped, lower-cased, whitespace collapsed; and the lower-cased body with whitespace collapsed.
+  - The sender is included so that two customers sending the same text are **not** merged. The goal is to catch the same message arriving twice (re-sends, or the same mail via email and Zendesk).
+  - Tickets whose content hash is already stored are rejected as `duplicate_content`, even with a new external id. The check-then-insert isn't atomic, which is safe with a single ingestion worker (as now).
+- 2026-10-15 (P1.5): Language check uses `abadojack/whatlanggo` (a small trigram detector, no model files; lingua-go was rejected for its RAM use).
+  - A ticket is skipped as `non_english` only when the detection is reliable, isn't English, and the subject+body has at least 30 letters. Shorter text is assumed English.
+  - On the 22 sample rows, only the Portuguese row is flagged. Three short English rows got low-confidence `eng`, never a wrong language.
+- 2026-10-15 (P1.5): `preprocess.CleanBody` is the single cleaning chain for all adapters: HTML→text when the body looks like HTML, quotes, signature, whitespace/NFC/zero-width removal. It's idempotent, so the email adapter's earlier cleaning is harmless. Skipped tickets are logged with a reason and not stored.
 - 2026-10-15 (P1.4): Zendesk Fetch uses `GET /api/v2/incremental/tickets/cursor.json?start_time=…&include=users`, then follows `cursor=after_cursor` until `end_of_stream`, with at most 50 pages per poll (the rest comes next poll).
   - `start_time` is clamped to ≤ now−61s (an API rule). A zero `since` looks back 30 days.
   - Only new/open/pending/hold tickets are ingested; solved, closed and deleted are skipped.
@@ -250,6 +260,8 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
 - **Zendesk is only tested against an `httptest` mock**, since no Zendesk account is configured. The incremental export also requires an admin API token.
 - **Email adapter not tested against a real mailbox:** IMAP_*/SMTP_* aren't configured. `IMAPClient` is untested beyond compiling. `SMTPMailer` is tested against an in-process fake SMTP server (no TLS, no auth). Gmail needs an app password, plus IMAP enabled.
+- **Ingestion DB round-trips:** `Ingestor.Process` makes 2 queries per ticket, at roughly 0.6s per round-trip through the Supabase pooler from this Mac. That's about 28s for the 22-row sample. Batch it (one hash lookup with `= any($1)` plus a batch insert) before ingesting real datasets.
+- **Invisible characters in generated Go files:** `\u` escapes written by Claude can land in files as literal BOM/nbsp/zero-width characters, and Go rejects a mid-file BOM. Fix with a small script that rewrites them as `\uXXXX` escapes. Check `go vet` after writing any file containing such escapes.
 - **Integration test cost:** each package pays about 26s once, to create, migrate and drop its schema through the Supabase pooler. Each test after that takes about 2–3s.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
 - **Groq models change:** `llama-3.3-70b-versatile` isn't available on the current key. Run `GET {GROQ_BASE_URL}/models` to see which models are live.
