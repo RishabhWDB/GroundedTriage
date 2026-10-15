@@ -26,6 +26,7 @@ data = [
     "kaggle>=2.2.4,<3",
     "pandas>=2.2",
     "pyarrow>=17",
+    "langdetect>=1.0.9",
 ]
 dev = [
     "ruff>=0.6",
