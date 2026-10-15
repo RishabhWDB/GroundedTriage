@@ -97,13 +97,17 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - real `IMAPClient` (go-imap v1, read-only, BODY.PEEK) and `SMTPMailer` (465 TLS / STARTTLS, PLAIN auth);
   - threaded `BuildReply`;
   - `email` registered in DefaultRegistry.
-  - Commit: see `git log --grep "P1.3b"` (hash backfilled next commit).
+  - Commit `088614a`.
+- P1.4 Zendesk adapter:
+  - `ZendeskSource` uses the cursor-based incremental export with users sideloaded and pagination capped by `MaxPages`;
+  - replies are a public comment via PUT;
+  - 429 retries honour `Retry-After`.
+  - Commit: see `git log --grep "P1.4"` (hash backfilled next commit).
 
 ### In progress
-- none. Next is P1.4.
+- none. Next is P1.5.
 
 ### To do
-- P1.4 Ticketing API adapter (Zendesk; Freshdesk optional)
 - P1.5 Preprocess & normalize
 - P1.6 Ingestion worker
 - P2.1 Dataset builders
@@ -174,6 +178,15 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - 2026-10-15 (P0.2a, review): Every Go connection runs `SET search_path TO [<test schema>,] public, extensions` in AfterConnect (`store.SearchPath`). The Supabase role default isn't relied on. Python psycopg connections must do the same once they exist; none exist yet, and the first comes in P5.1. `TestCosineQueryResolvesVector` guards against regression: I removed `extensions` and confirmed the run fails.
 - 2026-10-15 (P0.3a): The Groq client is plain httpx against the OpenAI-compatible endpoint, not the `groq` SDK. This gives full control of retries: 429/5xx/transport errors back off exponentially with jitter (up to 5 retries, 30s cap) and honour `Retry-After`; other 4xx errors fail immediately. Sleep and transport are injectable for tests.
 - 2026-10-15 (P0.3a, review): torch is not a dependency yet. `app.device.select_device` imports it lazily and returns `cpu` with a log message when it's missing. `/health` only probes `find_spec("torch")` and never imports torch.
+- 2026-10-15 (P1.4): Zendesk Fetch uses `GET /api/v2/incremental/tickets/cursor.json?start_time=…&include=users`, then follows `cursor=after_cursor` until `end_of_stream`, with at most 50 pages per poll (the rest comes next poll).
+  - `start_time` is clamped to ≤ now−61s (an API rule). A zero `since` looks back 30 days.
+  - Only new/open/pending/hold tickets are ingested; solved, closed and deleted are skipped.
+  - Ticket fields: `ExternalID`=`ThreadID` is the ticket id; `Body` is the description (first comment); `Sender` is the requester's email from the sideload, else `zendesk-user:<id>`; `ReceivedAt` is `created_at`.
+  - **Limitation:** follow-up comments on an existing ticket aren't ingested, because the incremental export is per ticket and the DB key drops repeats.
+- 2026-10-15 (P1.4): Zendesk retries:
+  - 429 is always retried, honouring `Retry-After`, otherwise with 2^n s backoff (up to 5 retries).
+  - 5xx and transport errors are retried only for GET. A reply PUT that fails with 5xx is **not** retried, because the comment may already have posted and a retry could duplicate it. Outbound (P6.3) owns idempotency.
+  - Freshdesk (optional in the spec) is not implemented.
 - 2026-10-15 (P1.3b): The IMAP poll opens a connection per poll, SELECTs the mailbox read-only, and searches UNSEEN SINCE the day of `since`. It fetches `BODY.PEEK[]`, so **the user's inbox flags are never changed**. Repeat fetches are handled by `since` filtering on the server's INTERNALDATE plus the DB unique key `(source, external_id=Message-ID)`.
   - `ReceivedAt` is INTERNALDATE (trusted), falling back to the `Date` header.
   - Mail from our own `SMTP_FROM` address is skipped, to avoid reply loops. Unparseable messages are logged and skipped, without failing the batch.
@@ -235,6 +248,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 - **Supabase connection mode:** use the **Session pooler** connection string (IPv4, port 5432). The Transaction pooler (6543) breaks prepared statements in pgx/psycopg.
 - **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
+- **Zendesk is only tested against an `httptest` mock**, since no Zendesk account is configured. The incremental export also requires an admin API token.
 - **Email adapter not tested against a real mailbox:** IMAP_*/SMTP_* aren't configured. `IMAPClient` is untested beyond compiling. `SMTPMailer` is tested against an in-process fake SMTP server (no TLS, no auth). Gmail needs an app password, plus IMAP enabled.
 - **Integration test cost:** each package pays about 26s once, to create, migrate and drop its schema through the Supabase pooler. Each test after that takes about 2–3s.
 - **Supabase pausing:** free-tier projects pause after inactivity. If DB connections fail, check whether the project needs resuming in the dashboard.
