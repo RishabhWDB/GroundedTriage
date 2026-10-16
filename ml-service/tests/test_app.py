@@ -3,11 +3,17 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.main import app
+from app.models import Registry, get_registry
 from app.schemas import Classification, ModelsLoaded, ReplyDraft
+from app.settings import Settings
 
 
-def test_health_reports_no_models_loaded():
-    resp = TestClient(app).get("/health")
+def test_health_reports_no_models_loaded(tmp_path):
+    app.dependency_overrides[get_registry] = lambda: Registry(Settings(models_dir=tmp_path))
+    try:
+        resp = TestClient(app).get("/health")
+    finally:
+        app.dependency_overrides.clear()
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"

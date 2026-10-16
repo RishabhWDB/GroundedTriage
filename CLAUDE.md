@@ -55,6 +55,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Score the reviewed stress set into the baseline results (after the CSV review) | `make baseline-stress` |
 | Train the fast tier on train, report on val (~8 min on M1) | `make fast-tier` → `models/fast_tier/` (gitignored) + `results/fast_tier/` |
 | Score urgency (heuristic, plus model if present) on val | `make urgency-eval` → `results/urgency/` |
+| Tune the cascade threshold τ on val (needs `models/deep_tier/`) | `make tune-tau` → `config/cascade.yaml`, `results/cascade/` |
+| Classify one ticket (ml-service running) | `curl -s localhost:8001/classify -H 'content-type: application/json' -d '{"ticket_id":"t1","subject":"Refund","body":"Charged twice"}'` |
 | Evaluate the proposed system | not implemented yet (P7) |
 
 ## 3. Status board
@@ -207,13 +209,18 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P3.2 Deep-tier inference loader (no training): `triage/hf_model.py` (`validate_artifact`, `HFClassifier`: lazy load, MPS fp16 / CPU, batching, truncation to `max_length`, `available` + logged reason) and `triage/deep_tier.py` (`DeepTier`). Tests build a tiny random BERT + word-level tokenizer in a temp dir (nothing downloaded).
   - Commit `65bb485`.
 - P3.3 Urgency loader + heuristic fallback (no training): `triage/urgency.py` (`UrgencyModel` on the shared loader, `heuristic_urgency`, `UrgencyPredictor`: model else heuristic, critical rule on top); `triage/eval_urgency.py` (`make urgency-eval` → `results/urgency/`); ordinal metrics on the full low..critical scale.
+  - Commit `d28e515`.
+- P3.4 Cascade + threshold tuning:
+  - `triage/cascade.py` (fast → τ → deep if available, else fast with `low_confidence`; urgency always);
+  - `triage/tune_threshold.py` (`make tune-tau`: τ sweep on val, cost curve, writes `config/cascade.yaml`; exits cleanly without the deep tier);
+  - `app/models.py` lazy registry; `POST /classify` → `Classification`; `/health` reports artifact availability without loading weights;
+  - verified live with only the fast tier present.
   - Commit: backfilled in the next commit.
 
 ### In progress
 - Phase 3 (classification). Phase 2 approved 2026-10-16; Arya asked for Phase 3 to run through without stopping between parts.
 
 ### To do
-- P3.4 Cascade + threshold tuning
 - P3.5 Go integration
 - P4.1 Rule engine
 - P4.2 Mute + no-reply detection
@@ -346,6 +353,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-16 (P3.4): Cascade:
+  - Fast tier on every ticket. Calibrated confidence **< τ** goes to the deep tier when it's available; the deep tier sees only those tickets, as one batch. Otherwise the fast prediction is kept with `low_confidence=true`, which also happens when the deep tier fails at load. Urgency runs on every ticket.
+  - `model_versions` = `{fast_tier, tau, deep_tier (if available), urgency (version or "heuristic")}`. `models_loaded` = deep/urgency artifact availability.
+  - **τ = 0.7 is an untuned default** (`config/cascade.yaml`, `tuned: false`) until the deep tier exists. Without a deep tier, τ only sets the `low_confidence` flag: at 0.7, half of val is flagged, and the other half is 93% accurate.
+  - **τ rule** (`make tune-tau`): sweep τ 0.00–1.00 in 0.01 steps on val. Pick the smallest deep-tier share whose macro-F1 (over the classes present in gold) is within 0.005 of the sweep's best; ties go to the smaller τ. It writes τ, the rule, the val numbers and both model versions to `config/cascade.yaml`, and the sweep and cost curve to `results/cascade/`. Without a valid `models/deep_tier/` it prints why, changes nothing and exits 0 (no fake curve).
+  - Serving: `app/models.Registry` is built once per process. The fast tier loads on the first `/classify` (0.6 s); deep/urgency validate on first access and load weights on first use. `/classify` returns 503 with "run `make fast-tier`" when there's no fast tier. τ is re-read from YAML on each request, so a re-tune needs no restart. `POST /classify` takes `{ticket_id, subject, body}` (`ClassifyRequest`).
+  - `Cascade.classify` also implements `app.interfaces.TicketClassifier` (stage fast|deep) for the P7 harness.
 - 2026-10-16 (P3.3): Urgency:
   - The model (`models/urgency/`, task `urgency`) uses the same loader and contract. label_map must be exactly `[low, medium, high]` in id order, optionally plus `critical`.
   - **The heuristic** (documented table in `triage/urgency.py`): six regex groups, each counted once per ticket. Urgency keywords +3 (alone enough for high); deadline/time +1; escalation +1; negative phrasing +1; business impact +2; low-urgency cues −2. Score ≤ −1 → low, 0..2 → medium, ≥ 3 → high.

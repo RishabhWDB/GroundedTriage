@@ -61,6 +61,14 @@ class Classification(BaseModel):
         return v
 
 
+class ClassifyRequest(BaseModel):
+    """POST /classify body: one accepted ticket's id and cleaned text."""
+
+    ticket_id: str
+    subject: str = ""
+    body: str = ""
+
+
 class Route(BaseModel):
     ticket_id: str
     action: Action

@@ -1,0 +1,11 @@
+# Classification cascade (P3.4). Read by ml-service triage.cascade.load_tau.
+#
+# Tickets whose calibrated fast-tier confidence is below tau go to the deep
+# tier; without a deep tier they keep the fast prediction with
+# low_confidence=true (routing reads that flag in P4.1).
+#
+# tau is chosen on val by `make tune-tau` once models/deep_tier/ exists:
+# the smallest deep-tier share within 0.005 of the best val macro-F1. That
+# script rewrites this file. Until then tau is an untuned default.
+tau: 0.7
+tuned: false
