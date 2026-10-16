@@ -54,6 +54,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Baseline evaluation on test (P2.3; ~90 min on M1 under swap; resumable) | `make baseline-eval` → `results/baseline/` (smoke: `make baseline ARGS="evaluate --limit 60 --out /tmp/x"`) |
 | Score the reviewed stress set into the baseline results (after the CSV review) | `make baseline-stress` |
 | Train the fast tier on train, report on val (~8 min on M1) | `make fast-tier` → `models/fast_tier/` (gitignored) + `results/fast_tier/` |
+| Score urgency (heuristic, plus model if present) on val | `make urgency-eval` → `results/urgency/` |
 | Evaluate the proposed system | not implemented yet (P7) |
 
 ## 3. Status board
@@ -204,13 +205,14 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - val macro-F1 0.825 overall / 0.790 real-only (see §8).
   - Commit `62cf039`.
 - P3.2 Deep-tier inference loader (no training): `triage/hf_model.py` (`validate_artifact`, `HFClassifier`: lazy load, MPS fp16 / CPU, batching, truncation to `max_length`, `available` + logged reason) and `triage/deep_tier.py` (`DeepTier`). Tests build a tiny random BERT + word-level tokenizer in a temp dir (nothing downloaded).
+  - Commit `65bb485`.
+- P3.3 Urgency loader + heuristic fallback (no training): `triage/urgency.py` (`UrgencyModel` on the shared loader, `heuristic_urgency`, `UrgencyPredictor`: model else heuristic, critical rule on top); `triage/eval_urgency.py` (`make urgency-eval` → `results/urgency/`); ordinal metrics on the full low..critical scale.
   - Commit: backfilled in the next commit.
 
 ### In progress
 - Phase 3 (classification). Phase 2 approved 2026-10-16; Arya asked for Phase 3 to run through without stopping between parts.
 
 ### To do
-- P3.3 Urgency inference loader + heuristic fallback (no training)
 - P3.4 Cascade + threshold tuning
 - P3.5 Go integration
 - P4.1 Rule engine
@@ -344,6 +346,14 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-16 (P3.3): Urgency:
+  - The model (`models/urgency/`, task `urgency`) uses the same loader and contract. label_map must be exactly `[low, medium, high]` in id order, optionally plus `critical`.
+  - **The heuristic** (documented table in `triage/urgency.py`): six regex groups, each counted once per ticket. Urgency keywords +3 (alone enough for high); deadline/time +1; escalation +1; negative phrasing +1; business impact +2; low-urgency cues −2. Score ≤ −1 → low, 0..2 → medium, ≥ 3 → high.
+  - **critical = business impact AND (urgency keywords OR escalation).** This rule applies on top of the model too, since the data has no critical rows (P2.1 D4); a critical override is marked `urgency_source="heuristic"`.
+  - Heuristic confidence is a fixed, uncalibrated 0.4 + 0.1 per fired group (max 0.8).
+  - The cue lists were written from general support-desk vocabulary **before** the val run and were not tuned on val afterwards. During unit testing I raised the urgency-keyword weight from +2 to +3, so that "URGENT … ASAP" alone means high; that was a design fix from a toy example, not tuning.
+  - If the model fails to load at first use, `UrgencyPredictor` falls back to the heuristic for that and later calls.
+  - Ordinal metrics: `eval.classification.urgency_metrics` gives macro-F1 over low/medium/high plus MAE over positions on low < medium < high < critical (critical vs high = 1 step) and the share off by ≥ 2.
 - 2026-10-16 (P3.2): Deep-tier loader (`triage/hf_model.py`, shared with urgency):
   - **Validation at construction, weights at first use.** Construction only reads files: required `config.json`, `label_map.json`, `model_card.json`, `model.safetensors` and `tokenizer.json` or `tokenizer_config.json`. label_map ids must be exactly 0..n-1 with no duplicate labels, and the labels must be exactly the 6 taxonomy names (any id order; predictions follow label_map ids). model_card needs the right `task`, a positive integer `max_length` and `val_metrics.macro_f1`. `config.json`'s `num_labels` must match label_map.
   - Any failure → `available=False` with a logged `reason`; nothing raises to the service. A failure at weight load (corrupt safetensors, wrong output size) also flips `available` to False, and callers fall back.
@@ -515,6 +525,11 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Coverage (calibrated confidence ≥ τ → share / accuracy): 0.5 → 87% / 0.834; 0.6 → 68% / 0.899; 0.7 → 50% / 0.934; 0.8 → 31% / 0.977; 0.9 → 18% / 0.992.
   - Cost: training 7.9 min (4 C fits + 2 calibrated fits); load 0.5 s; single ticket p50 1.7 ms, p95 2.5 ms; batch 0.5 ms/ticket; peak RSS 612 MB (7.5 GB swap in use).
   - Not comparable with the baseline yet: different split (val vs test). P7.1 scores both on test.
+- **Urgency heuristic on val (P3.3, `results/urgency/`, n=3,485 labelled rows):** macro-F1 **0.273**, accuracy 0.419, ordinal MAE 0.615, off by ≥ 2 on 3.2%.
+  - It predicts medium for 84% of rows (2,922), so it's a conservative fallback, not a classifier. Gold is medium 1,429 / high 1,366 / low 690.
+  - 74 rows are predicted critical; gold has no critical, so all 74 count as errors.
+  - Fired groups: urgency 551, impact 215, deadline 88, low 17, escalation 10, negative 2. The Tobi-Bueck texts rarely use escalation or negative phrasing.
+  - For reference only (different split): SCRIBE's sentiment-as-urgency on test has macro-F1 0.357 / MAE 0.750. The heuristic is closer on the ordinal scale but worse on macro-F1. The fine-tuned urgency model is expected to replace both.
 - **SCRIBE baseline on test (P2.3, `results/baseline/`, test content `c6539fff…`, n=3,775, MPS, 2026-10-16):**
   - Overall macro-F1 **0.522**, accuracy 0.527 (weighted F1 0.557).
   - Real only = without Meeting Scheduling (n=3,715, 5 classes): macro-F1 **0.479**, accuracy 0.521. Synthetic Meeting rows (n=60): recall 0.917.

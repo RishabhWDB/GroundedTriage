@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier
+.PHONY: setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier urgency-eval
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -97,6 +97,9 @@ export-splits: ## Bundle splits + taxonomy + card for the GPU PC (datasets/expor
 
 fast-tier: ## P3.1: train the TF-IDF+LR fast tier on train, report on val -> models/fast_tier/, results/fast_tier/
 	cd $(ML_DIR) && $(VPY) -m triage.train_fast_tier
+
+urgency-eval: ## P3.3: score the urgency heuristic (and model, if present) on val -> results/urgency/
+	cd $(ML_DIR) && $(VPY) -m triage.eval_urgency
 
 seed: ## Seed demo data (implemented in P8.1)
 	@echo "seed: not implemented yet (P8.1)"; exit 1
