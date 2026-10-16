@@ -106,3 +106,38 @@ def test_drafter_two_passes_ungrounded():
     assert len(llm.calls) == 2
     assert "Billing" in llm.calls[0]["messages"][1]["content"]
     assert "first draft" in llm.calls[1]["messages"][1]["content"]
+
+
+def test_evaluate_stress_only_updates_metrics(tmp_path, monkeypatch):
+    import json
+
+    from baseline import evaluate as ev
+
+    class Stub:
+        def __init__(self, device=None):
+            pass
+
+        def classify(self, tickets):
+            return [
+                CategoryPrediction(category="Meeting Scheduling", confidence=0.9, stage="zero_shot")
+                for _ in tickets
+            ]
+
+    rows = [
+        {"id": "s1", "stress_type": "embedded_meeting", "category": "Meeting Scheduling",
+         "subject": "Call?", "body": "Can we talk Tuesday?"},
+        {"id": "s2", "stress_type": "call_mention", "category": "Billing",
+         "subject": "Refund", "body": "As discussed on the call, refund please."},
+    ]  # fmt: skip
+    monkeypatch.setattr(ev, "ScribeClassifier", Stub)
+    monkeypatch.setattr(ev, "load_reviewed", lambda: rows)
+    (tmp_path / "metrics.json").write_text(json.dumps({"stress_set": {"status": "pending"}}))
+    m = ev.evaluate_stress_only(tmp_path)
+    s = json.loads((tmp_path / "metrics.json").read_text())["stress_set"]
+    assert s == m["stress_set"] and s["status"] == "reviewed"
+    assert s["by_stress_type"]["call_mention"] == {"n": 1, "accuracy": 0.0, "predicted_meeting": 1}
+    assert s["by_stress_type"]["embedded_meeting"]["accuracy"] == 1.0
+
+    monkeypatch.setattr(ev, "load_reviewed", lambda: None)
+    with pytest.raises(SystemExit):
+        ev.evaluate_stress_only(tmp_path)

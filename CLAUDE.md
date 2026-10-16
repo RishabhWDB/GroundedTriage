@@ -50,7 +50,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Regenerate synthetic meeting emails (Groq; cached, resumable) | `make synthetic-meetings` |
 | Install the SCRIBE baseline extra (torch + transformers) | `make setup-baseline` |
 | SCRIBE baseline CLI (own process; ~2 GB of weights download on first run) | `make baseline ARGS="classify --split test --limit 10"` / `ARGS="classify --csv ../datasets/sample_emails.csv"` / `ARGS="draft --csv ../datasets/sample_emails.csv --limit 2"` |
-| Baseline evaluation on test (P2.3; ~40 min on M1 MPS; resumable) | `make baseline-eval` → `results/baseline/` (smoke: `make baseline ARGS="evaluate --limit 60 --out /tmp/x"`) |
+| Baseline evaluation on test (P2.3; ~90 min on M1 under swap; resumable) | `make baseline-eval` → `results/baseline/` (smoke: `make baseline ARGS="evaluate --limit 60 --out /tmp/x"`) |
+| Score the reviewed stress set into the baseline results (after the CSV review) | `make baseline-stress` |
 | Evaluate the proposed system | not implemented yet (P7) |
 
 ## 3. Status board
@@ -192,10 +193,12 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `eval/classification.py` (reporting-rule slices, confusion, ordinal urgency MAE, latency summaries, confusion plot), shared with P7.1;
   - `baseline/evaluate.py` + `make baseline-eval` (resumable) → `results/baseline/{metrics.json, confusion_matrix.png, latency.md, predictions.jsonl}`;
   - macro-F1 0.522 overall / 0.479 real-only and without Meeting Scheduling (see §8). Stress set reported as pending review.
+  - Commit `c5a5f7b`.
+- P2.3a Phase 2 review follow-ups: `baseline evaluate --stress-only` / `make baseline-stress` scores the reviewed stress set into an existing `metrics.json`; review decisions recorded below.
   - Commit: backfilled in the next commit.
 
 ### In progress
-- none. Phase 2 is done; waiting for Arya's Phase 2 review before starting P3.1.
+- Phase 3 (classification). Phase 2 approved 2026-10-16; Arya asked for Phase 3 to run through without stopping between parts.
 
 ### To do
 - P3.1 Fast tier
@@ -334,6 +337,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-16 (Phase 2 review):
+  1. **The SCRIBE baseline is reported as is** (faithful, untuned). P7.1 also adds **"SCRIBE (val-tuned descriptions)"**: tune ONLY the zero-shot label descriptions and hypothesis template on val (a small, documented search, 3–5 candidate wordings per class), freeze, evaluate once on test, and label it a *strengthened baseline*.
+     - For the report: SCRIBE's paper reports zero-shot BART beating fine-tuned BERT. On these real support tickets, zero-shot collapses into General Inquiry. Evidence (P2.3, test): 1,818 of 3,712 zero-shot predictions are General Inquiry (41% of Technical, 52% of Billing, 43% of Feature, 53% of Spam rows), giving General Inquiry precision 0.25 against recall 0.73, Billing recall 0.32 and Spam recall 0.21. Even the val-only TF-IDF+LR diagnostic (macro-F1 0.802 on val) far exceeds the zero-shot baseline (0.522 on test).
+  2. `--stress-only` exists (`make baseline-stress`); run it after Arya finishes reviewing the stress CSV.
+  3. **The P2.3 latencies were taken under heavy swap and must not be used in any comparison.** P7.1 re-measures latency for all systems in one session under the same conditions (other apps closed, models warmed, RSS and swap recorded) and reports those instead.
+  4. **Demo data:** leave the Mumbai rows as they are. P8.1 plans a `make demo-reset` that clears only demo-tagged rows (or uses a separate demo schema) and asks for confirmation. Never a blanket truncate of DATABASE_URL.
+  5. **Memory (from P3 on, assume 8 GB):** lazy-load models in the ml-service; at most one transformer resident per role; fp16 on MPS for inference; record RSS + swap in every eval run; never load the baseline models in the ml-service process.
 - 2026-10-16 (P2.3): Baseline evaluation design:
   - Run on the full test split with batch size 4 on MPS (fastest in smoke tests: batch 1 = 0.72, 4 = 0.58, 16 = 0.77 s/ticket). Models are warmed up before timing; load time is reported separately.
   - Slices (`eval.classification.sliced_metrics`): overall (6 labels), `origin_real`/`origin_synthetic` (labels present in that slice's gold), `without_meeting_scheduling` (gold Meeting rows dropped, 5 labels; a non-Meeting row predicted Meeting is an error), and `real_meeting_mentions` (real, non-Meeting rows matching `MEETING_WORDS`). Every Meeting row in test is synthetic, so origin_real and without_meeting_scheduling are the same rows and the same numbers.
@@ -446,7 +456,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 - **DB connections:** always go through `store.OpenPool`/`store.OpenSQL`, which set an explicit search_path. Python must `SET search_path TO public, extensions` on connect.
 - **External services** (Groq, IMAP/SMTP, Zendesk, Google Calendar) sit behind interfaces with fakes. Unit tests run offline.
 - **Env vars:** see `.env.example` (DATABASE_URL, TEST_DATABASE_URL, GROQ_*, ML_SERVICE_URL, ML_PORT, TORCH_DEVICE, API_KEY, IMAP_*, SMTP_*, ZENDESK_*, GOOGLE_*).
-- **Model RAM:** load models lazily. The SCRIBE baseline (BART-MNLI, about 1.6 GB) runs as its own CLI, never inside the always-on ml-service.
+- **Model RAM (8 GB):** load models lazily, at most one transformer resident per role, fp16 on MPS for inference, record RSS + swap in eval runs. The SCRIBE baseline (BART-MNLI, about 1.6 GB) runs as its own CLI, never inside the always-on ml-service.
 
 ## 7. Known issues and gotchas
 
@@ -485,7 +495,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Rules decided 1.67% of tickets (63: 48 Spam, 15 Meeting), all correct (precision 1.0). Zero-shot accuracy 0.519 on the rest.
   - 34 real tickets were predicted Meeting Scheduling (false positives). Real tickets mentioning a meeting word (n=196): accuracy 0.418, 27 predicted Meeting.
   - Sentiment-as-urgency (n=3,485, low/medium/high): macro-F1 0.357, accuracy 0.397, ordinal MAE 0.750.
-  - Latency (M1 8 GB, heavy swap): model load 16.5 s; batched 0.705 tickets/s (p50 911 ms/ticket); single ticket p50 640 ms, p95 1.9 s, max 73 s (swap).
+  - Latency (M1 8 GB, heavy swap; **not for comparison**, P7.1 re-measures): model load 16.5 s; batched 0.705 tickets/s (p50 911 ms/ticket); single ticket p50 640 ms, p95 1.9 s, max 73 s (swap).
   - Stress set: pending Arya's review.
 - Data audit (P2.1g, `results/data_audit/report.md`):
   - After the P2.1h re-split, TF-IDF+LR (1–2-gram, balanced) trained on capped train and scored on val gives macro-F1 0.802 / accuracy 0.735 on full text and 0.709 / 0.647 on the subject alone. Meeting Scheduling F1 is 1.0 from either field. This is a data diagnostic, not the P3.1 fast tier.

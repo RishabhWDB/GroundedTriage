@@ -4,6 +4,7 @@
     python -m baseline classify --csv ../datasets/sample_emails.csv --out preds.jsonl
     python -m baseline draft --csv ../datasets/sample_emails.csv --limit 2
     python -m baseline evaluate --split test     # P2.3 -> results/baseline/
+    python -m baseline evaluate --stress-only    # after the stress CSV review
 
 Needs the optional extra: pip install -e ".[baseline]" (make setup-baseline).
 """
@@ -90,8 +91,12 @@ def cmd_draft(args) -> int:
 
 
 def cmd_evaluate(args) -> int:
-    from baseline.evaluate import RESULTS, evaluate
+    from baseline.evaluate import RESULTS, evaluate, evaluate_stress_only
 
+    if args.stress_only:
+        m = evaluate_stress_only(Path(args.out) if args.out else RESULTS, args.device)
+        print(json.dumps(m["stress_set"], indent=1))
+        return 0
     m = evaluate(
         args.split,
         limit=args.limit,
@@ -127,6 +132,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--latency-n", type=int, default=100, help="single-ticket latency sample")
     p.add_argument("--out", default=None, help="output dir (default results/baseline)")
     p.add_argument("--device", default=None, help="cpu | mps (default: auto)")
+    p.add_argument(
+        "--stress-only",
+        action="store_true",
+        help="only (re)score the reviewed stress set into an existing metrics.json",
+    )
     p.set_defaults(fn=cmd_evaluate)
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")

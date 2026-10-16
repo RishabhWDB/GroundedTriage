@@ -181,6 +181,43 @@ def latency_markdown(m: dict) -> str:
     return "\n".join(lines)
 
 
+def stress_metrics(clf: ScribeClassifier) -> dict:
+    """Metrics on the hand-reviewed Meeting stress set, or a pending status."""
+    stress = load_reviewed()
+    if stress is None:
+        return {"status": "pending: datasets/stress/meeting_stress.csv not fully reviewed"}
+    sdf = pd.DataFrame(stress)
+    sp = clf.classify(_tickets(sdf))
+    sdf["pred"] = [p.category for p in sp]
+    return {
+        "status": "reviewed",
+        "overall": classification_metrics(sdf["category"], sdf["pred"]),
+        "by_stress_type": {
+            t: {
+                "n": len(g),
+                "accuracy": round(float((g["category"] == g["pred"]).mean()), 4),
+                "predicted_meeting": int((g["pred"] == MEETING).sum()),
+            }
+            for t, g in sdf.groupby("stress_type")
+        },
+    }
+
+
+def evaluate_stress_only(out: Path = RESULTS, device: str | None = None) -> dict:
+    """Fill in metrics.json's stress_set from a finished run, without re-running
+    the full split (a few minutes instead of ~90)."""
+    path = out / "metrics.json"
+    if not path.exists():
+        raise SystemExit(f"{path} missing: run the full evaluation first")
+    if load_reviewed() is None:
+        raise SystemExit("stress CSV not fully reviewed (every row needs needs_review=false)")
+    m = json.loads(path.read_text())
+    m["stress_set"] = stress_metrics(ScribeClassifier(device=device))
+    m["stress_set"]["date"] = time.strftime("%Y-%m-%d")
+    path.write_text(json.dumps(m, indent=2, default=str))
+    return m
+
+
 def evaluate(
     split: str = "test",
     limit: int | None = None,
@@ -257,27 +294,7 @@ def evaluate(
         },
         "single_ticket": single_ticket_latency(clf, df, latency_n, seed),
     }
-    stress = load_reviewed()
-    if stress is None:
-        m["stress_set"] = {
-            "status": "pending: datasets/stress/meeting_stress.csv not fully reviewed"
-        }
-    else:
-        sdf = pd.DataFrame(stress)
-        sp = clf.classify(_tickets(sdf))
-        sdf["pred"] = [p.category for p in sp]
-        m["stress_set"] = {
-            "status": "reviewed",
-            "overall": classification_metrics(sdf["category"], sdf["pred"]),
-            "by_stress_type": {
-                t: {
-                    "n": len(g),
-                    "accuracy": round(float((g["category"] == g["pred"]).mean()), 4),
-                    "predicted_meeting": int((g["pred"] == MEETING).sum()),
-                }
-                for t, g in sdf.groupby("stress_type")
-            },
-        }
+    m["stress_set"] = stress_metrics(clf)
     import torch
     import transformers
 
