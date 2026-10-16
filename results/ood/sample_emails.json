@@ -1,0 +1,271 @@
+{
+  "rows": [
+    {
+      "id": "sample-00",
+      "subject": "Charged twice for October invoice",
+      "gold": "Billing",
+      "fast": "Billing",
+      "fast_confidence": 0.913,
+      "cascade": "Billing",
+      "tier": "fast",
+      "scribe": "Billing"
+    },
+    {
+      "id": "sample-01",
+      "subject": "Cannot log in after password reset",
+      "gold": "Technical Issue",
+      "fast": "Spam",
+      "fast_confidence": 0.719,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "Technical Issue"
+    },
+    {
+      "id": "sample-02",
+      "subject": "API returning 500 errors since this morning",
+      "gold": "Technical Issue",
+      "fast": "Spam",
+      "fast_confidence": 0.959,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "Technical Issue"
+    },
+    {
+      "id": "sample-03",
+      "subject": "Feature request: export reports to Excel",
+      "gold": "Feature Request",
+      "fast": "Billing",
+      "fast_confidence": 0.506,
+      "cascade": "Billing",
+      "tier": "fast",
+      "scribe": "Feature Request"
+    },
+    {
+      "id": "sample-04",
+      "subject": "Very disappointed with support response time",
+      "gold": "General Inquiry",
+      "fast": "Spam",
+      "fast_confidence": 0.677,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "Technical Issue"
+    },
+    {
+      "id": "sample-05",
+      "subject": "Congratulations! You have won a $1000 gift card",
+      "gold": "Spam",
+      "fast": "Spam",
+      "fast_confidence": 0.963,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "Spam"
+    },
+    {
+      "id": "sample-06",
+      "subject": "Can we meet Thursday to review the Q4 rollout?",
+      "gold": "Meeting Scheduling",
+      "fast": "Meeting Scheduling",
+      "fast_confidence": 0.968,
+      "cascade": "Meeting Scheduling",
+      "tier": "fast",
+      "scribe": "Meeting Scheduling"
+    },
+    {
+      "id": "sample-07",
+      "subject": "Dinner on Saturday?",
+      "gold": "General Inquiry",
+      "fast": "Spam",
+      "fast_confidence": 0.946,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "General Inquiry"
+    },
+    {
+      "id": "sample-08",
+      "subject": "Updated project timeline attached",
+      "gold": "General Inquiry",
+      "fast": "Meeting Scheduling",
+      "fast_confidence": 0.637,
+      "cascade": "Meeting Scheduling",
+      "tier": "fast",
+      "scribe": "General Inquiry"
+    },
+    {
+      "id": "sample-09",
+      "subject": "Library hours during the holiday weekend",
+      "gold": "General Inquiry",
+      "fast": "Spam",
+      "fast_confidence": 0.658,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "General Inquiry"
+    },
+    {
+      "id": "sample-10",
+      "subject": "CRITICAL: production database down",
+      "gold": "Technical Issue",
+      "fast": "Technical Issue",
+      "fast_confidence": 0.702,
+      "cascade": "Technical Issue",
+      "tier": "fast",
+      "scribe": "Technical Issue"
+    },
+    {
+      "id": "sample-11",
+      "subject": "This week in SaaS: 10 growth tactics",
+      "gold": "General Inquiry",
+      "fast": "Spam",
+      "fast_confidence": 0.892,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "General Inquiry"
+    },
+    {
+      "id": "sample-12",
+      "subject": "Refund for annual plan downgrade",
+      "gold": "Billing",
+      "fast": "Spam",
+      "fast_confidence": 0.945,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "Billing"
+    },
+    {
+      "id": "sample-13",
+      "subject": "Two-factor codes not arriving",
+      "gold": "Technical Issue",
+      "fast": "Spam",
+      "fast_confidence": 0.93,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "General Inquiry"
+    },
+    {
+      "id": "sample-14",
+      "subject": "Problema com a fatura de setembro",
+      "gold": "Billing",
+      "fast": "Spam",
+      "fast_confidence": 0.894,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "Billing"
+    },
+    {
+      "id": "sample-15",
+      "subject": "Mobile app crashes on startup",
+      "gold": "Technical Issue",
+      "fast": "Technical Issue",
+      "fast_confidence": 0.81,
+      "cascade": "Technical Issue",
+      "tier": "fast",
+      "scribe": "Technical Issue"
+    },
+    {
+      "id": "sample-16",
+      "subject": "Re: Charged twice for October invoice",
+      "gold": "Billing",
+      "fast": "Billing",
+      "fast_confidence": 0.534,
+      "cascade": "Billing",
+      "tier": "fast",
+      "scribe": "Billing"
+    },
+    {
+      "id": "sample-17",
+      "subject": "Dark mode for the dashboard",
+      "gold": "Feature Request",
+      "fast": "Technical Issue",
+      "fast_confidence": 0.967,
+      "cascade": "Technical Issue",
+      "tier": "fast",
+      "scribe": "Feature Request"
+    },
+    {
+      "id": "sample-18",
+      "subject": "Your onboarding call was fantastic",
+      "gold": "General Inquiry",
+      "fast": "Meeting Scheduling",
+      "fast_confidence": 0.636,
+      "cascade": "Meeting Scheduling",
+      "tier": "fast",
+      "scribe": "General Inquiry"
+    },
+    {
+      "id": "sample-19",
+      "subject": "Need the board deck numbers by 5pm today",
+      "gold": "General Inquiry",
+      "fast": "Spam",
+      "fast_confidence": 0.943,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "General Inquiry"
+    },
+    {
+      "id": "sample-20",
+      "subject": "Very disappointed with support response time",
+      "gold": "General Inquiry",
+      "fast": "Spam",
+      "fast_confidence": 0.677,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "Technical Issue"
+    },
+    {
+      "id": "sample-21",
+      "subject": "[Automated] Scheduled maintenance notification",
+      "gold": "General Inquiry",
+      "fast": "Spam",
+      "fast_confidence": 0.96,
+      "cascade": "Spam",
+      "tier": "fast",
+      "scribe": "General Inquiry"
+    }
+  ],
+  "correct": {
+    "fast": 6,
+    "cascade": 6,
+    "scribe": 19
+  },
+  "predicted_spam": {
+    "fast": 13,
+    "cascade": 13,
+    "scribe": 1
+  },
+  "gold_spam": 1,
+  "n": 22,
+  "models": {
+    "fast_tier": "fast-20261016012651-6f7999df",
+    "tau": "0.7",
+    "urgency": "heuristic"
+  },
+  "fast_top_spam_features": [
+    "word__com",
+    "word__here",
+    "word__http",
+    "word__click",
+    "word__free",
+    "word__click here",
+    "word__all",
+    "word__no",
+    "word__www",
+    "word__now",
+    "char__mail",
+    "word__will",
+    "word__iraq",
+    "char__ her",
+    "word__http www",
+    "word__email",
+    "word__get",
+    "word__mail",
+    "char__.co",
+    "char__ here"
+  ],
+  "run": {
+    "git_commit": "906561f",
+    "machine": "arm64 Darwin 25.5.0",
+    "python": "3.11.14",
+    "peak_rss_mb": 424.5,
+    "swap_usage_at_end": "total = 9216.00M  used = 8710.62M  free = 505.38M  (encrypted)",
+    "date": "2026-10-16"
+  }
+}

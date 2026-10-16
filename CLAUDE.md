@@ -57,6 +57,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Score urgency (heuristic, plus model if present) on val | `make urgency-eval` → `results/urgency/` |
 | Tune the cascade threshold τ on val (needs `models/deep_tier/`) | `make tune-tau` → `config/cascade.yaml`, `results/cascade/` |
 | Classify one ticket (ml-service running) | `curl -s localhost:8001/classify -H 'content-type: application/json' -d '{"ticket_id":"t1","subject":"Refund","body":"Charged twice"}'` |
+| Out-of-domain check on the hand-written sample emails (cascade + SCRIBE) | `make sample-check` → `results/ood/` |
 | Evaluate the proposed system | not implemented yet (P7) |
 
 ## 3. Status board
@@ -222,10 +223,12 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `pipeline.Classifier` (`ClassifyPending`: per-ticket POST /classify, validates the ticket id and category, persists, one `classify.run` audit row, stops after N consecutive failures);
   - the worker runs it after every poll (`Poller.AfterPoll`) and once in `-once` mode.
   - Integration test against a stub ml-service; live Go→ml-service test passes.
+  - Commit `906561f`.
+- P3.5a Out-of-domain check: `eval/sample_check.py` (`make sample-check`) runs the cascade and SCRIBE on the 22 hand-written sample emails → `results/ood/`. **The fast tier gets 6/22 (13 predicted Spam); SCRIBE gets 19/22.** It learned source style, not only topic (see §5 and §8).
   - Commit: backfilled in the next commit.
 
 ### In progress
-- Phase 3 (classification). Phase 2 approved 2026-10-16; Arya asked for Phase 3 to run through without stopping between parts.
+- none. Phase 3 is done; waiting for Arya's Phase 3 review. **Open blocker:** the Spam source-style shortcut (§5, P3.5a) must be decided before the deep tier is trained on the PC.
 
 ### To do
 - P4.1 Rule engine
@@ -359,6 +362,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-16 (P3.5a): **Finding: source-style shortcut for Spam.**
+  - On the 22 hand-written sample emails, the fast tier is right on 6 and predicts Spam for 13, often at high confidence: "API returning 500 errors" → Spam 0.96; "Refund for annual plan downgrade" → Spam 0.95. SCRIBE gets 19/22 with 1 Spam.
+  - The fast tier's strongest Spam features are common informal words (`all`, `no`, `will`, `get`, `your`, `here`, `from`), not only spam cues (`click here`, `free`, `http`).
+  - Cause: every real class has exactly one source. Spam is SpamAssassin, the only *human-written* text. The other four real classes are Tobi-Bueck's formal LLM-written tickets. So "informal human English" ≈ Spam. Length isn't the cue (Spam median 1,127 chars against ~400).
+  - val/test can't show this, because there the source and the class always coincide. The val macro-F1 (0.825) overstates real-world quality.
+  - The sample labels are ours, and several rows are off-domain (Personal/Work remapped to General Inquiry), so this is a sanity check, not a metric. But the Technical and Billing misses are unambiguous.
+  - **This will likely affect the DeBERTa deep tier too** (same splits). It needs Arya's decision before PC training; see the Phase 3 review for options. Nothing was changed in the data or models.
 - 2026-10-16 (P3.5): Go classification step:
   - The worker classifies after each poll, inside the same timeout-bounded context. **Only `ingest_status='accepted'` tickets with no `classifications` row are sent**, so skipped tickets never reach the ml-service.
   - Each run handles up to 100 tickets (`BatchSize`), oldest first. One request per ticket (the ml-service batches internally only within a request; volume is low).
@@ -552,6 +562,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Coverage (calibrated confidence ≥ τ → share / accuracy): 0.5 → 87% / 0.834; 0.6 → 68% / 0.899; 0.7 → 50% / 0.934; 0.8 → 31% / 0.977; 0.9 → 18% / 0.992.
   - Cost: training 7.9 min (4 C fits + 2 calibrated fits); load 0.5 s; single ticket p50 1.7 ms, p95 2.5 ms; batch 0.5 ms/ticket; peak RSS 612 MB (7.5 GB swap in use).
   - Not comparable with the baseline yet: different split (val vs test). P7.1 scores both on test.
+- **Out-of-domain sample check (P3.5a, `results/ood/sample_emails.md`, n=22 hand-written, not a metric):** fast tier / cascade 6/22 correct with 13 predicted Spam (gold Spam = 1); SCRIBE baseline 19/22 with 1 predicted Spam.
 - **Urgency heuristic on val (P3.3, `results/urgency/`, n=3,485 labelled rows):** macro-F1 **0.273**, accuracy 0.419, ordinal MAE 0.615, off by ≥ 2 on 3.2%.
   - It predicts medium for 84% of rows (2,922), so it's a conservative fallback, not a classifier. Gold is medium 1,429 / high 1,366 / low 690.
   - 74 rows are predicted critical; gold has no critical, so all 74 count as errors.
