@@ -52,6 +52,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | SCRIBE baseline CLI (own process; ~2 GB of weights download on first run) | `make baseline ARGS="classify --split test --limit 10"` / `ARGS="classify --csv ../datasets/sample_emails.csv"` / `ARGS="draft --csv ../datasets/sample_emails.csv --limit 2"` |
 | Baseline evaluation on test (P2.3; ~90 min on M1 under swap; resumable) | `make baseline-eval` → `results/baseline/` (smoke: `make baseline ARGS="evaluate --limit 60 --out /tmp/x"`) |
 | Score the reviewed stress set into the baseline results (after the CSV review) | `make baseline-stress` |
+| Train the fast tier on train, report on val (~8 min on M1) | `make fast-tier` → `models/fast_tier/` (gitignored) + `results/fast_tier/` |
 | Evaluate the proposed system | not implemented yet (P7) |
 
 ## 3. Status board
@@ -195,13 +196,17 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - macro-F1 0.522 overall / 0.479 real-only and without Meeting Scheduling (see §8). Stress set reported as pending review.
   - Commit `c5a5f7b`.
 - P2.3a Phase 2 review follow-ups: `baseline evaluate --stress-only` / `make baseline-stress` scores the reviewed stress set into an existing `metrics.json`; review decisions recorded below.
+  - Commit `d38973c`.
+- P3.1 Fast tier:
+  - `triage/fast_tier.py` (pipeline builder, `FastTier.load` with validation, `predict`), `triage/train_fast_tier.py` (`make fast-tier`) → `models/fast_tier/{model.joblib, model_card.json}` + `results/fast_tier/`;
+  - `eval/runinfo.py` (git commit, peak RSS, swap) used by every training/eval run, including the baseline; `eval.classification` gains ECE/reliability and confidence-coverage helpers;
+  - val macro-F1 0.825 overall / 0.790 real-only (see §8).
   - Commit: backfilled in the next commit.
 
 ### In progress
 - Phase 3 (classification). Phase 2 approved 2026-10-16; Arya asked for Phase 3 to run through without stopping between parts.
 
 ### To do
-- P3.1 Fast tier
 - P3.2 Deep-tier inference loader (no training)
 - P3.3 Urgency inference loader + heuristic fallback (no training)
 - P3.4 Cascade + threshold tuning
@@ -238,7 +243,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 |---|---|---|---|---|
 | `models/deep_tier/` | absent | — | — | — |
 | `models/urgency/` | absent | — | — | — |
-| `models/fast_tier/` | absent (trained in-repo in P3.1) | TF-IDF + LR | — | — |
+| `models/fast_tier/` | present (`fast-20261016012651-6f7999df`, `make fast-tier`) | TF-IDF word 1–2 + char_wb 3–5, LR C=16 balanced, isotonic-calibrated | in repo, 2026-10-16 | macro-F1 0.825, acc 0.788, ECE 0.083 |
 
 ## 5. Decisions log
 
@@ -337,6 +342,14 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-16 (P3.1): Fast tier design:
+  - Features: word 1–2-gram TF-IDF (min_df 2, ≤200k) ∪ char_wb 3–5-gram TF-IDF (min_df 3, ≤300k), sublinear tf, float32. LR `class_weight="balanced"`, lbfgs.
+  - **C** is picked from {1, 4, 16, 64} by *uncalibrated* val macro-F1 (cheap; C=16 won at 0.8296, C=64 at 0.8287, so the optimum is inside the grid). The first run used {1, 4, 16}; C=16 sat on the edge, so 64 was added.
+  - **Calibration:** `CalibratedClassifierCV(cv=5, ensemble=False)` on train, so the artifact is one model with one vocabulary (4.2 MB). The method (sigmoid or isotonic) is picked by **val ECE** (top-class confidence, 15 bins). Isotonic won (0.0831 against sigmoid's 0.0892).
+  - **Finding: both calibrated models are worse calibrated on val than the plain LR (ECE 0.038), and they are *under*-confident.** For example, isotonic tickets at confidence ≥ 0.7 are 93% correct. Likely cause: the calibrators are fitted on cross-validated *train* predictions, and train is class-capped (Technical 39% of train vs 53% of val) and fitted with balanced weights, so the learned priors don't match val. The spec asks for CalibratedClassifierCV, so it's kept. τ is chosen on val by the coverage rule, so a monotone mis-calibration shifts τ but doesn't break the cascade. Alternative for the Phase 3 review: calibrate on half of val (`cv="prefit"`) and tune τ on the other half.
+  - Selection and every reported number use val only; **test is untouched until P7.1**.
+  - The artifact is a joblib pickle: only load models this repo trained. `FastTier.load` returns None (logged) on missing files, unreadable pickles or classes that don't match the taxonomy, and warns on a scikit-learn version mismatch. scikit-learn and numpy moved to core deps (the ml-service serves the fast tier).
+  - The version stamp is `fast-<UTC yyyymmddHHMMSS>-<train content sha[:8]>`.
 - 2026-10-16 (Phase 2 review):
   1. **The SCRIBE baseline is reported as is** (faithful, untuned). P7.1 also adds **"SCRIBE (val-tuned descriptions)"**: tune ONLY the zero-shot label descriptions and hypothesis template on val (a small, documented search, 3–5 candidate wordings per class), freeze, evaluate once on test, and label it a *strengthened baseline*.
      - For the report: SCRIBE's paper reports zero-shot BART beating fine-tuned BERT. On these real support tickets, zero-shot collapses into General Inquiry. Evidence (P2.3, test): 1,818 of 3,712 zero-shot predictions are General Inquiry (41% of Technical, 52% of Billing, 43% of Feature, 53% of Spam rows), giving General Inquiry precision 0.25 against recall 0.73, Billing recall 0.32 and Spam recall 0.21. Even the val-only TF-IDF+LR diagnostic (macro-F1 0.802 on val) far exceeds the zero-shot baseline (0.522 on test).
@@ -487,6 +500,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 ## 8. Results so far
 
 - Ungrounded hallucination example: `results/examples/ungrounded_hallucination_01.md`. The SCRIBE baseline told a customer "I've processed a refund … within 3–5 business days" with no grounding. P7.2 collects more automatically.
+- **Fast tier on val (P3.1, `results/fast_tier/`, `fast-20261016012651-6f7999df`; val only, test untouched):**
+  - Macro-F1 **0.825**, accuracy 0.788 (n=3,775). Real only = without Meeting (n=3,715): macro-F1 **0.790**, accuracy 0.785.
+  - Per-class F1: Technical 0.835, Billing 0.675, Feature 0.951, General Inquiry 0.491, Spam 1.000, Meeting 1.000. General Inquiry is the weak class (P 0.53 / R 0.45).
+  - Real val tickets mentioning a meeting word (n=173): accuracy 0.873, 0 predicted Meeting.
+  - Coverage (calibrated confidence ≥ τ → share / accuracy): 0.5 → 87% / 0.834; 0.6 → 68% / 0.899; 0.7 → 50% / 0.934; 0.8 → 31% / 0.977; 0.9 → 18% / 0.992.
+  - Cost: training 7.9 min (4 C fits + 2 calibrated fits); load 0.5 s; single ticket p50 1.7 ms, p95 2.5 ms; batch 0.5 ms/ticket; peak RSS 612 MB (7.5 GB swap in use).
+  - Not comparable with the baseline yet: different split (val vs test). P7.1 scores both on test.
 - **SCRIBE baseline on test (P2.3, `results/baseline/`, test content `c6539fff…`, n=3,775, MPS, 2026-10-16):**
   - Overall macro-F1 **0.522**, accuracy 0.527 (weighted F1 0.557).
   - Real only = without Meeting Scheduling (n=3,715, 5 classes): macro-F1 **0.479**, accuracy 0.521. Synthetic Meeting rows (n=60): recall 0.917.

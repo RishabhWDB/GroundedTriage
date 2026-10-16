@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 import logging
 import platform
-import subprocess
 import time
 from pathlib import Path
 
@@ -42,6 +41,7 @@ from eval.classification import (
     sliced_metrics,
     urgency_metrics,
 )
+from eval.runinfo import git_commit, peak_rss_mb, swap_usage
 
 logger = logging.getLogger(__name__)
 
@@ -121,25 +121,6 @@ def single_ticket_latency(clf: ScribeClassifier, df: pd.DataFrame, n: int, seed:
         "end_to_end_zero_shot": latency_summary(lat.loc[lat["stage"] == "zero_shot", "total"]),
         **{k: latency_summary(lat[k]) for k in STAGES},
     }
-
-
-def _swap_usage() -> str:
-    """macOS swap in use when the run ends (latency is sensitive to memory pressure)."""
-    try:
-        return subprocess.run(
-            ["sysctl", "-n", "vm.swapusage"], capture_output=True, text=True
-        ).stdout.strip()
-    except OSError:
-        return ""
-
-
-def _git_commit() -> str:
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=REPO_ROOT
-        ).stdout.strip()
-    except OSError:
-        return ""
 
 
 def latency_markdown(m: dict) -> str:
@@ -311,8 +292,9 @@ def evaluate(
         "hypothesis_template": models.HYPOTHESIS_TEMPLATE,
         "torch": torch.__version__,
         "transformers": transformers.__version__,
-        "git_commit": _git_commit(),
-        "swap_usage_at_end": _swap_usage(),
+        "git_commit": git_commit(),
+        "peak_rss_mb": peak_rss_mb(),
+        "swap_usage_at_end": swap_usage(),
         "date": time.strftime("%Y-%m-%d"),
     }
     (out / "metrics.json").write_text(json.dumps(m, indent=2, default=str))

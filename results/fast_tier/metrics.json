@@ -1,0 +1,555 @@
+{
+  "card": {
+    "version": "fast-20261016012651-6f7999df",
+    "task": "category",
+    "model": "tfidf(word 1-2 + char_wb 3-5) + logistic regression (balanced), isotonic-calibrated",
+    "trained_at": "2026-10-16T01:26:51+00:00",
+    "trained_on": {
+      "export_tag": "c6539fff94a1",
+      "train_content_sha256": "6f7999dffc759ec1da5dc55e4e07b2a7eef3de13282ef828ec25625f384fbb18"
+    },
+    "train_rows": 13651,
+    "C": 16.0,
+    "calibration": {
+      "method": "isotonic",
+      "folds": 5,
+      "ensemble": false
+    },
+    "sklearn_version": "1.9.1",
+    "classes": [
+      "Billing",
+      "Feature Request",
+      "General Inquiry",
+      "Meeting Scheduling",
+      "Spam",
+      "Technical Issue"
+    ],
+    "val_metrics": {
+      "macro_f1": 0.8252,
+      "accuracy": 0.7881,
+      "macro_f1_real_only": 0.7902,
+      "ece": 0.0831
+    }
+  },
+  "val": {
+    "overall": {
+      "n": 3775,
+      "accuracy": 0.7881,
+      "macro_f1": 0.8252,
+      "macro_precision": 0.8375,
+      "macro_recall": 0.8162,
+      "weighted_f1": 0.7821,
+      "labels": [
+        "Technical Issue",
+        "Billing",
+        "Feature Request",
+        "General Inquiry",
+        "Spam",
+        "Meeting Scheduling"
+      ],
+      "per_class": {
+        "Technical Issue": {
+          "precision": 0.8022,
+          "recall": 0.8707,
+          "f1": 0.835,
+          "support": 2003
+        },
+        "Billing": {
+          "precision": 0.7391,
+          "recall": 0.6207,
+          "f1": 0.6748,
+          "support": 493
+        },
+        "Feature Request": {
+          "precision": 0.9493,
+          "recall": 0.9519,
+          "f1": 0.9506,
+          "support": 374
+        },
+        "General Inquiry": {
+          "precision": 0.5345,
+          "recall": 0.4537,
+          "f1": 0.4908,
+          "support": 615
+        },
+        "Spam": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 230
+        },
+        "Meeting Scheduling": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 60
+        }
+      }
+    },
+    "origin_real": {
+      "n": 3715,
+      "accuracy": 0.7847,
+      "macro_f1": 0.7902,
+      "macro_precision": 0.805,
+      "macro_recall": 0.7794,
+      "weighted_f1": 0.7786,
+      "labels": [
+        "Technical Issue",
+        "Billing",
+        "Feature Request",
+        "General Inquiry",
+        "Spam"
+      ],
+      "per_class": {
+        "Technical Issue": {
+          "precision": 0.8022,
+          "recall": 0.8707,
+          "f1": 0.835,
+          "support": 2003
+        },
+        "Billing": {
+          "precision": 0.7391,
+          "recall": 0.6207,
+          "f1": 0.6748,
+          "support": 493
+        },
+        "Feature Request": {
+          "precision": 0.9493,
+          "recall": 0.9519,
+          "f1": 0.9506,
+          "support": 374
+        },
+        "General Inquiry": {
+          "precision": 0.5345,
+          "recall": 0.4537,
+          "f1": 0.4908,
+          "support": 615
+        },
+        "Spam": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 230
+        }
+      }
+    },
+    "origin_synthetic": {
+      "n": 60,
+      "accuracy": 1.0,
+      "macro_f1": 1.0,
+      "macro_precision": 1.0,
+      "macro_recall": 1.0,
+      "weighted_f1": 1.0,
+      "labels": [
+        "Meeting Scheduling"
+      ],
+      "per_class": {
+        "Meeting Scheduling": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 60
+        }
+      }
+    },
+    "without_meeting_scheduling": {
+      "n": 3715,
+      "accuracy": 0.7847,
+      "macro_f1": 0.7902,
+      "macro_precision": 0.805,
+      "macro_recall": 0.7794,
+      "weighted_f1": 0.7786,
+      "labels": [
+        "Technical Issue",
+        "Billing",
+        "Feature Request",
+        "General Inquiry",
+        "Spam"
+      ],
+      "per_class": {
+        "Technical Issue": {
+          "precision": 0.8022,
+          "recall": 0.8707,
+          "f1": 0.835,
+          "support": 2003
+        },
+        "Billing": {
+          "precision": 0.7391,
+          "recall": 0.6207,
+          "f1": 0.6748,
+          "support": 493
+        },
+        "Feature Request": {
+          "precision": 0.9493,
+          "recall": 0.9519,
+          "f1": 0.9506,
+          "support": 374
+        },
+        "General Inquiry": {
+          "precision": 0.5345,
+          "recall": 0.4537,
+          "f1": 0.4908,
+          "support": 615
+        },
+        "Spam": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 230
+        }
+      }
+    },
+    "real_meeting_mentions": {
+      "n": 173,
+      "accuracy": 0.8728,
+      "predicted_meeting": 0,
+      "gold_counts": {
+        "Technical Issue": 71,
+        "Spam": 43,
+        "Feature Request": 26,
+        "General Inquiry": 18,
+        "Billing": 15
+      },
+      "pattern": "\\b(?:meeting|call|zoom|teams|webex|schedul\\w*|reschedul\\w*|calendar|appointment)\\b"
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "Technical Issue",
+      "Billing",
+      "Feature Request",
+      "General Inquiry",
+      "Spam",
+      "Meeting Scheduling"
+    ],
+    "matrix": [
+      [
+        1744,
+        65,
+        12,
+        182,
+        0,
+        0
+      ],
+      [
+        131,
+        306,
+        2,
+        54,
+        0,
+        0
+      ],
+      [
+        7,
+        4,
+        356,
+        7,
+        0,
+        0
+      ],
+      [
+        292,
+        39,
+        5,
+        279,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        230,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        60
+      ]
+    ]
+  },
+  "calibration": {
+    "n": 3775,
+    "ece": 0.0831,
+    "bins": [
+      {
+        "lo": 0.2667,
+        "hi": 0.3333,
+        "n": 5,
+        "accuracy": 0.4,
+        "mean_confidence": 0.3015
+      },
+      {
+        "lo": 0.3333,
+        "hi": 0.4,
+        "n": 49,
+        "accuracy": 0.3469,
+        "mean_confidence": 0.377
+      },
+      {
+        "lo": 0.4,
+        "hi": 0.4667,
+        "n": 213,
+        "accuracy": 0.5164,
+        "mean_confidence": 0.4371
+      },
+      {
+        "lo": 0.4667,
+        "hi": 0.5333,
+        "n": 472,
+        "accuracy": 0.5127,
+        "mean_confidence": 0.5017
+      },
+      {
+        "lo": 0.5333,
+        "hi": 0.6,
+        "n": 460,
+        "accuracy": 0.6283,
+        "mean_confidence": 0.5663
+      },
+      {
+        "lo": 0.6,
+        "hi": 0.6667,
+        "n": 452,
+        "accuracy": 0.7832,
+        "mean_confidence": 0.6336
+      },
+      {
+        "lo": 0.6667,
+        "hi": 0.7333,
+        "n": 476,
+        "accuracy": 0.8235,
+        "mean_confidence": 0.6999
+      },
+      {
+        "lo": 0.7333,
+        "hi": 0.8,
+        "n": 491,
+        "accuracy": 0.8941,
+        "mean_confidence": 0.7682
+      },
+      {
+        "lo": 0.8,
+        "hi": 0.8667,
+        "n": 360,
+        "accuracy": 0.9583,
+        "mean_confidence": 0.829
+      },
+      {
+        "lo": 0.8667,
+        "hi": 0.9333,
+        "n": 264,
+        "accuracy": 0.9583,
+        "mean_confidence": 0.9005
+      },
+      {
+        "lo": 0.9333,
+        "hi": 1.0,
+        "n": 533,
+        "accuracy": 0.9981,
+        "mean_confidence": 0.9772
+      }
+    ]
+  },
+  "calibration_uncalibrated_lr": {
+    "n": 3775,
+    "ece": 0.0381,
+    "bins": [
+      {
+        "lo": 0.2667,
+        "hi": 0.3333,
+        "n": 6,
+        "accuracy": 0.1667,
+        "mean_confidence": 0.3176
+      },
+      {
+        "lo": 0.3333,
+        "hi": 0.4,
+        "n": 53,
+        "accuracy": 0.4528,
+        "mean_confidence": 0.3787
+      },
+      {
+        "lo": 0.4,
+        "hi": 0.4667,
+        "n": 129,
+        "accuracy": 0.4884,
+        "mean_confidence": 0.4371
+      },
+      {
+        "lo": 0.4667,
+        "hi": 0.5333,
+        "n": 243,
+        "accuracy": 0.4198,
+        "mean_confidence": 0.5035
+      },
+      {
+        "lo": 0.5333,
+        "hi": 0.6,
+        "n": 274,
+        "accuracy": 0.5438,
+        "mean_confidence": 0.5671
+      },
+      {
+        "lo": 0.6,
+        "hi": 0.6667,
+        "n": 284,
+        "accuracy": 0.6127,
+        "mean_confidence": 0.6349
+      },
+      {
+        "lo": 0.6667,
+        "hi": 0.7333,
+        "n": 276,
+        "accuracy": 0.663,
+        "mean_confidence": 0.701
+      },
+      {
+        "lo": 0.7333,
+        "hi": 0.8,
+        "n": 316,
+        "accuracy": 0.6899,
+        "mean_confidence": 0.7671
+      },
+      {
+        "lo": 0.8,
+        "hi": 0.8667,
+        "n": 401,
+        "accuracy": 0.803,
+        "mean_confidence": 0.8335
+      },
+      {
+        "lo": 0.8667,
+        "hi": 0.9333,
+        "n": 443,
+        "accuracy": 0.8488,
+        "mean_confidence": 0.9011
+      },
+      {
+        "lo": 0.9333,
+        "hi": 1.0,
+        "n": 1350,
+        "accuracy": 0.9615,
+        "mean_confidence": 0.9831
+      }
+    ]
+  },
+  "coverage": [
+    {
+      "tau": 0.4,
+      "accepted_share": 0.9857,
+      "accepted_accuracy": 0.7944
+    },
+    {
+      "tau": 0.5,
+      "accepted_share": 0.8678,
+      "accepted_accuracy": 0.8342
+    },
+    {
+      "tau": 0.6,
+      "accepted_share": 0.6824,
+      "accepted_accuracy": 0.8987
+    },
+    {
+      "tau": 0.7,
+      "accepted_share": 0.5001,
+      "accepted_accuracy": 0.9343
+    },
+    {
+      "tau": 0.8,
+      "accepted_share": 0.3065,
+      "accepted_accuracy": 0.9767
+    },
+    {
+      "tau": 0.85,
+      "accepted_share": 0.2286,
+      "accepted_accuracy": 0.9815
+    },
+    {
+      "tau": 0.9,
+      "accepted_share": 0.1751,
+      "accepted_accuracy": 0.9924
+    },
+    {
+      "tau": 0.95,
+      "accepted_share": 0.1261,
+      "accepted_accuracy": 1.0
+    }
+  ],
+  "c_selection": [
+    {
+      "C": 1.0,
+      "val_macro_f1": 0.8052,
+      "val_accuracy": 0.7356,
+      "fit_s": 32.6
+    },
+    {
+      "C": 4.0,
+      "val_macro_f1": 0.8219,
+      "val_accuracy": 0.7587,
+      "fit_s": 33.3
+    },
+    {
+      "C": 16.0,
+      "val_macro_f1": 0.8296,
+      "val_accuracy": 0.7709,
+      "fit_s": 33.7
+    },
+    {
+      "C": 64.0,
+      "val_macro_f1": 0.8287,
+      "val_accuracy": 0.7706,
+      "fit_s": 28.7
+    }
+  ],
+  "calibration_selection": [
+    {
+      "method": "sigmoid",
+      "val_ece": 0.0892,
+      "val_macro_f1": 0.8283,
+      "fit_s": 180.1
+    },
+    {
+      "method": "isotonic",
+      "val_ece": 0.0831,
+      "val_macro_f1": 0.8252,
+      "fit_s": 161.0
+    }
+  ],
+  "training": {
+    "total_s": 473.3,
+    "calibrated_fit_s": 161.0,
+    "artifact_mb": 4.2
+  },
+  "latency": {
+    "load_s": 0.49,
+    "single_ticket_ms": {
+      "n": 100,
+      "mean_ms": 1.7745,
+      "p50_ms": 1.6911,
+      "p95_ms": 2.4707,
+      "max_ms": 5.829
+    },
+    "batch_all_val": {
+      "tickets": 3775,
+      "wall_s": 1.9,
+      "ms_per_ticket": 0.502
+    }
+  },
+  "run": {
+    "git_commit": "d38973c",
+    "machine": "arm64 Darwin 25.5.0",
+    "python": "3.11.14",
+    "peak_rss_mb": 611.6,
+    "swap_usage_at_end": "total = 8192.00M  used = 7516.62M  free = 675.38M  (encrypted)",
+    "date": "2026-10-16",
+    "split": "val",
+    "rows": 3775,
+    "split_content_sha256": "cac237f430e4d9378505d9226480c36817315890800a6eb764dff67396a21be7"
+  }
+}

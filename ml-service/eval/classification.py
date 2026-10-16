@@ -29,6 +29,7 @@ MEETING_WORDS = re.compile(
     r"\b(?:meeting|call|zoom|teams|webex|schedul\w*|reschedul\w*|calendar|appointment)\b", re.I
 )
 URGENCY_LEVELS = ["low", "medium", "high"]
+URGENCY_SCALE = ["low", "medium", "high", "critical"]
 
 
 def _r(x: float) -> float:
@@ -98,16 +99,24 @@ def confusion(gold: Sequence[str], pred: Sequence[str], labels: Sequence[str]) -
     return confusion_matrix(list(gold), list(pred), labels=list(labels)).tolist()
 
 
-def urgency_metrics(gold: Sequence[str], pred: Sequence[str]) -> dict:
-    """Low/medium/high only (rows with no gold urgency must be dropped first)."""
+def urgency_metrics(
+    gold: Sequence[str], pred: Sequence[str], levels: Sequence[str] = URGENCY_LEVELS
+) -> dict:
+    """Macro-F1 over ``levels`` plus mean absolute error over ordinal positions
+    on the full scale low < medium < high < critical (so a "critical" prediction
+    for a "high" ticket is 1 step off). Rows without gold urgency must be
+    dropped first."""
     gold, pred = list(gold), list(pred)
-    idx = {lvl: i for i, lvl in enumerate(URGENCY_LEVELS)}
-    m = classification_metrics(gold, pred, URGENCY_LEVELS)
+    m = classification_metrics(gold, pred, list(levels))
     if not gold:
         return m
-    m["ordinal_mae"] = _r(
-        mean_absolute_error([idx[g] for g in gold], [idx.get(p, 1) for p in pred])
-    )
+    pos = {lvl: i for i, lvl in enumerate(URGENCY_SCALE)}
+    unknown = sorted({x for x in gold + pred if x not in pos})
+    if unknown:
+        raise ValueError(f"unknown urgency levels {unknown}; scale is {URGENCY_SCALE}")
+    g, p = np.array([pos[x] for x in gold]), np.array([pos[x] for x in pred])
+    m["ordinal_mae"] = _r(mean_absolute_error(g, p))
+    m["off_by_two_or_more"] = _r(np.mean(np.abs(g - p) >= 2))
     return m
 
 
@@ -122,6 +131,70 @@ def latency_summary(ms: Sequence[float]) -> dict:
         "p95_ms": _r(np.percentile(a, 95)),
         "max_ms": _r(a.max()),
     }
+
+
+def calibration(conf: Sequence[float], correct: Sequence[bool], bins: int = 15) -> dict:
+    """Expected calibration error of the top-class confidence (equal-width bins)
+    plus the per-bin table for a reliability plot."""
+    conf, correct = np.asarray(conf, dtype=float), np.asarray(correct, dtype=float)
+    if not len(conf):
+        return {"n": 0}
+    edges = np.linspace(0, 1, bins + 1)
+    idx = np.clip(np.digitize(conf, edges[1:-1]), 0, bins - 1)
+    table, ece = [], 0.0
+    for b in range(bins):
+        sel = idx == b
+        if not sel.any():
+            continue
+        acc, mean_conf = correct[sel].mean(), conf[sel].mean()
+        ece += sel.mean() * abs(acc - mean_conf)
+        table.append(
+            {
+                "lo": _r(edges[b]),
+                "hi": _r(edges[b + 1]),
+                "n": int(sel.sum()),
+                "accuracy": _r(acc),
+                "mean_confidence": _r(mean_conf),
+            }
+        )
+    return {"n": int(len(conf)), "ece": _r(ece), "bins": table}
+
+
+def coverage_curve(conf: Sequence[float], correct: Sequence[bool], taus: Sequence[float]) -> list:
+    """For each threshold: share of tickets with confidence >= tau and their accuracy."""
+    conf, correct = np.asarray(conf, dtype=float), np.asarray(correct, dtype=bool)
+    out = []
+    for t in taus:
+        sel = conf >= t
+        out.append(
+            {
+                "tau": _r(t),
+                "accepted_share": _r(sel.mean()) if len(conf) else 0.0,
+                "accepted_accuracy": _r(correct[sel].mean()) if sel.any() else None,
+            }
+        )
+    return out
+
+
+def plot_reliability(cal: dict, path, title: str) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(5, 5), dpi=150)
+    ax.plot([0, 1], [0, 1], "--", color="grey", lw=1)
+    xs = [b["mean_confidence"] for b in cal["bins"]]
+    ys = [b["accuracy"] for b in cal["bins"]]
+    ax.plot(xs, ys, "o-")
+    ax.set_xlabel("mean confidence (top class)")
+    ax.set_ylabel("accuracy")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_title(f"{title}\nECE {cal['ece']:.3f}", fontsize=9)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
 
 
 def plot_confusion(cm: list[list[int]], labels: Sequence[str], path, title: str) -> None:
