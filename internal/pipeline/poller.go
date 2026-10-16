@@ -40,7 +40,10 @@ type Poller struct {
 	// PollTimeout bounds one poll. A poll in progress is allowed to finish
 	// (up to this timeout) when Run's context is cancelled.
 	PollTimeout time.Duration
-	Log         *slog.Logger
+	// AfterPoll, when set, runs after every poll in Run (e.g. classification),
+	// under the same timeout-bounded context.
+	AfterPoll func(ctx context.Context)
+	Log       *slog.Logger
 }
 
 // SourceResult is the outcome of polling one source.
@@ -152,6 +155,9 @@ func (p *Poller) Run(ctx context.Context, interval time.Duration) {
 	for {
 		pollCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 		p.PollOnce(pollCtx)
+		if p.AfterPoll != nil {
+			p.AfterPoll(pollCtx)
+		}
 		cancel()
 		select {
 		case <-ctx.Done():

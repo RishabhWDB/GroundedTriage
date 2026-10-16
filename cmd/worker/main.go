@@ -1,6 +1,7 @@
-// Command worker polls enabled ingestion sources (config/sources.yaml) and
-// stores new tickets (layer 1). Classification, routing and replies are
-// added to the pipeline in later phases.
+// Command worker polls enabled ingestion sources (config/sources.yaml),
+// stores new tickets (layer 1) and classifies accepted tickets through the
+// ml-service's POST /classify (layer 2, ML_SERVICE_URL). Routing and replies
+// are added in later phases.
 //
 //	go run ./cmd/worker            # poll every WORKER_POLL_INTERVAL (default 60s)
 //	go run ./cmd/worker -once      # one poll, then exit
@@ -18,6 +19,7 @@ import (
 
 	"github.com/RishabhWDB/GroundedTriage/internal/envfile"
 	"github.com/RishabhWDB/GroundedTriage/internal/ingest"
+	"github.com/RishabhWDB/GroundedTriage/internal/mlclient"
 	"github.com/RishabhWDB/GroundedTriage/internal/pipeline"
 	"github.com/RishabhWDB/GroundedTriage/internal/preprocess"
 	"github.com/RishabhWDB/GroundedTriage/internal/store"
@@ -64,12 +66,28 @@ func main() {
 	}
 	defer pool.Close()
 
+	mlURL := os.Getenv("ML_SERVICE_URL")
+	if mlURL == "" {
+		mlURL = "http://localhost:8001"
+	}
+	classifier := &pipeline.Classifier{
+		Store: store.Classifications{Pool: pool},
+		ML:    mlclient.New(mlURL),
+		Audit: store.Audit{Pool: pool},
+	}
+	classify := func(ctx context.Context) {
+		if _, err := classifier.ClassifyPending(ctx); err != nil {
+			slog.Error("worker: classify", "err", err)
+		}
+	}
+
 	poller := &pipeline.Poller{
 		Sources:     sources,
 		Ingestor:    &preprocess.Ingestor{Store: store.Tickets{Pool: pool}},
 		Checkpoints: store.Checkpoints{Pool: pool},
 		Audit:       store.Audit{Pool: pool},
 		Overlap:     10 * time.Minute,
+		AfterPoll:   classify,
 	}
 
 	if *once {
@@ -80,7 +98,10 @@ func main() {
 				"dup_content", r.Stats.DuplicateContent, "dropped", r.Stats.Dropped, "err", r.Err)
 			failed = failed || r.Err != nil
 		}
-		if failed {
+		stats, err := classifier.ClassifyPending(ctx)
+		slog.Info("worker: classify", "pending", stats.Pending, "classified", stats.Classified,
+			"failed", stats.Failed, "err", err)
+		if failed || err != nil {
 			os.Exit(1)
 		}
 		return

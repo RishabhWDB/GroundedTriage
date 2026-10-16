@@ -29,7 +29,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Start api + worker + ml-service (honcho, `Procfile`) | `make dev` |
 | Single service | `make api` (Gin on `:8080`, `API_PORT`) / `make worker` / `make ml` (uvicorn on `:8001`) |
 | Health checks | `curl localhost:8001/health` (ml-service), `curl localhost:8080/health` (api, includes ml-service) |
-| Live Go → ml-service test (needs `make dev` or `make ml` running) | `go test -tags live -count=1 ./internal/mlclient -run TestLiveHealth` |
+| Live Go → ml-service tests (needs `make dev` or `make ml` running; classify needs `models/fast_tier/`) | `go test -tags live -count=1 ./internal/mlclient -run Live` |
 | Unit tests (Go + Python; slow/integration skipped) | `make test` |
 | One Go test | `go test ./internal/<pkg> -run TestName` |
 | One Python test | `cd ml-service && .venv/bin/pytest tests/test_x.py::test_name` |
@@ -42,7 +42,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Seed | `make seed` (not implemented until P8.1) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
-| Worker: one poll / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s) |
+| Worker: one poll + classify / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s; classifies via `ML_SERVICE_URL`) |
 | Build splits + dataset card (downloads raw data on first run) | `make data` |
 | Data audit (synthetic diversity, train→test near-dups, subject shortcut) | `make data-audit` → `results/data_audit/report.md` |
 | Hard Meeting stress-test CSV (Groq; refuses to overwrite a reviewed file without `--force`) | `make stress-set` → `datasets/stress/meeting_stress.csv` |
@@ -215,13 +215,19 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `triage/tune_threshold.py` (`make tune-tau`: τ sweep on val, cost curve, writes `config/cascade.yaml`; exits cleanly without the deep tier);
   - `app/models.py` lazy registry; `POST /classify` → `Classification`; `/health` reports artifact availability without loading weights;
   - verified live with only the fast tier present.
+  - Commit `83c5f0f`.
+- P3.5 Go integration:
+  - `store.Classifications` (`Insert`, `Latest`, `Unclassified`: accepted tickets with no classification, oldest first);
+  - `mlclient.Classify`;
+  - `pipeline.Classifier` (`ClassifyPending`: per-ticket POST /classify, validates the ticket id and category, persists, one `classify.run` audit row, stops after N consecutive failures);
+  - the worker runs it after every poll (`Poller.AfterPoll`) and once in `-once` mode.
+  - Integration test against a stub ml-service; live Go→ml-service test passes.
   - Commit: backfilled in the next commit.
 
 ### In progress
 - Phase 3 (classification). Phase 2 approved 2026-10-16; Arya asked for Phase 3 to run through without stopping between parts.
 
 ### To do
-- P3.5 Go integration
 - P4.1 Rule engine
 - P4.2 Mute + no-reply detection
 - P4.3 Queues + SLA escalation
@@ -353,6 +359,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-16 (P3.5): Go classification step:
+  - The worker classifies after each poll, inside the same timeout-bounded context. **Only `ingest_status='accepted'` tickets with no `classifications` row are sent**, so skipped tickets never reach the ml-service.
+  - Each run handles up to 100 tickets (`BatchSize`), oldest first. One request per ticket (the ml-service batches internally only within a request; volume is low).
+  - A failed ticket (transport error, non-2xx after the client's retries, a mismatched `ticket_id`, or an unknown category) is logged and left unclassified, so the next run retries it. **3 consecutive failures stop the run** with `ErrMLUnavailable`, so a down ml-service isn't hammered ticket by ticket.
+  - One `classify.run` audit row per run: counts, by-category and by-tier tallies, up to 100 ticket ids, last error. A 503 (no fast tier) is retried by the client like any 5xx.
+  - `worker -once` exits 1 if classification fails.
+  - **Not run against DATABASE_URL:** that would add classification rows for the 20 Mumbai demo tickets, and the review said to leave the demo rows as they are. The integration test covers it on TEST_DATABASE_URL.
 - 2026-10-16 (P3.4): Cascade:
   - Fast tier on every ticket. Calibrated confidence **< τ** goes to the deep tier when it's available; the deep tier sees only those tickets, as one batch. Otherwise the fast prediction is kept with `low_confidence=true`, which also happens when the deep tier fails at load. Urgency runs on every ticket.
   - `model_versions` = `{fast_tier, tau, deep_tier (if available), urgency (version or "heuristic")}`. `models_loaded` = deep/urgency artifact availability.

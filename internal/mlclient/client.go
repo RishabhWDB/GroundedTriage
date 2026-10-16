@@ -123,3 +123,18 @@ func (c *Client) once(ctx context.Context, method, path string, body []byte, out
 	}
 	return json.Unmarshal(data, out)
 }
+
+// ClassifyRequest is the POST /classify body.
+type ClassifyRequest struct {
+	TicketID string `json:"ticket_id"`
+	Subject  string `json:"subject"`
+	Body     string `json:"body"`
+}
+
+// Classify calls POST /classify. A 503 means the ml-service has no fast
+// tier (models/fast_tier/ missing); it is retried like any 5xx.
+func (c *Client) Classify(ctx context.Context, req ClassifyRequest) (model.Classification, error) {
+	var out model.Classification
+	err := c.do(ctx, http.MethodPost, "/classify", req, &out)
+	return out, err
+}

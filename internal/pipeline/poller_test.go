@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -137,6 +138,8 @@ func TestFailingSourceDoesNotBlockOthers(t *testing.T) {
 func TestRunStopsOnCancel(t *testing.T) {
 	src := ingest.NewFakeSource("csv", tk("a", t0))
 	p, _, au := newPoller(ingest.Sources{"csv": src})
+	var after atomic.Int32
+	p.AfterPoll = func(context.Context) { after.Add(1) }
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { p.Run(ctx, 10*time.Millisecond); close(done) }()
@@ -151,5 +154,8 @@ func TestRunStopsOnCancel(t *testing.T) {
 	defer au.mu.Unlock()
 	if len(au.entries) < 2 {
 		t.Fatalf("expected several polls, got %d", len(au.entries))
+	}
+	if int(after.Load()) != len(au.entries) {
+		t.Fatalf("AfterPoll ran %d times for %d polls", after.Load(), len(au.entries))
 	}
 }

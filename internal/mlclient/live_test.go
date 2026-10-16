@@ -28,3 +28,20 @@ func TestLiveHealth(t *testing.T) {
 	}
 	t.Logf("ml-service %s %s models_loaded=%+v", url, h.Version, h.ModelsLoaded)
 }
+
+// TestLiveClassify needs models/fast_tier/ (make fast-tier).
+func TestLiveClassify(t *testing.T) {
+	url := os.Getenv("ML_SERVICE_URL")
+	if url == "" {
+		url = "http://localhost:8001"
+	}
+	c, err := New(url).Classify(context.Background(), ClassifyRequest{
+		TicketID: "live-1", Subject: "Charged twice", Body: "We were billed twice for October, please refund."})
+	if err != nil {
+		t.Fatalf("POST %s/classify: %v (is `make ml` running and models/fast_tier/ trained?)", url, err)
+	}
+	if c.TicketID != "live-1" || c.Category == "" || c.Tier == "" || c.ModelVersions["fast_tier"] == "" {
+		t.Fatalf("classification = %+v", c)
+	}
+	t.Logf("live classify: %+v", c)
+}

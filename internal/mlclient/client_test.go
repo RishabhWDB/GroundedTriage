@@ -2,6 +2,7 @@ package mlclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -102,5 +103,28 @@ func TestPerAttemptTimeoutAndGiveUp(t *testing.T) {
 	}
 	if time.Since(start) > 900*time.Millisecond {
 		t.Fatalf("took %v; per-attempt timeout not applied", time.Since(start))
+	}
+}
+
+func TestClassifyPostsTicket(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/classify" {
+			t.Errorf("%s %s", r.Method, r.URL.Path)
+		}
+		var req ClassifyRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.TicketID != "t1" || req.Body != "refund" {
+			t.Errorf("request %+v err %v", req, err)
+		}
+		_, _ = w.Write([]byte(`{"ticket_id":"t1","category":"Billing","category_confidence":0.9,"tier":"fast",
+		 "low_confidence":false,"urgency":"high","urgency_confidence":0.7,"urgency_source":"heuristic",
+		 "models_loaded":{"deep_tier":false,"urgency":false},"model_versions":{"fast_tier":"fast-x"}}`))
+	}))
+	defer srv.Close()
+	c, err := newTestClient(srv.URL).Classify(context.Background(), ClassifyRequest{TicketID: "t1", Body: "refund"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Category != "Billing" || c.Urgency != "high" || c.ModelVersions["fast_tier"] != "fast-x" {
+		t.Fatalf("decoded %+v", c)
 	}
 }
