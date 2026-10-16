@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     judge_reasoning_effort: str = "medium"
     judge_max_tokens: int = 4096
     torch_device: str = ""
+    # fp16 inference on MPS for the fine-tuned transformers (8 GB RAM).
+    model_fp16: bool = True
     ml_port: int = 8001
     models_dir: Path = REPO_ROOT / "models"
 

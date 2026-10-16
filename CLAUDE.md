@@ -48,6 +48,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Hard Meeting stress-test CSV (Groq; refuses to overwrite a reviewed file without `--force`) | `make stress-set` → `datasets/stress/meeting_stress.csv` |
 | Bundle splits for the GPU PC | `make export-splits` → `datasets/export/groundedtriage-splits-<test hash>.tar.gz` |
 | Regenerate synthetic meeting emails (Groq; cached, resumable) | `make synthetic-meetings` |
+| Install torch + transformers for the deep tier / urgency model | `make setup-models` |
 | Install the SCRIBE baseline extra (torch + transformers) | `make setup-baseline` |
 | SCRIBE baseline CLI (own process; ~2 GB of weights download on first run) | `make baseline ARGS="classify --split test --limit 10"` / `ARGS="classify --csv ../datasets/sample_emails.csv"` / `ARGS="draft --csv ../datasets/sample_emails.csv --limit 2"` |
 | Baseline evaluation on test (P2.3; ~90 min on M1 under swap; resumable) | `make baseline-eval` → `results/baseline/` (smoke: `make baseline ARGS="evaluate --limit 60 --out /tmp/x"`) |
@@ -201,13 +202,14 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `triage/fast_tier.py` (pipeline builder, `FastTier.load` with validation, `predict`), `triage/train_fast_tier.py` (`make fast-tier`) → `models/fast_tier/{model.joblib, model_card.json}` + `results/fast_tier/`;
   - `eval/runinfo.py` (git commit, peak RSS, swap) used by every training/eval run, including the baseline; `eval.classification` gains ECE/reliability and confidence-coverage helpers;
   - val macro-F1 0.825 overall / 0.790 real-only (see §8).
+  - Commit `62cf039`.
+- P3.2 Deep-tier inference loader (no training): `triage/hf_model.py` (`validate_artifact`, `HFClassifier`: lazy load, MPS fp16 / CPU, batching, truncation to `max_length`, `available` + logged reason) and `triage/deep_tier.py` (`DeepTier`). Tests build a tiny random BERT + word-level tokenizer in a temp dir (nothing downloaded).
   - Commit: backfilled in the next commit.
 
 ### In progress
 - Phase 3 (classification). Phase 2 approved 2026-10-16; Arya asked for Phase 3 to run through without stopping between parts.
 
 ### To do
-- P3.2 Deep-tier inference loader (no training)
 - P3.3 Urgency inference loader + heuristic fallback (no training)
 - P3.4 Cascade + threshold tuning
 - P3.5 Go integration
@@ -342,6 +344,12 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-16 (P3.2): Deep-tier loader (`triage/hf_model.py`, shared with urgency):
+  - **Validation at construction, weights at first use.** Construction only reads files: required `config.json`, `label_map.json`, `model_card.json`, `model.safetensors` and `tokenizer.json` or `tokenizer_config.json`. label_map ids must be exactly 0..n-1 with no duplicate labels, and the labels must be exactly the 6 taxonomy names (any id order; predictions follow label_map ids). model_card needs the right `task`, a positive integer `max_length` and `val_metrics.macro_f1`. `config.json`'s `num_labels` must match label_map.
+  - Any failure → `available=False` with a logged `reason`; nothing raises to the service. A failure at weight load (corrupt safetensors, wrong output size) also flips `available` to False, and callers fall back.
+  - Inference: `AutoTokenizer` + `AutoModelForSequenceClassification` from the directory; **fp16 on MPS** (`MODEL_FP16`, default true; CPU stays fp32); `torch.inference_mode`; batches of 16; truncation to the card's `max_length`; softmax computed in fp32. One model per role stays resident after the first call.
+  - torch/transformers are a `[models]` extra (`make setup-models`). Without them the loader reports unavailable instead of failing.
+  - `/health` reports artifact availability (file checks only; it never loads weights).
 - 2026-10-16 (P3.1): Fast tier design:
   - Features: word 1–2-gram TF-IDF (min_df 2, ≤200k) ∪ char_wb 3–5-gram TF-IDF (min_df 3, ≤300k), sublinear tf, float32. LR `class_weight="balanced"`, lbfgs.
   - **C** is picked from {1, 4, 16, 64} by *uncalibrated* val macro-F1 (cheap; C=16 won at 0.8296, C=64 at 0.8287, so the optimum is inside the grid). The first run used {1, 4, 16}; C=16 sat on the edge, so 64 was added.

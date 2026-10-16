@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: setup setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier
+.PHONY: setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -22,6 +22,9 @@ setup: ## Create the Python venv, install deps, fetch Go modules
 	cd $(ML_DIR) && $(VPY) -m pip install -e ".[dev,data]"
 	go mod download
 	mkdir -p models/fast_tier models/deep_tier models/urgency datasets/raw datasets/processed
+
+setup-models: ## Install torch + transformers for the deep tier / urgency model (P3.2, P3.3)
+	cd $(ML_DIR) && $(VPY) -m pip install -e ".[dev,data,models,eval]"
 
 setup-baseline: ## Install the optional SCRIBE baseline extra (torch + transformers; models download on first run)
 	cd $(ML_DIR) && $(VPY) -m pip install -e ".[dev,data,baseline,eval]"

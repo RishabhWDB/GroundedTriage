@@ -39,6 +39,12 @@ baseline = [
     "torch>=2.4",
     "transformers>=4.44",
 ]
+# Inference for the fine-tuned deep tier and urgency model (P3.2, P3.3),
+# loaded lazily by the ml-service. Same packages as `baseline`.
+models = [
+    "torch>=2.4",
+    "transformers>=4.44",
+]
 # Evaluation plots (P2.3, P7).
 eval = [
     "matplotlib>=3.8",
