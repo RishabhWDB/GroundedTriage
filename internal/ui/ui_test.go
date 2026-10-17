@@ -3,6 +3,7 @@ package ui
 import (
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -37,12 +38,30 @@ func TestServesUIWithSecurityHeaders(t *testing.T) {
 		t.Fatalf("app.js: %d %s", js.Code, js.Header().Get("Content-Type"))
 	}
 	// Untrusted ticket text must never reach an HTML sink.
-	for _, sink := range []string{".innerHTML", "insertAdjacentHTML", ".outerHTML", "document.write"} {
-		if strings.Contains(js.Body.String(), sink) {
-			t.Fatalf("app.js uses %s", sink)
+	for _, f := range []string{"/ui/app.js", "/ui/dashboard.js"} {
+		body := get(f)
+		if body.Code != 200 {
+			t.Fatalf("%s: %d", f, body.Code)
+		}
+		for _, sink := range []string{".innerHTML", "insertAdjacentHTML", ".outerHTML", "document.write"} {
+			if strings.Contains(body.Body.String(), sink) {
+				t.Fatalf("%s uses %s", f, sink)
+			}
 		}
 	}
 	if get("/ui/style.css").Code != 200 || get("/ui/missing.js").Code != 404 {
 		t.Fatal("static file serving")
+	}
+}
+
+// The dashboard model's Node tests, when node is installed (skipped otherwise).
+func TestDashboardModelWithNode(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed")
+	}
+	out, err := exec.Command(node, "--test", "jstest/").CombinedOutput()
+	if err != nil {
+		t.Fatalf("node --test failed: %v\n%s", err, out)
 	}
 }

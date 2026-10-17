@@ -333,7 +333,16 @@ function openEditor(d, act) {
 // ---------- dashboard (P6.4) ----------
 
 async function loadDashboard() {
-  $("#tiles").replaceChildren(el("p", { class: "note" }, "The dashboard arrives in P6.4."));
+  const m = window.dashboardModel(await api("/metrics/summary"));
+  $("#tiles").replaceChildren(...m.tiles.map((t) =>
+    el("div", { class: "tile" }, el("div", { class: `v${t.alert ? " breached" : ""}` }, t.value), el("div", { class: "k" }, t.key))));
+  $("#charts").replaceChildren(...m.charts.map((c) => el("div", { class: "card" }, el("h3", {}, c.title),
+    c.bars.length ? c.bars.map((b) => {
+      const fill = el("div", { class: "fill" });
+      fill.style.width = `${Math.round(b.share * 100)}%`; // CSSOM, allowed by the CSP
+      return el("div", { class: "bar" }, el("span", { title: b.label }, b.label), el("div", { class: "track" }, fill), el("span", {}, b.value));
+    }) : el("p", { class: "note" }, "No data yet."))),
+    el("p", { class: "note" }, `Generated ${fmtTime(m.generatedAt)}. Refresh the page to update.`));
 }
 
 route();

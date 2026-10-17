@@ -84,6 +84,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
    - **Draft:** each `[n]` is a button that opens the source chunk (title, heading, URL, text). Faithfulness and unsupported claims are shown. An abstained draft shows the reason and has no text.
 7. **Actions:** *Edit* → change the text → *Save* (badge "edited") → *Approve* (status approved). On another draft, *Reject* with a note. Approve should be disabled on an unedited abstained draft.
 8. **Safety:** a ticket whose subject or body contains `<script>…</script>` must show it as literal text.
+9. **Dashboard:** open *Dashboard*. Check the tiles and bars against the inbox counts. *Models loaded* reads "ml-service unreachable" unless `make ml` is running.
 
 ## 3. Status board
 
@@ -382,14 +383,17 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `internal/outbound.Sender` (worker step after replies): claim approved drafts → `Source.Reply` of the ticket's adapter with the draft's idempotency key → `sent` + route resolved + audit `reply.sent`; known failures are retried (≤ 5 attempts); stale claims are flagged, never resent;
   - `store.Outbound`; migration **00011** (`send_started_at`, `send_attempts`; applied);
   - `ReplyDraft.idempotency_key` in the contract (Go + Python); the CSV adapter skips a key it already wrote, the email Message-ID comes from the key, Zendesk gets an `Idempotency-Key` header.
+  - Commit `be41ff8`.
+- P6.4 Dashboard:
+  - `#/dashboard` in the UI renders `GET /metrics/summary`. Tiles: tickets, open routes, SLA breached (red when > 0), escalated, deep-tier share, abstain rate, average faithfulness, models loaded. Bar charts: volume by source and category, urgency, tier, actions, drafts by status, top senders.
+  - The mapping is a pure `dashboard.js` model, tested with `node --test` (run by `go test ./internal/ui` when Node is installed, skipped otherwise).
   - Commit: backfilled in the next commit.
 
 ### In progress
-- Phase 6 (serving and review). Leftover gpt-oss budget: live re-check of the reasoning-off judge (P5.4), then style-aug (P3.8b).
+- none. Phase 6 is done; waiting for Arya's Phase 6 review. Leftover gpt-oss budget: live re-check of the reasoning-off judge (P5.4), then style-aug (P3.8b).
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P6.4 Dashboard
 - P7.1 Classification evaluation: baseline vs proposed
 - P7.2 RAG evaluation
 - P7.3 Monitoring
