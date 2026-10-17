@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier urgency-eval tune-tau sample-check style-aug spam-filter
+.PHONY: setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier urgency-eval tune-tau ood-set ood-eval style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -104,8 +104,11 @@ urgency-eval: ## P3.3: score the urgency heuristic (and model, if present) on va
 tune-tau: ## P3.4: sweep the cascade threshold on val (needs models/deep_tier/) -> config/cascade.yaml, results/cascade/
 	cd $(ML_DIR) && $(VPY) -m triage.tune_threshold
 
-sample-check: ## Out-of-domain check on the 22 hand-written sample emails (cascade + SCRIBE) -> results/ood/
-	cd $(ML_DIR) && $(VPY) -m eval.sample_check --with-baseline
+ood-set: ## P3.11: build the OOD set (Twitter pre-labelled for review, Enron spam, team template) -> datasets/ood/
+	cd $(ML_DIR) && $(VPY) -m data.ood
+
+ood-eval: ## Required gate: score SCRIBE, fast tier and cascades on the reviewed OOD set -> results/ood/
+	cd $(ML_DIR) && $(VPY) -m eval.ood_eval --with-baseline
 
 style-aug: ## P3.8: informal-style paraphrases of ~25% of train via Groq (resumable; days on the free tier) -> datasets/synthetic/style_aug.jsonl
 	cd $(ML_DIR) && $(VPY) -m data.style_aug

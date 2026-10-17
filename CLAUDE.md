@@ -59,7 +59,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Score urgency (heuristic, plus model if present) on val | `make urgency-eval` → `results/urgency/` |
 | Tune the cascade threshold τ on val (needs `models/deep_tier/`) | `make tune-tau` → `config/cascade.yaml`, `results/cascade/` |
 | Classify one ticket (ml-service running) | `curl -s localhost:8001/classify -H 'content-type: application/json' -d '{"ticket_id":"t1","subject":"Refund","body":"Charged twice"}'` |
-| Out-of-domain check on the hand-written sample emails (cascade + SCRIBE) | `make sample-check` → `results/ood/` |
+| Build the OOD set (Twitter pre-labelled for review, Enron spam, team template) | `make ood-set` → `datasets/ood/` (refuses to overwrite a reviewed file) |
+| **Required gate before accepting any model:** OOD eval of SCRIBE, fast tier and cascades | `make ood-eval` → `results/ood/` |
 | Evaluate the proposed system | not implemented yet (P7) |
 
 ## 3. Status board
@@ -255,6 +256,10 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - the fast and deep tiers require the 5 topic classes (6-class artifacts are rejected);
   - contract: `tier` adds `spam_filter`; `spam_score`, `possible_spam` (Python + Go);
   - migration **00005** (applied to Mumbai); `store.Classifications` persists them.
+  - Commit `aa94af1`.
+- P3.11 OOD evaluation set and gate:
+  - `data/ood.py` (`make ood-set`) → `datasets/ood/`: `twitter.csv` (149 rows, qwen pre-labels, `needs_review=true`), `enron_spam.csv` (20, CC0 copy of Enron1), the `team_written.csv` template and a README;
+  - `eval/ood_eval.py` (`make ood-eval`) scores SCRIBE, the fast tier alone and the cascade under each spam rule on reviewed rows plus the 22 samples. It **replaces `sample-check`** (removed).
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -262,7 +267,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### To do
 - P3.8a Commit the generated `datasets/synthetic/style_aug.jsonl` and rebuild/re-export (when the Groq run finishes; several days on the free tier)
-- P3.11 OOD evaluation set (Twitter customer support, team-written template, non-SpamAssassin spam) + `make ood-eval` gate
 - P3.12 Re-run the fast tier, urgency eval and OOD eval; before/after; updated Phase 3 review
 - P4.1 Rule engine
 - P4.2 Mute + no-reply detection
@@ -395,6 +399,14 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P3.11): OOD set:
+  - **Twitter:** Kaggle `thoughtvector/customer-support-on-twitter`, licence **CC BY-NC-SA 4.0** (checked via the Kaggle API), so the 149 rows are committed with attribution (`datasets/ood/README.md`). Inbound thread-opening tweets; `@mentions` stripped (the first is kept as `brand`); English (langdetect); ≥ 60 chars; deduplicated. Seeded (4242) 600-candidate pool.
+    - Pre-labels from the **judge model (qwen3.8-27b) with no reasoning**: a separate Groq rate-limit bucket from the gpt-oss style-aug run; 30 calls, 36k tokens.
+    - Candidate labels: General 265, Technical 194, Billing 59, None 58, Feature 18, Spam 5, Meeting 1.
+    - Quotas: Technical 45 / Billing 40 / General 40 / Feature 20 / Meeting 10 / Spam 10. **Feature, Meeting and Spam are rare on Twitter**, giving 18 / 1 / 5, so 149 rows in total. The team-written emails are where meeting requests come from.
+  - **Enron spam:** the original AUEB server's TLS chain fails verification (I didn't bypass it), so it comes from the CC0 Kaggle copy `venky73/spam-mails-dataset` (Enron1, 1,499 spam). 20 seeded English rows, committed. The text is the corpus's lower-cased tokenised form, a style the SpamAssassin-trained filter has never seen.
+  - **Scoring:** only `needs_review=false` Twitter rows are scored (plus Enron, team rows and the 22 samples), the same rule as the stress set. `make ood-eval` is the **required gate** before accepting any model or threshold rule, and is reported next to test in P7.
+  - The P3.5a `results/ood/sample_emails.{md,json}` stay as the before snapshot (6-class fast tier: 6/22).
 - 2026-10-17 (P3.10): Spam filter in the cascade:
   - The spam filter runs first on every ticket. **≥ mute threshold → `Spam`, `tier=spam_filter`**, confidence = filter score, and the topic models don't run. Review band → the topic cascade runs normally and the result carries **`possible_spam=true`** (P4 routes it to a "possible spam — review" queue instead of muting). Below the review threshold → topic only.
   - Without `models/spam_filter/`, nothing is ever Spam, `spam_score` is null and `model_versions.spam_filter="absent"`. The filter version string includes the rule (`spam-…:support`).
