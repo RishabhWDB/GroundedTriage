@@ -67,6 +67,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Embedding fast tier (bge-small + LR; embeddings cached in `datasets/raw/emb_cache/`) | `make fast-tier-emb` / `make fast-tier-emb-aug` → `models/fast_tier_emb[_aug]/`, `results/fast_tier_emb[_aug]/` |
 | Fast tier style-aug ablation (train + train_style_aug) | `make fast-tier-aug` → `models/fast_tier_aug/`, `results/fast_tier_aug/` |
 | **Final systems only:** score ood-test once (every run is logged) | `make ood-eval-test` → `results/ood/test/`, `results/ood/test_log.jsonl` |
+| REST API (needs `API_KEY` in `.env`, not the placeholder) | `make api`; e.g. `curl -H "X-API-Key: $KEY" localhost:8080/tickets?status=open`; spec in `docs/openapi.yaml` |
 | Evaluate the proposed system | not implemented yet (P7) |
 
 ## 3. Status board
@@ -350,6 +351,12 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P6.1a Review queries:
   - `store.Review`: `ListTickets` (filters category, urgency, status, queue; inbox order), `GetTicket` (ticket + latest classification, route, meeting, draft), `GetDraft` / `LatestDraft`, `Chunks` (citation texts + URLs), draft transitions `ApproveDraft` / `RejectDraft` / `EditDraft` (conditional updates → `ErrConflict`), `Summary` (dashboard counts);
   - migration **00010** (draft review + send columns; applied to Mumbai).
+  - Commit `daf4b89`.
+- P6.1b REST API:
+  - `internal/api` (Gin): `GET /tickets` (validated filters, paging), `GET /tickets/:id`, `GET /tickets/:id/draft` (draft + retrieved chunks with their [n] number and cited flag), `POST /drafts/:id/approve|reject|edit` (audited), `POST /ingest/csv` (multipart upload, 5 MiB, `.csv` only, stored under a generated name), `GET /metrics/summary` (+ ml-service models);
+  - API-key middleware (`X-API-Key` or Bearer, constant-time compare) and a consistent JSON error shape;
+  - `docs/openapi.yaml`, with a test that every registered route is documented.
+  - `cmd/api` wires it to the DB and refuses to start without a real `API_KEY`.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -357,7 +364,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P6.1b REST API handlers + API-key middleware + OpenAPI
 - P6.2 Agent review UI
 - P6.3 Outbound reply
 - P6.4 Dashboard
@@ -387,6 +393,8 @@ Keep this list current: add items as they arise, remove them when done. Nothing 
 | 7 | Drop in artifacts: copy to `models/deep_tier/` and `models/urgency/` (a second deep tier, e.g. the aug variant, can live in another folder for comparison) | `models/` | `make setup-models` → `make ml` and `curl localhost:8001/health` (models_loaded true; reasons in the log) → `make urgency-eval` → `make tune-tau` → `make ood-eval`. Restart the ml-service after copying weights |
 
 | 8 | Google Calendar for the meeting scheduler (optional; the worker runs without it): in Google Cloud, enable the Calendar API, create an OAuth client of type **Desktop app**, save its JSON as `credentials.json` (gitignored), add yourself as a test user, set `GOOGLE_TIMEZONE` | repo root, `.env` | `make calendar-auth` → `token.json`; the worker then uses Google automatically (or set `MEETING_CALENDAR=google`). Test-mode tokens expire after 7 days, so re-run it then |
+
+| 9 | **Set a real `API_KEY` in `.env`** (any long random string, e.g. `openssl rand -hex 24`). It's still the `.env.example` placeholder, and `make api` refuses to start with it | `.env` | `make api` (the UI asks for the same key) |
 
 Claude's own background item: `make style-aug` once per day (Groq free cap) until 3,978 rows, then `make data && make export-splits` (P3.8b).
 
@@ -517,6 +525,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P6.1b): API conventions:
+  - The paths are exactly the spec's (no version prefix). `GET /health` is public; everything else needs `API_KEY` (`X-API-Key` or `Authorization: Bearer`). With no key configured, every protected route answers 401. `cmd/api` also refuses to start when `API_KEY` is empty or still `change-me`.
+  - Errors are `{"error": {"code", "message"}}` with codes bad_request / unauthorized / not_found / conflict (disallowed draft transition) / payload_too_large / internal.
+  - Inputs are validated: category in the taxonomy, urgency in the scale, status in open/resolved/unrouted, limit 1–200, ids are UUIDs, reviewer required, edit needs a non-empty body.
+  - `POST /ingest/csv`: multipart field `file`, ≤ 5 MiB (`MaxBytesReader`), `.csv` only. It's stored as `datasets/out/uploads/<UTC time>-<random>.csv` (gitignored), never under the client's name, then ingested through the same `preprocess.Ingestor` as the CSV source.
+  - Review actions write `draft.approved|rejected|edited` audit rows, with the reviewer as actor.
+  - **Live smoke check (Mumbai, read-only, temporary key):** 401 without a key; `/tickets` listed the 21 demo tickets (unclassified, as left); `/metrics/summary` computed; a bad filter returned the JSON error. `.env`'s `API_KEY` is still the placeholder → manual item 9.
 - 2026-10-17 (P6.1a): Review data rules:
   - **Inbox order:** route priority (1 first), then SLA deadline, then newest; unrouted tickets last.
   - **`status` filter** = the route status: `open | resolved | unrouted`. Every row also shows the latest draft status.

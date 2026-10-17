@@ -1,0 +1,319 @@
+openapi: 3.0.3
+info:
+  title: GroundedTriage API
+  version: "0.6.0"
+  description: |
+    REST API of the Go `api` service (P6.1), used by the agent review UI (P6.2)
+    and the dashboard (P6.4). Every endpoint except `GET /health` needs the API
+    key (`X-API-Key: <key>` or `Authorization: Bearer <key>`; set `API_KEY`).
+    Errors always have the shape `{"error": {"code": "...", "message": "..."}}`.
+servers:
+  - url: http://127.0.0.1:8080
+security:
+  - apiKey: []
+  - bearer: []
+paths:
+  /health:
+    get:
+      summary: Liveness, plus the ml-service's health
+      security: []
+      responses:
+        "200": {description: OK}
+  /tickets:
+    get:
+      summary: Inbox, most urgent first (priority, then SLA deadline, then newest)
+      parameters:
+        - {name: category, in: query, schema: {$ref: "#/components/schemas/Category"}}
+        - {name: urgency, in: query, schema: {$ref: "#/components/schemas/Urgency"}}
+        - name: status
+          in: query
+          description: Route status; `unrouted` = no route yet
+          schema: {type: string, enum: [open, resolved, unrouted]}
+        - {name: queue, in: query, schema: {type: string}, example: billing}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        "200":
+          description: A page of tickets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/TicketSummary"}}
+                  total: {type: integer}
+                  limit: {type: integer}
+                  offset: {type: integer}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /tickets/{id}:
+    get:
+      summary: Ticket with its latest classification, route, meeting outcome and draft
+      parameters: [{$ref: "#/components/parameters/Id"}]
+      responses:
+        "200":
+          description: Ticket detail
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/TicketDetail"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /tickets/{id}/draft:
+    get:
+      summary: The ticket's latest draft and the KB chunks it was given ([n] numbering)
+      parameters: [{$ref: "#/components/parameters/Id"}]
+      responses:
+        "200":
+          description: Draft and chunks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  draft: {$ref: "#/components/schemas/Draft"}
+                  chunks:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Chunk"
+                        - type: object
+                          properties:
+                            number: {type: integer, description: "The [n] the drafter saw"}
+                            cited: {type: boolean}
+        "404": {$ref: "#/components/responses/Error"}
+  /drafts/{id}/approve:
+    post:
+      summary: Approve a grounded draft, or an abstained draft an agent edited
+      description: Fixes the idempotency key used to send the reply exactly once (P6.3).
+      parameters: [{$ref: "#/components/parameters/Id"}]
+      requestBody: {$ref: "#/components/requestBodies/Review"}
+      responses:
+        "200": {$ref: "#/components/responses/Draft"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /drafts/{id}/reject:
+    post:
+      summary: Reject a draft that hasn't been sent
+      parameters: [{$ref: "#/components/parameters/Id"}]
+      requestBody: {$ref: "#/components/requestBodies/Review"}
+      responses:
+        "200": {$ref: "#/components/responses/Draft"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /drafts/{id}/edit:
+    post:
+      summary: Replace the subject and body of a grounded or abstained draft (marks it edited)
+      parameters: [{$ref: "#/components/parameters/Id"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reviewer, body]
+              properties:
+                reviewer: {type: string}
+                subject: {type: string}
+                body: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Draft"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /ingest/csv:
+    post:
+      summary: Upload a SCRIBE-format CSV (Sender, Subject, Body[, Label, Date, Id]) and ingest it
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary, description: ".csv, at most 5 MiB"}
+      responses:
+        "200":
+          description: Ingestion counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  file: {type: string}
+                  fetched: {type: integer}
+                  inserted: {type: integer}
+                  inserted_skipped: {type: integer, description: Stored but not classified (e.g. non-English)}
+                  duplicate_external_id: {type: integer}
+                  duplicate_content: {type: integer}
+                  dropped: {type: integer}
+        "400": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
+  /metrics/summary:
+    get:
+      summary: Dashboard counts and which models the ml-service has loaded
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary: {$ref: "#/components/schemas/Summary"}
+                  models:
+                    type: object
+                    properties:
+                      ml_service: {type: string, enum: [ok, unreachable]}
+                      fast_tier_loaded: {type: boolean}
+                      deep_tier: {type: boolean}
+                      urgency: {type: boolean}
+components:
+  securitySchemes:
+    apiKey: {type: apiKey, in: header, name: X-API-Key}
+    bearer: {type: http, scheme: bearer}
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  requestBodies:
+    Review:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [reviewer]
+            properties:
+              reviewer: {type: string}
+              note: {type: string}
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Draft:
+      description: The draft after the change
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Draft"}
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: {type: string, enum: [bad_request, unauthorized, not_found, conflict, payload_too_large, internal]}
+            message: {type: string}
+    Category:
+      type: string
+      enum: [Technical Issue, Billing, Feature Request, General Inquiry, Spam, Meeting Scheduling]
+    Urgency: {type: string, enum: [low, medium, high, critical]}
+    TicketSummary:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        source: {type: string, enum: [email, zendesk, csv]}
+        sender: {type: string}
+        subject: {type: string}
+        received_at: {type: string, format: date-time}
+        ingest_status: {type: string, enum: [accepted, skipped]}
+        category: {allOf: [{$ref: "#/components/schemas/Category"}], nullable: true}
+        urgency: {allOf: [{$ref: "#/components/schemas/Urgency"}], nullable: true}
+        tier: {type: string, enum: [fast, deep, spam_filter], nullable: true}
+        low_confidence: {type: boolean}
+        possible_spam: {type: boolean}
+        action: {type: string, enum: [mute, queue, reply, schedule], nullable: true}
+        queue: {type: string, nullable: true}
+        priority: {type: integer, minimum: 1, maximum: 4, nullable: true}
+        sla_due_at: {type: string, format: date-time, nullable: true}
+        route_status: {type: string, enum: [open, resolved], nullable: true}
+        draft_status: {type: string, enum: [grounded, abstained, approved, sent, rejected], nullable: true}
+        faithfulness_score: {type: number, nullable: true}
+    TicketDetail:
+      type: object
+      properties:
+        ticket: {type: object, description: "The Ticket contract (internal/model)"}
+        classification:
+          type: object
+          nullable: true
+          description: "Classification contract: category, category_confidence, tier, low_confidence, urgency, urgency_confidence, urgency_source, spam_score, possible_spam, models_loaded, model_versions"
+        route:
+          type: object
+          nullable: true
+          description: "Route (action, queue, priority, sla_due_at, reason) + status, escalations, escalated_at"
+        meeting:
+          type: object
+          nullable: true
+          description: "Scheduling outcome: status (booked|counter_offer|no_slot|not_a_meeting), slot, event id, reason"
+        draft: {allOf: [{$ref: "#/components/schemas/Draft"}], nullable: true}
+    Draft:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        ticket_id: {type: string, format: uuid}
+        subject: {type: string}
+        body: {type: string, description: "Reply text with [n] citations"}
+        citations: {type: array, items: {type: string}, description: Cited KB chunk ids}
+        faithfulness_score: {type: number, nullable: true}
+        unsupported_claims: {type: array, items: {type: string}}
+        status: {type: string, enum: [grounded, abstained, approved, sent, rejected]}
+        abstain_reason: {type: string}
+        retrieval_max_score: {type: number, nullable: true}
+        retrieval_mode: {type: string}
+        claims:
+          type: array
+          items:
+            type: object
+            properties:
+              claim: {type: string}
+              cited: {type: array, items: {type: integer}}
+              supported: {type: boolean}
+              reason: {type: string}
+        retrieved_chunk_ids: {type: array, items: {type: string}}
+        edited: {type: boolean}
+        reviewer: {type: string}
+        reviewed_at: {type: string, format: date-time, nullable: true}
+        review_note: {type: string}
+        idempotency_key: {type: string, nullable: true}
+        sent_at: {type: string, format: date-time, nullable: true}
+        send_error: {type: string}
+        created_at: {type: string, format: date-time}
+    Chunk:
+      type: object
+      properties:
+        id: {type: string}
+        doc_id: {type: string}
+        title: {type: string}
+        heading: {type: string}
+        text: {type: string}
+        url: {type: string}
+    Summary:
+      type: object
+      properties:
+        tickets: {type: integer}
+        by_source: {type: object, additionalProperties: {type: integer}}
+        by_category: {type: object, additionalProperties: {type: integer}}
+        by_urgency: {type: object, additionalProperties: {type: integer}}
+        by_tier: {type: object, additionalProperties: {type: integer}}
+        by_action: {type: object, additionalProperties: {type: integer}}
+        open_routes: {type: integer}
+        sla_breached_open: {type: integer}
+        escalated_routes: {type: integer}
+        drafts_by_status: {type: object, additionalProperties: {type: integer}}
+        abstain_rate: {type: number, nullable: true}
+        avg_faithfulness: {type: number, nullable: true}
+        top_senders:
+          type: array
+          items:
+            type: object
+            properties:
+              sender: {type: string}
+              tickets: {type: integer}
+        generated_at: {type: string, format: date-time}

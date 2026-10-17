@@ -28,7 +28,7 @@ func TestHealthReportsMLService(t *testing.T) {
 			c := mlclient.New(tc.url)
 			c.MaxRetries = 0
 			rec := httptest.NewRecorder()
-			newRouter(c).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+			newRouter(c, nil).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 			if rec.Code != http.StatusOK {
 				t.Fatalf("code = %d", rec.Code)
 			}
