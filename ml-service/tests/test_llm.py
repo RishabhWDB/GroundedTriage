@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from app.llm import FakeLLM, GroqLLM, LLMError, build_llm
+from app.llm import FakeLLM, GroqLLM, JSONModeError, LLMError, build_llm
 from app.settings import Settings
 
 OK_BODY = {"choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}]}
@@ -69,6 +69,13 @@ def test_non_retryable_error_raises_immediately():
     with pytest.raises(LLMError, match="HTTP 400"):
         llm.complete([])
     assert sleeps == []
+
+
+def test_json_mode_failure_is_its_own_error():
+    body = '{"error":{"code":"json_validate_failed","message":"Failed to generate JSON"}}'
+    llm = make_llm(lambda req: httpx.Response(400, text=body), [])
+    with pytest.raises(JSONModeError):
+        llm.complete([], json_mode=True)
 
 
 def test_missing_key_raises():

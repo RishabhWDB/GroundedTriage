@@ -20,6 +20,7 @@ from app.schemas import (
     RetrieveResponse,
 )
 from app.textinput import model_input
+from rag.generator import DraftRequest, GeneratedDraft, generate
 
 VERSION = "0.1.0"
 RegistryDep = Annotated[Registry, Depends(get_registry)]
@@ -74,3 +75,15 @@ def retrieve(req: RetrieveRequest, reg: RegistryDep) -> RetrieveResponse:
         ticket_id=req.ticket_id, mode=res.mode, max_score=res.max_score, chunks=res.chunks
     )
 
+
+@app.post("/draft", response_model=GeneratedDraft)
+def draft(req: DraftRequest, reg: RegistryDep) -> GeneratedDraft:
+    llm = reg.llm()
+    if llm is None:
+        raise HTTPException(status_code=503, detail="GROQ_API_KEY is not set")
+    try:
+        return generate(req, llm)
+    except ValueError as exc:  # no sources
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=f"draft failed: {exc}") from exc

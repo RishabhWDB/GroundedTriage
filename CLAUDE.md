@@ -324,6 +324,11 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - migration **00008** (`kb_chunks.tsv` generated column + GIN index; applied to Mumbai);
   - `POST /retrieve` (registry: lazy DB connection under a lock, one shared embedder);
   - `eval/retrieval.py` (`make retrieval-eval` → `results/retrieval/`, including the retrieval-floor analysis used by P5.4).
+  - Commit `3de4fe6`. **Process slip:** that commit's `app/main.py` had one extra trailing blank line, so `make lint` (ruff format) failed on it. My command chain committed on the test result and ignored the lint failure. Fixed in P5.3; commits are now gated on `make lint && make test`.
+- P5.3 Draft generator:
+  - `rag/generator.py` + `POST /draft` (gpt-oss-120b, JSON mode, temperature 0): answers only from numbered sources with [n] citations; tone from urgency and category; no promised actions without a source; draft → constrained refine;
+  - citation parsing and validation;
+  - `app.llm.JSONModeError` (Groq `json_validate_failed`) is retried as a bad attempt.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -496,6 +501,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P5.3): Draft generator:
+  - **Grounding rules in the prompt:** every factual statement ends with [n]; no outside knowledge; **never claim or promise an action** (refund issued, setting changed, escalation) unless a source says it happens. That's the SCRIBE failure in `results/examples/ungrounded_hallucination_01.md`. When the sources don't answer, say so and ask for what's missing. No placeholders; fixed sign-off "The Support Team".
+  - **Tone:** urgency (critical, high, medium, low) plus a per-category hint (Billing: exact amounts and policies as sourced; Technical: numbered steps; ...).
+  - **Draft → refine** (SCRIBE's second pass, kept but constrained): the refiner may change clarity and tone only. If its [n] set differs from the draft's, the refined text is discarded (noted in `notes`).
+  - **Citations:** `[n]`/`[n, m]` markers outside 1..len(chunks) are removed from the body and reported in `invalid_citations`; `citations` = cited chunk ids in first-cited order. Leftover placeholders are flagged in `notes`.
+  - No chunks → `ValueError` (HTTP 422): the pipeline abstains without drafting.
+  - Groq JSON mode can fail server-side with HTTP 400 `json_validate_failed` (e.g. output cut at max_tokens). `GroqLLM` raises `JSONModeError`, and the drafting loop treats it as a bad attempt (2 attempts).
 - 2026-10-17 (P5.2): Retriever:
   - Query = `model_input(subject, body)`, prefixed with bge's query instruction ("Represent this sentence for searching relevant passages: "); cosine top-k over HNSW (`ef_search` 100), default k=5.
   - **Hybrid** (flag, `RETRIEVAL_HYBRID=true`): RRF (k=60) of the dense top-50 and a Postgres full-text top-50 (`websearch_to_tsquery`, `ts_rank_cd`; a BM25-like ranking, not exact BM25; generated `tsv` column, migration 00008). Hybrid results keep each chunk's cosine score, so the gate's floor means the same thing in both modes.

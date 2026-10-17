@@ -26,6 +26,11 @@ class LLMError(RuntimeError):
     pass
 
 
+class JSONModeError(LLMError):
+    """Groq JSON mode failed server-side (HTTP 400 json_validate_failed), e.g.
+    the output was cut off at max_tokens. A bad attempt: callers retry."""
+
+
 class LLM(Protocol):
     def complete(
         self,
@@ -130,6 +135,8 @@ class GroqLLM:
                 if resp.status_code == 200:
                     return self._parse(resp.json(), payload["max_tokens"])
                 last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                if resp.status_code == 400 and "json_validate_failed" in resp.text:
+                    raise JSONModeError(last_error)
                 if resp.status_code not in RETRYABLE_STATUS:
                     raise LLMError(last_error)
             if attempt < self.max_retries:
