@@ -159,3 +159,25 @@ def test_caching_llm(tmp_path):
     assert (c.hits, c.misses) == (1, 2) and len(inner.calls) == 2
     again = CachingLLM(FakeLLM([]), tmp_path, "m")  # a new process, same cache
     assert again.complete(msgs, json_mode=True) == "first"
+
+
+def test_429_error_keeps_limit_name_and_redacts_org():
+    import httpx
+
+    from app.llm import GroqLLM, LLMError
+
+    msg = (
+        '{"error":{"message":"Rate limit reached for model `openai/gpt-oss-120b` in organization '
+        "`org_01abcdefghijklmnopqrstuvwx` service tier `on_demand` on tokens per day (TPD): "
+        'Limit 200000, Used 199000, Requested 2500."}}'
+    )
+    llm = GroqLLM(
+        api_key="k",
+        model="m",
+        transport=httpx.MockTransport(lambda r: httpx.Response(429, text=msg)),
+        sleep=lambda s: None,
+        max_retries=0,
+    )
+    with pytest.raises(LLMError) as exc:
+        llm.complete([{"role": "user", "content": "x"}])
+    assert "tokens per day (TPD)" in str(exc.value) and "org_01abc" not in str(exc.value)

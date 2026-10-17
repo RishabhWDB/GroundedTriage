@@ -432,6 +432,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P8.3a Docs (skeleton; finalised after P7.4): `README.md` (overview, SCRIBE-vs-system table, architecture diagram, setup, run, evaluation commands, adding fine-tuned models, repo map, licences), `docs/architecture.md` (per-layer design decisions), `docs/demo_script.md` (five-minute walkthrough on the demo tickets, with recovery table). Results point to `results/REPORT.md` (P7.4); no numbers in the docs yet.
   - Commit `b4b772a`.
 - P7.2c Fix: the first full P7.2 run hung for ~47 min, blocked in psycopg `poll` (confirmed with `sample`) on a Postgres connection the pooler had silently dropped while minutes of judge calls passed. `rag.kb.connect` now sets TCP keepalives (idle 30 s, 3 × 10 s), `connect_timeout` 15 s and `statement_timeout` 120 s; `Retriever` takes a `reconnect` callable and retries a query once on `OperationalError`/`InterfaceError` (used by the ml-service registry and the eval); the eval logs each finished item. Same bug would have hit the long-lived ml-service. No rows were lost (row-level resume; LLM calls cached).
+  - Commit `6f21cdc`.
+- P7.2d Fix: Groq 429 errors kept only 200 characters of the body, which cut off the limit name, so the eval couldn't always tell the rolling daily cap ("tokens per day (TPD)") from per-minute limits. Errors now keep 500 characters with the org id redacted. Day-1 status: the run stopped at the rolling daily cap after 23 of 556 rows (style-aug had used the earlier part of the 24 h window); resumed at 21:11 IST.
   - Commit: backfilled in the next commit.
   - Commit: backfilled in the next commit.
 ### In progress

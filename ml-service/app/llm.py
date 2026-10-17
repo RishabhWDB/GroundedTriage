@@ -12,6 +12,7 @@ accumulated in ``usage``. An eval-time response cache comes in P7.2.
 import json
 import logging
 import random
+import re
 import time
 from collections.abc import Callable, Sequence
 from typing import Protocol
@@ -139,7 +140,10 @@ class GroqLLM:
             else:
                 if resp.status_code == 200:
                     return self._parse(resp.json(), payload["max_tokens"])
-                last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                # 500 chars keep Groq's limit name ("tokens per day (TPD)"), which
+                # callers use to tell the daily cap from per-minute limits.
+                body = re.sub(r"org_[A-Za-z0-9]+", "org_…", resp.text[:500])
+                last_error = f"HTTP {resp.status_code}: {body}"
                 if resp.status_code == 400 and "json_validate_failed" in resp.text:
                     raise JSONModeError(last_error)
                 if resp.status_code not in RETRYABLE_STATUS:
