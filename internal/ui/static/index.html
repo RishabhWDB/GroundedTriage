@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GroundedTriage · Agent review</title>
+  <link rel="stylesheet" href="/ui/style.css">
+  <script src="/ui/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>GroundedTriage</h1>
+    <nav>
+      <a href="#/inbox" id="nav-inbox">Inbox</a>
+      <a href="#/dashboard" id="nav-dashboard">Dashboard</a>
+    </nav>
+    <div class="who">
+      <label>Reviewer <input id="reviewer" placeholder="your name" autocomplete="name"></label>
+      <button id="logout" type="button" class="link">Change API key</button>
+    </div>
+  </header>
+
+  <section id="login" hidden>
+    <form id="login-form" class="card narrow">
+      <h2>API key</h2>
+      <p>Enter the API key configured as <code>API_KEY</code> for the api service.</p>
+      <input id="api-key" type="password" required autocomplete="current-password">
+      <button type="submit">Continue</button>
+      <p id="login-error" class="error" hidden></p>
+    </form>
+  </section>
+
+  <main id="app" hidden>
+    <section id="inbox-view" hidden>
+      <form id="filters" class="toolbar">
+        <select name="status">
+          <option value="open">Open</option>
+          <option value="">All</option>
+          <option value="resolved">Resolved</option>
+          <option value="unrouted">Unrouted</option>
+        </select>
+        <select name="category">
+          <option value="">Any category</option>
+        </select>
+        <select name="urgency">
+          <option value="">Any urgency</option>
+          <option>critical</option><option>high</option><option>medium</option><option>low</option>
+        </select>
+        <input name="queue" placeholder="queue (e.g. billing)">
+        <button type="submit">Filter</button>
+        <span class="spacer"></span>
+        <label class="upload">Upload CSV <input id="csv-file" type="file" accept=".csv"></label>
+      </form>
+      <p id="upload-result" class="note" hidden></p>
+      <table id="inbox">
+        <thead>
+          <tr><th>P</th><th>SLA due</th><th>Subject</th><th>Sender</th><th>Category</th><th>Tier</th>
+            <th>Urgency</th><th>Queue</th><th>Draft</th><th>Faithfulness</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="pager">
+        <button id="prev" type="button">Previous</button>
+        <span id="page-info"></span>
+        <button id="next" type="button">Next</button>
+      </div>
+    </section>
+
+    <section id="ticket-view" hidden>
+      <p><a href="#/inbox">&larr; Inbox</a></p>
+      <div class="grid">
+        <div class="col">
+          <article class="card" id="ticket-card"></article>
+          <article class="card" id="classification-card"></article>
+          <article class="card" id="route-card"></article>
+          <article class="card" id="meeting-card" hidden></article>
+        </div>
+        <div class="col">
+          <article class="card" id="draft-card"></article>
+          <aside class="card" id="chunk-panel" hidden></aside>
+        </div>
+      </div>
+    </section>
+
+    <section id="dashboard-view" hidden>
+      <div id="tiles" class="tiles"></div>
+      <div id="charts" class="charts"></div>
+    </section>
+  </main>
+
+  <div id="toast" role="status" hidden></div>
+</body>
+</html>

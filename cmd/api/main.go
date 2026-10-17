@@ -1,7 +1,8 @@
 // Command api serves the Gin REST API and the agent review UI (Layer 5).
 //
 // GET /health (public; also reports ml-service health) and the REST API of
-// internal/api (P6.1, API key required: API_KEY). The UI arrives in P6.2.
+// internal/api (P6.1, API key required: API_KEY), plus the agent review UI
+// at /ui/ (P6.2; the browser asks for the same key).
 package main
 
 import (
@@ -21,6 +22,7 @@ import (
 	"github.com/RishabhWDB/GroundedTriage/internal/mlclient"
 	"github.com/RishabhWDB/GroundedTriage/internal/preprocess"
 	"github.com/RishabhWDB/GroundedTriage/internal/store"
+	"github.com/RishabhWDB/GroundedTriage/internal/ui"
 )
 
 func getenv(key, def string) string {
@@ -35,6 +37,7 @@ func newRouter(ml *mlclient.Client, srv *api.Server) *gin.Engine {
 	r.Use(gin.Recovery())
 	if srv != nil {
 		srv.Register(r)
+		ui.Register(r)
 	}
 	r.GET("/health", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)

@@ -68,7 +68,22 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Fast tier style-aug ablation (train + train_style_aug) | `make fast-tier-aug` → `models/fast_tier_aug/`, `results/fast_tier_aug/` |
 | **Final systems only:** score ood-test once (every run is logged) | `make ood-eval-test` → `results/ood/test/`, `results/ood/test_log.jsonl` |
 | REST API (needs `API_KEY` in `.env`, not the placeholder) | `make api`; e.g. `curl -H "X-API-Key: $KEY" localhost:8080/tickets?status=open`; spec in `docs/openapi.yaml` |
+| Agent review UI | `make api` (or `make dev`), open http://127.0.0.1:8080/ (manual test below) |
 | Evaluate the proposed system | not implemented yet (P7) |
+
+### Manual UI test (P6.2)
+
+1. Set a real `API_KEY` in `.env` (manual item 9). Run `make dev` (api + worker + ml-service) or just `make api`.
+2. Open http://127.0.0.1:8080/. It redirects to `/ui/`. Enter the API key, then your name in **Reviewer** (top right).
+3. **Inbox:** set the status filter to *All*. The 21 Mumbai demo tickets are listed, unclassified (the worker hasn't run on them). Check that filters and paging work, and that a breached SLA shows in red.
+4. **Upload:** use *Upload CSV* with `datasets/sample_emails.csv`. Expect "0 new" (all duplicates) on the demo DB.
+5. **Pipeline:** with `make ml` running, `go run ./cmd/worker -once` classifies, routes and drafts. **This writes to the demo DB.** Until the P8.1 demo seed exists, do it only if you're happy to change the demo rows.
+6. **Ticket view:** open a ticket. Check:
+   - the classification card shows the tier, low-confidence/possible-spam badges, urgency with *model* or *heuristic*, and model versions;
+   - the route card shows the queue, priority, SLA and reason; Meeting tickets show the meeting outcome;
+   - **Draft:** each `[n]` is a button that opens the source chunk (title, heading, URL, text). Faithfulness and unsupported claims are shown. An abstained draft shows the reason and has no text.
+7. **Actions:** *Edit* → change the text → *Save* (badge "edited") → *Approve* (status approved). On another draft, *Reject* with a note. Approve should be disabled on an unedited abstained draft.
+8. **Safety:** a ticket whose subject or body contains `<script>…</script>` must show it as literal text.
 
 ## 3. Status board
 
@@ -357,6 +372,11 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - API-key middleware (`X-API-Key` or Bearer, constant-time compare) and a consistent JSON error shape;
   - `docs/openapi.yaml`, with a test that every registered route is documented.
   - `cmd/api` wires it to the DB and refuses to start without a real `API_KEY`.
+  - Commit `36b5d5d`.
+- P6.2 Agent review UI:
+  - `internal/ui` (embedded static HTML/CSS/JS, served at `/ui/`, `/` redirects): API-key login (localStorage); inbox (priority/SLA order, filters, breached SLA highlighted, paging, CSV upload); ticket view (ticket, classification incl. tier and model-vs-heuristic urgency, spam score, route, meeting, draft with clickable [n] citations → source chunk panel, faithfulness, unsupported and all claims, approve/edit/reject).
+  - Strict CSP, data only via textContent.
+  - Integration test drives the UI's calls against seeded data; manual test in §2.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -364,7 +384,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P6.2 Agent review UI
 - P6.3 Outbound reply
 - P6.4 Dashboard
 - P7.1 Classification evaluation: baseline vs proposed
@@ -525,6 +544,12 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P6.2): Review UI design:
+  - Plain HTML/CSS/JS, no framework or build step, embedded in the api binary (`go:embed`), so there's nothing to deploy separately. Hash routing: `#/inbox`, `#/tickets/<id>`, `#/dashboard`.
+  - **Security:** ticket and draft text is untrusted and only ever inserted via `textContent` (a test fails if `app.js` uses an HTML sink). CSP `default-src 'self'; script-src 'self'` (no inline scripts), `nosniff`, `no-referrer`, `frame-ancestors 'none'`. Chunk URLs are linked only when they are http(s), with `noopener noreferrer`.
+  - The API key and reviewer name live in the browser's localStorage. The key is sent as `X-API-Key`; a 401 sends the agent back to the key prompt.
+  - Citations: the drafter numbered the retrieved chunks [1..k] in retrieval order; `GET /tickets/:id/draft` returns that number per chunk, so `[n]` in the text maps to the exact source the drafter saw.
+  - Button rules mirror the store's transitions (approve disabled for an unedited abstained draft). The server enforces them anyway (409).
 - 2026-10-17 (P6.1b): API conventions:
   - The paths are exactly the spec's (no version prefix). `GET /health` is public; everything else needs `API_KEY` (`X-API-Key` or `Authorization: Bearer`). With no key configured, every protected route answers 401. `cmd/api` also refuses to start when `API_KEY` is empty or still `change-me`.
   - Errors are `{"error": {"code", "message"}}` with codes bad_request / unauthorized / not_found / conflict (disallowed draft transition) / payload_too_large / internal.
