@@ -90,3 +90,26 @@ def test_dense_and_hybrid_search(kb_schema):
     assert kw.mode == "hybrid" and kw.chunks[0].doc_id == "d-domain"
     assert all(0 <= c.score <= 1.0001 for c in kw.chunks)  # cosine kept even for keyword-only hits
     assert r.search("   ", k=3).chunks == []
+
+
+class ReverseReranker:
+    """Puts the dense order upside down, to prove the reranker decides the order."""
+
+    def rerank(self, query, passages):
+        return list(range(len(passages)))[::-1]
+
+
+@pytest.mark.integration
+def test_reranker_orders_but_scores_stay_cosine(kb_schema):
+    plain = Retriever(kb_schema, topic_encode).search("refund", k=3)
+    rr = Retriever(kb_schema, topic_encode, reranker=ReverseReranker(), rerank_candidates=3)
+    res = rr.search("refund", k=3)
+    assert res.mode == "dense+rerank"
+    assert [c.chunk_id for c in res.chunks] == [c.chunk_id for c in plain.chunks][::-1]
+    assert res.max_score == plain.max_score  # cosine kept, so the gate's floor is unchanged
+    assert (
+        Retriever(kb_schema, topic_encode, reranker=ReverseReranker())
+        .search("refund", k=3, hybrid=True)
+        .mode
+        == "hybrid"
+    )  # hybrid ignores the reranker

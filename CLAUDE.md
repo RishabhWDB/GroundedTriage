@@ -342,10 +342,14 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `pipeline.Replier` (retrieve → skip drafting below the floor → draft → verify → store; abstained → `human_review` with the reason; audit `reply.grounded|abstained`);
   - the worker runs it last (`RETRIEVAL_HYBRID`).
   - End-to-end integration test with a stubbed ml-service.
+  - Commit `bb191c9`.
+- P5.6 Optional cross-encoder reranker (no LLM tokens):
+  - `rag/reranker.py` (ms-marco-MiniLM-L-6-v2, lazy, fp16 on MPS); the retriever reranks the dense top-20 when given a reranker (cosine scores kept); `RETRIEVAL_RERANK` flag, **off** (it was worse);
+  - `eval/wixqa_splits.py` fixes the demo / P7.2-dev / P7.2-test question split.
   - Commit: backfilled in the next commit.
 
 ### In progress
-- none. Phase 5 is done; waiting for Arya's Phase 5 review. Leftover gpt-oss budget: live re-check of the reasoning-off judge (P5.4), then style-aug (P3.8b).
+- Phase 6 (serving and review). Leftover gpt-oss budget: live re-check of the reasoning-off judge (P5.4), then style-aug (P3.8b).
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
@@ -509,6 +513,21 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (Phase 5 review):
+  - **Q1, demo in the Wix domain; no custom KB.** The docs and report frame the KB as per-deployment content (any docs folder via `python -m rag.kb --folder ...`).
+    - **P8 demo ticket CSV (~25 rows):** ~15 real WixQA user questions rewritten as support emails (facts kept, tone varied incl. informal); ~4 deliberately out-of-KB tickets (abstention); ~2 meeting requests; ~2 spam; ~2 billing. Record which rows are expected to ground vs abstain.
+    - The ~15 WixQA rows come only from the **`demo` split** of `eval/wixqa_splits.py` (20 expert-written questions); P7.2 never evaluates on them.
+  - **Q2, keep the 95%-answerable floor rule.** P7.2 must include **out-of-KB questions** and report **abstain precision/recall at the chosen floor**, plus a small floor sweep (85/90/95/98% answerable kept) on **`p72_dev`** only. The floor is never moved based on the final eval (`p72_test`).
+  - **Q3, qwen with reasoning off until P7.2's κ.** If κ against Arya's labels is < 0.6, the judge is revisited then.
+  - **P7.2 sizing (plan; recompute and print expected days before starting):** ~150 answerable `p72_test` questions × grounded drafts + the same 150 × ungrounded (SCRIBE-style) drafts + ~50 out-of-KB questions.
+    - Rough cost: ~600 gpt-oss calls × ~1.5k tokens ≈ 0.9M tokens ≈ **~5 days** at the 200k/day cap.
+    - Plus ~300 judge calls at ~1 per minute (qwen 1,000 output tokens/min) ≈ 5–6 h of judge time, spread over the same days.
+    - Everything is cached and resumable (drafts and judgements keyed by request sha256).
+- 2026-10-17 (P5.6): **Cross-encoder reranker: rejected as default** (rule: keep only if recall@1 improves ≥ 5 pts without blowing memory).
+  - `cross-encoder/ms-marco-MiniLM-L-6-v2` reranking the dense top-20 (cosine scores kept, so the floor is unchanged) **lowered** recall@1: expert-written 0.43 → 0.36, simulated 0.34 → 0.29. MRR 0.561 → 0.5124 and 0.471 → 0.4235.
+  - Latency p50 154 → 457 ms; model load 18.55 s on MPS. Peak RSS for the whole eval run with the reranker was 557.1 MB, against 626–633 MB in the earlier runs without it: no visible increase, though RSS under ~6.6 GB of swap is noisy.
+  - A plausible cause: MS MARCO web-search relevance doesn't match WixQA's how-to phrasing, and bge already ranks well. It stays behind `RETRIEVAL_RERANK=true` (default off).
+- 2026-10-17 (P5.6): **Fixed WixQA splits** (`eval/wixqa_splits.py`, seed `wixqa-splits-v1`, sha256 order, independent of file order): `demo` = 20 expert-written questions (the P8 demo pool); the rest are split 40/60 into `p72_dev` (152) and `p72_test` (228), per question set.
 - 2026-10-17 (P5.5): Reply step (Go):
   - Runs for tickets whose **current route action is `reply`** and that have no `reply_drafts` row (10 per run; each costs up to 3 LLM calls).
   - Retrieve (k=5, dense unless `RETRIEVAL_HYBRID=true`). **No chunks, or `below_floor` → stored as abstained with no drafting or judging** (no tokens).
@@ -877,6 +896,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
   - Latency (embed + SQL, Mac → Mumbai): dense p50 144 ms / p95 152 ms (the first query, with embedder load, 5.9 s); hybrid p50 184 / p95 216 ms.
   - Best top-5 cosine: answerable WixQA questions median 0.8004 (5% quantile 0.7177); 400 Tobi-Bueck val tickets (out of domain for a Wix KB) median 0.6703 (95% quantile 0.7397).
+- **Reranker (P5.6, rejected as default):** dense+rerank recall@1/3/5 / MRR, expert-written 0.36 / 0.61 / 0.75 / 0.5124 (dense: 0.43 / 0.645 / 0.77 / 0.561); simulated 0.29 / 0.52 / 0.625 / 0.4235. Latency p50 457 ms vs 154 ms.
 - **Spam filter before → after P3.14 (spam_test, n=4,388; thresholds re-derived on spam_val by the same rules):**
 
   | rule | mute threshold | spam recall (mute / +review) | support FPR | ham FPR | ham in review | AP |

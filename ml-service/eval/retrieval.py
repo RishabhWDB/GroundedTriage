@@ -57,10 +57,13 @@ def aggregate(rows: list[dict], ks=KS) -> dict:
     return out
 
 
-def evaluate(retriever: Retriever, kinds=("expertwritten", "simulated"), modes=("dense", "hybrid")):
+def evaluate(retriever: Retriever, kinds=("expertwritten", "simulated"), modes=("dense", "hybrid"),
+             reranker=None):  # fmt: skip
+    """modes: dense | hybrid | dense+rerank (the last needs `reranker`)."""
     m: dict = {"depth": DEPTH, "results": {}, "latency_ms": {}}
     for mode in modes:
         lat = []
+        retriever.reranker = reranker if mode == "dense+rerank" else None
         for kind in kinds:
             rows = []
             for qa in load_wixqa_qa(kind):
@@ -72,6 +75,7 @@ def evaluate(retriever: Retriever, kinds=("expertwritten", "simulated"), modes=(
             m["results"][f"{mode}/{kind}"] = aggregate(rows)
             logger.info("%s/%s: %s", mode, kind, m["results"][f"{mode}/{kind}"])
         m["latency_ms"][mode] = latency_summary(lat)
+    retriever.reranker = None
     return m
 
 
@@ -121,6 +125,13 @@ def report_markdown(m: dict) -> str:
     lines += ["", "Query latency (embed + SQL from this Mac to Supabase Mumbai, ms):", ""]
     for mode, lat in m["latency_ms"].items():
         lines.append(f"- {mode}: p50 {lat['p50_ms']}, p95 {lat['p95_ms']}, max {lat['max_ms']}")
+    if "reranker" in m:
+        rr = m["reranker"]
+        lines += [
+            "",
+            f"Reranker `{rr['model']}` on {rr['device']}: dense top-{rr['candidates']} reranked; "
+            f"load {rr['load_s']} s (peak RSS of the whole run below).",
+        ]
     if "floor" in m:
         f = m["floor"]
         lines += [
@@ -153,7 +164,16 @@ def main(argv: list[str] | None = None) -> int:
     conn = connect(get_settings().database_url or None)
     emb = Embedder(max_length=KB_MAX_LENGTH)
     retriever = Retriever(conn, emb.encode)
-    m = evaluate(retriever)
+    from rag.reranker import CrossEncoderReranker
+
+    reranker = CrossEncoderReranker()
+    m = evaluate(retriever, modes=("dense", "hybrid", "dense+rerank"), reranker=reranker)
+    m["reranker"] = {
+        "model": reranker.model_name,
+        "candidates": retriever.rerank_candidates,
+        "device": reranker.device,
+        "load_s": round(reranker.load_s or 0, 2),
+    }
     import pandas as pd
 
     from data.build import OUT_DIR

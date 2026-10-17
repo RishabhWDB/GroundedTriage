@@ -38,6 +38,7 @@ class Registry:
         self._llm = None
         self._judge = None
         self._embedder = None
+        self._reranker = None
         self._db = None
         # One psycopg connection, used under this lock: FastAPI runs sync handlers in threads.
         self.db_lock = threading.Lock()
@@ -99,7 +100,18 @@ class Registry:
                 self._db = connect(self.settings.database_url)
         from rag.retriever import Retriever
 
-        return Retriever(self._db, self.embedder().encode)
+        return Retriever(self._db, self.embedder().encode, reranker=self.reranker())
+
+    def reranker(self):
+        """The cross-encoder when RETRIEVAL_RERANK is on (lazy, one instance), else None."""
+        if not self.settings.retrieval_rerank:
+            return None
+        with self._lock:
+            if self._reranker is None:
+                from rag.reranker import CrossEncoderReranker
+
+                self._reranker = CrossEncoderReranker()
+            return self._reranker
 
     def llm(self):
         """The drafter LLM (Groq), built on first use; None without GROQ_API_KEY."""

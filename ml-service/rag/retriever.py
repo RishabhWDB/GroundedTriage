@@ -48,7 +48,7 @@ from kb_chunks where id = any(%(ids)s)"""
 @dataclass
 class RetrievalResult:
     chunks: list[RetrievedChunk]
-    mode: str  # dense | hybrid
+    mode: str  # dense | dense+rerank | hybrid
 
     @property
     def max_score(self) -> float:
@@ -64,13 +64,20 @@ def rrf(rankings: list[list[str]], k: int = RRF_K) -> list[str]:
     return sorted(score, key=lambda c: -score[c])
 
 
+RERANK_CANDIDATES = 20  # dense top-N handed to the cross-encoder (P5.6)
+
+
 class Retriever:
-    def __init__(self, conn, encode_query, ef_search: int = 100):
+    def __init__(self, conn, encode_query, ef_search: int = 100, reranker=None,
+                 rerank_candidates: int = RERANK_CANDIDATES):  # fmt: skip
         """conn: a psycopg connection (search_path incl. extensions);
-        encode_query: list[str] -> (n, 384) normalised vectors."""
+        encode_query: list[str] -> (n, 384) normalised vectors;
+        reranker: optional, with .rerank(query, passages) -> indices best first."""
         self.conn = conn
         self.encode_query = encode_query
         self.ef_search = ef_search
+        self.reranker = reranker
+        self.rerank_candidates = rerank_candidates
 
     def _embed(self, query: str) -> str:
         return vector_literal(self.encode_query([QUERY_INSTRUCTION + query])[0])
@@ -81,13 +88,18 @@ class Retriever:
         q = self._embed(query)
         with self.conn.cursor() as cur:
             cur.execute(f"SET hnsw.ef_search = {int(self.ef_search)}")
-            n = CANDIDATES if hybrid else k
+            rerank = self.reranker is not None and not hybrid
+            n = CANDIDATES if hybrid else max(k, self.rerank_candidates) if rerank else k
             cur.execute(DENSE_SQL, {"q": q, "n": n})
             dense = {r[0]: r for r in cur.fetchall()}
             if not hybrid:
-                rows = list(dense.values())[:k]
+                rows = list(dense.values())
                 self.conn.commit()
-                return RetrievalResult([self._chunk(r) for r in rows], "dense")
+                if rerank:  # the cross-encoder orders; chunks keep their cosine scores
+                    order = self.reranker.rerank(query, [r[4] for r in rows])
+                    rows = [rows[i] for i in order]
+                mode = "dense+rerank" if rerank else "dense"
+                return RetrievalResult([self._chunk(r) for r in rows[:k]], mode)
             cur.execute(KEYWORD_SQL, {"text": query, "n": CANDIDATES})
             keyword = [r[0] for r in cur.fetchall()]
             fused = rrf([list(dense), keyword])[:k]

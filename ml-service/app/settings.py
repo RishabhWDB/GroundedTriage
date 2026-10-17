@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     ml_port: int = 8001
     # Postgres (Supabase Session pooler) for KB retrieval (P5).
     database_url: str = ""
+    # Cross-encoder reranking of the dense top-20 (P5.6). Off: it lowered
+    # recall@1 on WixQA (0.43 -> 0.36 expert-written) and tripled latency.
+    retrieval_rerank: bool = False
     models_dir: Path = REPO_ROOT / "models"
 
 
