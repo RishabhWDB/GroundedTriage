@@ -377,6 +377,11 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `internal/ui` (embedded static HTML/CSS/JS, served at `/ui/`, `/` redirects): API-key login (localStorage); inbox (priority/SLA order, filters, breached SLA highlighted, paging, CSV upload); ticket view (ticket, classification incl. tier and model-vs-heuristic urgency, spam score, route, meeting, draft with clickable [n] citations → source chunk panel, faithfulness, unsupported and all claims, approve/edit/reject).
   - Strict CSP, data only via textContent.
   - Integration test drives the UI's calls against seeded data; manual test in §2.
+  - Commit `1f8bc6a`.
+- P6.3 Outbound reply:
+  - `internal/outbound.Sender` (worker step after replies): claim approved drafts → `Source.Reply` of the ticket's adapter with the draft's idempotency key → `sent` + route resolved + audit `reply.sent`; known failures are retried (≤ 5 attempts); stale claims are flagged, never resent;
+  - `store.Outbound`; migration **00011** (`send_started_at`, `send_attempts`; applied);
+  - `ReplyDraft.idempotency_key` in the contract (Go + Python); the CSV adapter skips a key it already wrote, the email Message-ID comes from the key, Zendesk gets an `Idempotency-Key` header.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -384,7 +389,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P6.3 Outbound reply
 - P6.4 Dashboard
 - P7.1 Classification evaluation: baseline vs proposed
 - P7.2 RAG evaluation
@@ -544,6 +548,16 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P6.3): **Exactly one send per approval, and never a blind resend.**
+  - The sender **claims** a draft first: a conditional `UPDATE … FOR UPDATE SKIP LOCKED` sets `send_started_at`. Two workers never claim the same draft (an integration test runs two senders concurrently: 6 approvals → 6 sends).
+  - It then calls the adapter. Success → `status=sent`, `sent_at`, and the ticket's route `resolved`, in one transaction. A **known** adapter error → `send_error` recorded and the claim released, so the next run retries, up to `MaxAttempts` (5).
+  - **A claim older than the lease (10 min) means the process died mid-send.** The reply may already have gone out, so the draft is flagged `send outcome unknown …` (audit `reply.send_unknown`) and **never resent automatically**; a human checks the channel. At-most-once beats a duplicate email to a customer.
+  - If the adapter succeeds but recording it fails, the claim is left in place, so the lease rule reports it instead of resending.
+  - The idempotency key `draft-<id>` (fixed at approval) is also passed to every adapter:
+    - CSV: writes a key at most once (new `IdempotencyKey` column; an old-format `replies.csv` without it is an error, so move it aside).
+    - Email: `Message-ID: <draft-<id>@domain>`, so receivers can dedupe.
+    - Zendesk: `Idempotency-Key` header. Zendesk's support for it on ticket updates isn't verified; the claim protocol is the main guarantee.
+  - The reply goes through the adapter named by `Ticket.Source` (one enabled source per type, P1.1). A ticket whose source isn't enabled fails with a clear `send_error`.
 - 2026-10-17 (P6.2): Review UI design:
   - Plain HTML/CSS/JS, no framework or build step, embedded in the api binary (`go:embed`), so there's nothing to deploy separately. Hash routing: `#/inbox`, `#/tickets/<id>`, `#/dashboard`.
   - **Security:** ticket and draft text is untrusted and only ever inserted via `textContent` (a test fails if `app.js` uses an HTML sink). CSP `default-src 'self'; script-src 'self'` (no inline scripts), `nosniff`, `no-referrer`, `frame-ancestors 'none'`. Chunk URLs are linked only when they are http(s), with `noopener noreferrer`.

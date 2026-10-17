@@ -119,6 +119,8 @@ class ReplyDraft(BaseModel):
     faithfulness_score: float | None = Field(default=None, ge=0, le=1)
     unsupported_claims: list[str] = Field(default_factory=list)
     status: DraftStatus
+    # Fixed at approval ("draft-<id>"); adapters use it to recognise a retried send (P6.3).
+    idempotency_key: str | None = None
 
 
 class Health(BaseModel):

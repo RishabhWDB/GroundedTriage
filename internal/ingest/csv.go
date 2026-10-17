@@ -150,9 +150,10 @@ func (s *CSVSource) Fetch(ctx context.Context, since time.Time) ([]model.Ticket,
 	return out, nil
 }
 
-var replyHeader = []string{"ExternalID", "To", "Subject", "Body", "Citations", "SentAt"}
+var replyHeader = []string{"ExternalID", "To", "Subject", "Body", "Citations", "SentAt", "IdempotencyKey"}
 
-// Reply appends the draft to ReplyPath (header written on first use).
+// Reply appends the draft to ReplyPath (header written on first use). A
+// draft whose IdempotencyKey is already in the file is not written again.
 func (s *CSVSource) Reply(ctx context.Context, t model.Ticket, d model.ReplyDraft) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -161,6 +162,15 @@ func (s *CSVSource) Reply(ctx context.Context, t model.Ticket, d model.ReplyDraf
 	defer s.mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(s.ReplyPath), 0o755); err != nil {
 		return err
+	}
+	if d.IdempotencyKey != "" {
+		sent, err := s.keyWritten(d.IdempotencyKey)
+		if err != nil {
+			return err
+		}
+		if sent {
+			return nil
+		}
 	}
 	_, statErr := os.Stat(s.ReplyPath)
 	f, err := os.OpenFile(s.ReplyPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
@@ -180,10 +190,49 @@ func (s *CSVSource) Reply(ctx context.Context, t model.Ticket, d model.ReplyDraf
 	}
 	if err := w.Write([]string{
 		t.ExternalID, t.Sender, subject, d.Body,
-		strings.Join(d.Citations, " "), time.Now().UTC().Format(time.RFC3339),
+		strings.Join(d.Citations, " "), time.Now().UTC().Format(time.RFC3339), d.IdempotencyKey,
 	}); err != nil {
 		return err
 	}
 	w.Flush()
 	return w.Error()
+}
+
+// keyWritten reports whether a reply with this idempotency key is in ReplyPath.
+func (s *CSVSource) keyWritten(key string) (bool, error) {
+	f, err := os.Open(s.ReplyPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	r := csv.NewReader(f)
+	r.FieldsPerRecord = -1
+	header, err := r.Read()
+	if err != nil {
+		return false, nil // empty file
+	}
+	col := -1
+	for i, h := range header {
+		if h == "IdempotencyKey" {
+			col = i
+		}
+	}
+	if col < 0 {
+		return false, fmt.Errorf("csv: %s has no IdempotencyKey column (written by an older version); move it aside", s.ReplyPath)
+	}
+	for {
+		rec, err := r.Read()
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if col < len(rec) && rec[col] == key {
+			return true, nil
+		}
+	}
 }

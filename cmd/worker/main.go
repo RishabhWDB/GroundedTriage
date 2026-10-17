@@ -5,7 +5,8 @@
 // escalates SLA breaches (layer 3), and books or proposes meetings for
 // `schedule` routes (P4.4; MEETING_CALENDAR=google|fake|off), and drafts
 // grounded replies for `reply` routes (P5.5: retrieve -> draft -> verify;
-// abstentions go to human_review). Sending happens after agent approval (P6).
+// abstentions go to human_review), and sends agent-approved drafts through
+// the ticket's source adapter exactly once (P6.3).
 //
 //	go run ./cmd/worker            # poll every WORKER_POLL_INTERVAL (default 60s)
 //	go run ./cmd/worker -once      # one poll, then exit
@@ -27,6 +28,7 @@ import (
 	"github.com/RishabhWDB/GroundedTriage/internal/envfile"
 	"github.com/RishabhWDB/GroundedTriage/internal/ingest"
 	"github.com/RishabhWDB/GroundedTriage/internal/mlclient"
+	"github.com/RishabhWDB/GroundedTriage/internal/outbound"
 	"github.com/RishabhWDB/GroundedTriage/internal/pipeline"
 	"github.com/RishabhWDB/GroundedTriage/internal/preprocess"
 	"github.com/RishabhWDB/GroundedTriage/internal/routing"
@@ -114,6 +116,7 @@ func main() {
 		Audit:  store.Audit{Pool: pool},
 		Hybrid: os.Getenv("RETRIEVAL_HYBRID") == "true",
 	}
+	sender := &outbound.Sender{Queue: store.Outbound{Pool: pool}, Sources: sources, Audit: store.Audit{Pool: pool}}
 
 	// After each poll: classify, route, escalate, schedule meetings. A failing step is logged and
 	// the next one still runs (routing also covers skipped tickets).
@@ -134,6 +137,9 @@ func main() {
 		}
 		if _, err := replier.ReplyPending(ctx); err != nil {
 			slog.Error("worker: replies", "err", err)
+		}
+		if _, err := sender.SendApproved(ctx); err != nil {
+			slog.Error("worker: outbound", "err", err)
 		}
 	}
 
@@ -170,7 +176,9 @@ func main() {
 		rp, perr := replier.ReplyPending(ctx)
 		slog.Info("worker: replies", "pending", rp.Pending, "grounded", rp.Grounded, "abstained", rp.Abstained,
 			"failed", rp.Failed, "err", perr)
-		if failed || err != nil || rerr != nil || eerr != nil || merr != nil || perr != nil {
+		ss, serr := sender.SendApproved(ctx)
+		slog.Info("worker: outbound", "claimed", ss.Claimed, "sent", ss.Sent, "failed", ss.Failed, "stale", ss.Stale, "err", serr)
+		if failed || err != nil || rerr != nil || eerr != nil || merr != nil || perr != nil || serr != nil {
 			os.Exit(1)
 		}
 		return

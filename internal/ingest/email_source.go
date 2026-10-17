@@ -144,7 +144,11 @@ func BuildReply(from string, t model.Ticket, d model.ReplyDraft, now time.Time) 
 	hdr("To", t.Sender)
 	hdr("Subject", mime.QEncoding.Encode("utf-8", headerSafe(replySubject(t, d))))
 	hdr("Date", now.UTC().Format(time.RFC1123Z))
-	hdr("Message-ID", "<"+hex.EncodeToString(idBytes)+"@"+domain+">")
+	msgID := hex.EncodeToString(idBytes)
+	if d.IdempotencyKey != "" { // a retried send carries the same Message-ID
+		msgID = headerSafe(d.IdempotencyKey)
+	}
+	hdr("Message-ID", "<"+msgID+"@"+domain+">")
 	if original != "" {
 		hdr("In-Reply-To", original)
 	}

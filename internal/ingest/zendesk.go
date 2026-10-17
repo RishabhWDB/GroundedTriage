@@ -148,7 +148,11 @@ func (z *ZendeskSource) Reply(ctx context.Context, t model.Ticket, d model.Reply
 	body := map[string]any{"ticket": map[string]any{
 		"comment": map[string]any{"body": d.Body, "public": true},
 	}}
-	return z.do(ctx, http.MethodPut, "/api/v2/tickets/"+t.ExternalID+".json", body, nil, false)
+	var hdr map[string]string
+	if d.IdempotencyKey != "" { // lets Zendesk drop a retried request
+		hdr = map[string]string{"Idempotency-Key": d.IdempotencyKey}
+	}
+	return z.do(ctx, http.MethodPut, "/api/v2/tickets/"+t.ExternalID+".json", body, nil, false, hdr)
 }
 
 // ZendeskError is a non-2xx API response.
@@ -162,7 +166,8 @@ func (e *ZendeskError) Error() string { return fmt.Sprintf("zendesk: HTTP %d: %s
 // do sends one API request. 429 is always retried (honouring Retry-After);
 // 5xx and transport errors only when idempotent (a failed PUT may have
 // applied, and retrying could post the comment twice).
-func (z *ZendeskSource) do(ctx context.Context, method, path string, in, out any, idempotent bool) error {
+func (z *ZendeskSource) do(ctx context.Context, method, path string, in, out any, idempotent bool,
+	headers ...map[string]string) error {
 	var payload []byte
 	if in != nil {
 		var err error
@@ -186,6 +191,11 @@ func (z *ZendeskSource) do(ctx context.Context, method, path string, in, out any
 		}
 		req.SetBasicAuth(z.Email+"/token", z.APIToken)
 		req.Header.Set("Accept", "application/json")
+		for _, h := range headers {
+			for k, v := range h {
+				req.Header.Set(k, v)
+			}
+		}
 		if payload != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}

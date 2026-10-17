@@ -57,4 +57,7 @@ type ReplyDraft struct {
 	FaithfulnessScore *float64 `json:"faithfulness_score,omitempty"`
 	UnsupportedClaims []string `json:"unsupported_claims"`
 	Status            string   `json:"status"` // grounded | abstained | approved | sent | rejected
+	// IdempotencyKey is fixed at approval ("draft-<id>"); adapters use it so a
+	// retried send can be recognised (P6.3).
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
