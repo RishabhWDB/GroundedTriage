@@ -35,6 +35,7 @@ class Registry:
         self.fast_reason = ""
         self._spam: SpamFilter | None = None
         self._spam_tried = False
+        self._llm = None
 
     @property
     def deep(self) -> DeepTier:
@@ -71,6 +72,15 @@ class Registry:
                     self.settings.models_dir / "spam_filter", self.settings.spam_rule
                 )
             return self._spam
+
+    def llm(self):
+        """The drafter LLM (Groq), built on first use; None without GROQ_API_KEY."""
+        with self._lock:
+            if self._llm is None and self.settings.groq_api_key:
+                from app.llm import build_llm
+
+                self._llm = build_llm(self.settings, "draft")
+            return self._llm
 
     def cascade(self) -> Cascade | None:
         fast = self.fast()

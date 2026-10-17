@@ -294,6 +294,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `pipeline.Router` (`RoutePending`, `EscalateBreached`, audit `route.run` / `sla.escalated` / `sla.breached_p1`);
   - the worker classifies → routes → escalates after each poll and hot-reloads the rules.
   - Fake-clock unit tests and a DB integration test.
+  - Commit `c110e3a`.
+- P4.4a Meeting extraction: `app/meeting.py` + `POST /extract_meeting` (gpt-oss-120b, JSON mode, temperature 0; relative dates resolved against `received_at`; validated: unparseable, past or >1-year starts, durations outside 5–480 min and unknown timezones become null with a note). The registry builds the LLM lazily (503 without `GROQ_API_KEY`). Tested with `FakeLLM`; **not run live** (that day's gpt-oss TPD was spent on style-aug).
   - Commit: backfilled in the next commit.
 
 ### In progress
