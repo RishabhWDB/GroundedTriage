@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     torch_device: str = ""
     # fp16 inference on MPS for the fine-tuned transformers (8 GB RAM).
     model_fp16: bool = True
+    # Spam filter operating point: a key of models/spam_filter/model_card.json "rules".
+    spam_rule: str = "support"
     ml_port: int = 8001
     models_dir: Path = REPO_ROOT / "models"
 

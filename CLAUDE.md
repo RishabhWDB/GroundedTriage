@@ -47,6 +47,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Data audit (synthetic diversity, train→test near-dups, subject shortcut) | `make data-audit` → `results/data_audit/report.md` |
 | Hard Meeting stress-test CSV (Groq; refuses to overwrite a reviewed file without `--force`) | `make stress-set` → `datasets/stress/meeting_stress.csv` |
 | Informal-style paraphrases of 25% of train (Groq; resumable; days on the free tier) | `make style-aug` (`--recheck` drops near-copies) → `datasets/synthetic/style_aug.jsonl`, then `make data` |
+| Train the binary spam filter and pick its thresholds on spam_val (~1 min) | `make spam-filter` → `models/spam_filter/`, `results/spam_filter/` |
 | Bundle splits for the GPU PC | `make export-splits` → `datasets/export/groundedtriage-splits-<test hash>.tar.gz` |
 | Regenerate synthetic meeting emails (Groq; cached, resumable) | `make synthetic-meetings` |
 | Install torch + transformers for the deep tier / urgency model | `make setup-models` |
@@ -243,6 +244,11 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P3.8 Style augmentation generator (data in a follow-up commit):
   - `data/style_aug.py` (`make style-aug`, resumable): 25% of each topic train class (3,978 rows), seeded order, gpt-oss-120b informal paraphrases, 8 per call; near-copy check (body cosine > 0.9 rejected); `--recheck`; JSON-mode failures retried;
   - `data.build.style_aug_split` → `train_style_aug.parquet` (rows whose source is in train, labels checked).
+  - Commit `707b2e7`.
+- P3.9 Binary spam filter:
+  - `triage/spam_filter.py` (`SpamFilter.load`, spam/review/ham decision) and `triage/train_spam_filter.py` (`make spam-filter`, ~1 min) → `models/spam_filter/` + `results/spam_filter/`;
+  - two stored threshold rules (`support`, the default, and `support_and_ham`), selectable with `SPAM_RULE`;
+  - the meeting/style parser now rejects non-object email entries (a crash in the style-aug run).
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -250,7 +256,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### To do
 - P3.8a Commit the generated `datasets/synthetic/style_aug.jsonl` and rebuild/re-export (when the Groq run finishes; several days on the free tier)
-- P3.9 Binary spam filter (train, threshold at ≤ 1% support FPR on val, review band)
 - P3.10 Cascade + contract: spam filter first (`tier=spam_filter`, possible-spam flag), migration
 - P3.11 OOD evaluation set (Twitter customer support, team-written template, non-SpamAssassin spam) + `make ood-eval` gate
 - P3.12 Re-run the fast tier, urgency eval and OOD eval; before/after; updated Phase 3 review
@@ -385,6 +390,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P3.9): Spam filter:
+  - Same features as the fast tier (word 1–2 + char_wb 3–5 TF-IDF), binary LR `class_weight="balanced"`, no calibration (only the ranking and thresholds matter). C from {1, 4, 16} by **val average precision**: C=16.
+  - Fitted on `spam_train`: 1,076 spam vs 2,862 ham + 16,538 support tickets.
+  - **Thresholds (rule `support`, your spec, the default):** mute = the lowest score with **support-ticket FPR ≤ 1%** on spam_val; review = the lowest with support FPR ≤ 5%. Support = Tobi-Bueck + synthetic meetings; ham is reported separately. Scores are float64 (float32 made the "one ulp above" threshold miss by one ticket: 36/3,545).
+  - **Finding:** support tickets (LLM-written) almost all score near 0, so the 1% rule sets mute at **0.0195**. At that point the filter mutes **20% of ham** (human-written legitimate mail) on val (19.7%) and test (21.0%). Real customers write like humans, so this rule likely over-mutes them.
+  - **Alternative rule `support_and_ham`** (stored in the card, `SPAM_RULE=support_and_ham`): the same FPR limits on support **and** ham. Mute ≥ 0.4365, review ≥ 0.0941. On test: spam recall 0.978 at mute (0.996 with review), support FPR 0.0, ham FPR 0.021. **Not adopted yet:** your rule stays the default until the OOD eval (P3.11/P3.12) measures both on human-written customer mail; the Phase 3 review asks you to choose.
+  - Spam test numbers are reported for this separate component (its own splits); the thresholds and C were chosen on spam_val only.
 - 2026-10-17 (P3.8): Style augmentation:
   - Selection: 25% of each class of the capped topic `train` (`select`, seed **2026**) = **3,978 rows**, shuffled so any prefix is a stratified sample.
   - Prompt fixed in the module: keep the same request, product and facts; replace `<name>`/`<acc_num>`-style tokens with invented values; no stock phrases. Each row gets a seeded style spec: register (6), length (2), greeting (5), typos (3), subject style (3).
@@ -610,6 +622,9 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 ## 8. Results so far
 
 - Ungrounded hallucination example: `results/examples/ungrounded_hallucination_01.md`. The SCRIBE baseline told a customer "I've processed a refund … within 3–5 business days" with no grounding. P7.2 collects more automatically.
+- **Spam filter (P3.9, `results/spam_filter/`, `spam-20261017022247-319c633f`):** AP 0.9929 / ROC-AUC 0.9996 on spam_test (val 0.9958 / 0.9998).
+  - Rule `support` (default; mute ≥ 0.0195, review ≥ 0.0052): spam recall 1.0 at mute; support FPR 0.0099 (val 0.0099); support in the review band 0.0449; **ham muted 0.2104** + 0.2594 in review (test).
+  - Rule `support_and_ham` (mute ≥ 0.4365, review ≥ 0.0941): test spam recall 0.9783 at mute / 0.9957 with review; support FPR 0.0; ham FPR 0.0212; ham in review 0.0424.
 - Data audit after the P3.7 rebuild: 0 near-duplicate pairs train-pool~val, train-pool~test and val~test across both tasks (29,252-row corpus). Topic diagnostic TF-IDF+LR on val: macro-F1 0.777, accuracy 0.728 (5 classes).
 - **Fast tier on val (P3.1, `results/fast_tier/`, `fast-20261016012651-6f7999df`; val only, test untouched):**
   - Macro-F1 **0.825**, accuracy 0.788 (n=3,775). Real only = without Meeting (n=3,715): macro-F1 **0.790**, accuracy 0.785.

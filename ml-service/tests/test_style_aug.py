@@ -72,6 +72,13 @@ def test_generate_writes_resumes_and_copies_labels(tmp_path):
     assert st2["already_done"] == BATCH_SIZE + 2 and st2["total_done"] == 15  # 25% of 60
 
 
+def test_parse_rejects_non_object_entries():
+    from data.synthetic_meetings import parse_response
+
+    with pytest.raises(ValueError, match="objects"):
+        parse_response(json.dumps({"emails": ["just a string"]}), 1)
+
+
 def test_generate_rejects_near_copies(tmp_path):
     tr = train_frame()
 

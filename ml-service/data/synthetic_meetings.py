@@ -163,6 +163,8 @@ def parse_response(text: str, expected: int) -> list[dict[str, str]]:
         raise ValueError(f"expected {expected} emails, got {type(emails).__name__}")
     out = []
     for e in emails:
+        if not isinstance(e, dict):
+            raise ValueError(f"email entries must be objects, got {type(e).__name__}")
         subject, body = str(e.get("subject", "")).strip(), str(e.get("body", "")).strip()
         if not subject or len(body) < 40:
             raise ValueError("empty subject or too-short body")
