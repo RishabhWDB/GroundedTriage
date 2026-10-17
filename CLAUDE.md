@@ -346,6 +346,10 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P5.6 Optional cross-encoder reranker (no LLM tokens):
   - `rag/reranker.py` (ms-marco-MiniLM-L-6-v2, lazy, fp16 on MPS); the retriever reranks the dense top-20 when given a reranker (cosine scores kept); `RETRIEVAL_RERANK` flag, **off** (it was worse);
   - `eval/wixqa_splits.py` fixes the demo / P7.2-dev / P7.2-test question split.
+  - Commit `a6f4376`.
+- P6.1a Review queries:
+  - `store.Review`: `ListTickets` (filters category, urgency, status, queue; inbox order), `GetTicket` (ticket + latest classification, route, meeting, draft), `GetDraft` / `LatestDraft`, `Chunks` (citation texts + URLs), draft transitions `ApproveDraft` / `RejectDraft` / `EditDraft` (conditional updates → `ErrConflict`), `Summary` (dashboard counts);
+  - migration **00010** (draft review + send columns; applied to Mumbai).
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -353,7 +357,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P6.1 REST API
+- P6.1b REST API handlers + API-key middleware + OpenAPI
 - P6.2 Agent review UI
 - P6.3 Outbound reply
 - P6.4 Dashboard
@@ -513,6 +517,15 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P6.1a): Review data rules:
+  - **Inbox order:** route priority (1 first), then SLA deadline, then newest; unrouted tickets last.
+  - **`status` filter** = the route status: `open | resolved | unrouted`. Every row also shows the latest draft status.
+  - **Draft transitions** (conditional `UPDATE`; a disallowed transition → `ErrConflict` → HTTP 409):
+    - approve: from `grounded`, or from an `abstained` draft that an agent edited (non-empty body). It sets the idempotency key `draft-<id>` that P6.3 sends with.
+    - edit: `grounded` or `abstained` only. It sets `edited=true`, since the faithfulness score described the generated text.
+    - reject: anything not yet sent.
+    - Reviewer, note and time are recorded on the draft.
+  - **Abstain rate** = drafts the gate abstained on (`abstain_reason` set, whatever review did later) / all drafts. Average faithfulness covers judged drafts only.
 - 2026-10-17 (Phase 5 review):
   - **Q1, demo in the Wix domain; no custom KB.** The docs and report frame the KB as per-deployment content (any docs folder via `python -m rag.kb --folder ...`).
     - **P8 demo ticket CSV (~25 rows):** ~15 real WixQA user questions rewritten as support emails (facts kept, tone varied incl. informal); ~4 deliberately out-of-KB tickets (abstention); ~2 meeting requests; ~2 spam; ~2 billing. Record which rows are expected to ground vs abstain.
