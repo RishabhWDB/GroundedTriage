@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: kb retrieval-eval calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
+.PHONY: kb retrieval-eval rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -136,6 +136,15 @@ kb: ## P5.1: ingest the WixQA help-centre KB into kb_documents/kb_chunks on DATA
 
 retrieval-eval: ## P5.2: recall@1/3/5 + MRR on WixQA QA pairs, dense vs hybrid -> results/retrieval/
 	cd $(ML_DIR) && $(VPY) -m eval.retrieval
+
+rag-eval-plan: ## P7.2: sizing + expected days at the Groq free cap (retrieval only, no LLM calls) -> results/rag/plan.json
+	cd $(ML_DIR) && $(VPY) -m eval.rag_eval --plan
+
+rag-floor-sweep: ## P7.2: floor sweep (keep 85/90/95/98%) on p72_dev, retrieval only -> results/rag/floor_sweep.json
+	cd $(ML_DIR) && $(VPY) -m eval.rag_eval --sweep
+
+rag-eval: ## P7.2: grounded vs ungrounded replies on p72_test + out-of-KB (cached, resumable; re-run daily) -> results/rag/
+	cd $(ML_DIR) && $(VPY) -m eval.rag_eval $(ARGS)
 
 seed: ## Seed demo data (implemented in P8.1)
 	@echo "seed: not implemented yet (P8.1)"; exit 1

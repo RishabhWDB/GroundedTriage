@@ -3,7 +3,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app.llm import FakeLLM, LLMError
+from app.llm import FakeLLM, LLMError, TruncatedError
 from app.main import app
 from app.models import Registry, get_registry
 from app.schemas import RetrievedChunk
@@ -12,8 +12,10 @@ from rag.faithfulness import (
     GateConfig,
     JudgeCache,
     VerifyRequest,
+    judge,
     judge_messages,
     load_config,
+    split_halves,
     verify,
 )
 
@@ -122,3 +124,33 @@ def test_json_mode_failure_is_retried():
 
     v = verify(vreq(), FakeLLM(responder=flaky), CFG)
     assert v.draft.status == "grounded" and calls["n"] == 2
+
+
+def test_split_halves_prefers_paragraphs():
+    assert split_halves("Para one is here.\n\nPara two.\n\nPara three is long.") == (
+        "Para one is here.\n\nPara two.",
+        "Para three is long.",
+    )
+    assert split_halves("One sentence. Two sentence") == ("One sentence", "Two sentence")
+    assert split_halves("single") is None
+
+
+def test_judge_splits_a_truncated_draft(tmp_path):
+    def responder(messages):
+        draft = messages[-1]["content"]
+        if "Alpha" in draft and "Beta" in draft:
+            raise TruncatedError("qwen: output truncated at max_tokens=1000")
+        word = "Alpha" if "Alpha" in draft else "Beta"
+        return json.dumps({"claims": [{"claim": word, "cited": [1], "supported": True}]})
+
+    claims = judge("Alpha holds [1].\n\nBeta holds [1].", CHUNKS, FakeLLM(responder=responder),
+                   "m", JudgeCache(tmp_path))  # fmt: skip
+    assert [c.claim for c in claims] == ["Alpha", "Beta"]
+
+
+def test_judge_gives_up_when_unsplittable(tmp_path):
+    def responder(messages):
+        raise TruncatedError("truncated")
+
+    with pytest.raises(TruncatedError):
+        judge("one block", CHUNKS, FakeLLM(responder=responder), "m", JudgeCache(tmp_path))

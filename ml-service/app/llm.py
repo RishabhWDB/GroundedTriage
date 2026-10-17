@@ -9,6 +9,7 @@ error rather than a silently truncated answer. Token usage is logged per call an
 accumulated in ``usage``. An eval-time response cache comes in P7.2.
 """
 
+import json
 import logging
 import random
 import time
@@ -29,6 +30,10 @@ class LLMError(RuntimeError):
 class JSONModeError(LLMError):
     """Groq JSON mode failed server-side (HTTP 400 json_validate_failed), e.g.
     the output was cut off at max_tokens. A bad attempt: callers retry."""
+
+
+class TruncatedError(LLMError):
+    """The output hit max_tokens (finish_reason=length)."""
 
 
 class LLM(Protocol):
@@ -158,7 +163,7 @@ class GroqLLM:
         )
         choice = body["choices"][0]
         if choice.get("finish_reason") == "length":
-            raise LLMError(
+            raise TruncatedError(
                 f"{self.model}: output truncated at max_tokens={max_tokens} "
                 f"(reasoning used {counts['reasoning_tokens']}); raise LLM_MAX_TOKENS"
             )
@@ -215,3 +220,49 @@ class FakeLLM:
         if not self._responses:
             raise LLMError("FakeLLM: no scripted responses left")
         return self._responses.pop(0)
+
+
+class CachingLLM:
+    """Wraps an LLM and caches complete() on disk by sha256 of (model, messages,
+    temperature, json_mode, max_tokens). Used by the evaluations (P7.2) so a
+    run resumed across Groq's daily cap never pays twice for the same call.
+    Cache hits are counted in ``hits``; misses go to the wrapped LLM."""
+
+    def __init__(self, llm: LLM, root, model: str):
+        from pathlib import Path
+
+        self.llm, self.root, self.model = llm, Path(root), model
+        self.hits = 0
+        self.misses = 0
+
+    def _key(self, messages, temperature, json_mode, max_tokens) -> str:
+        import hashlib
+
+        blob = json.dumps(
+            {"model": self.model, "messages": list(messages), "temperature": temperature,
+             "json_mode": json_mode, "max_tokens": max_tokens},
+            sort_keys=True,
+        )  # fmt: skip
+        return hashlib.sha256(blob.encode()).hexdigest()
+
+    def complete(
+        self,
+        messages: Sequence[Message],
+        *,
+        temperature: float = 0.0,
+        json_mode: bool = False,
+        max_tokens: int | None = None,
+    ) -> str:
+        key = self._key(messages, temperature, json_mode, max_tokens)
+        path = self.root / f"{key}.json"
+        if path.exists():
+            self.hits += 1
+            return json.loads(path.read_text())["response"]
+        self.misses += 1
+        text = self.llm.complete(messages, temperature=temperature, json_mode=json_mode,
+                                 max_tokens=max_tokens)  # fmt: skip
+        self.root.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"response": text}))
+        tmp.replace(path)
+        return text

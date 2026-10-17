@@ -145,3 +145,17 @@ def test_build_llm_roles(monkeypatch):
     assert str(judge._client.base_url).startswith("https://api.groq.com/openai/v1")
     with pytest.raises(ValueError):
         build_llm(s, "other")
+
+
+def test_caching_llm(tmp_path):
+    from app.llm import CachingLLM
+
+    inner = FakeLLM(["first", "second"])
+    c = CachingLLM(inner, tmp_path, "m")
+    msgs = [{"role": "user", "content": "hi"}]
+    assert c.complete(msgs, json_mode=True) == "first"
+    assert c.complete(msgs, json_mode=True) == "first"  # cached
+    assert c.complete(msgs, json_mode=False) == "second"  # different request
+    assert (c.hits, c.misses) == (1, 2) and len(inner.calls) == 2
+    again = CachingLLM(FakeLLM([]), tmp_path, "m")  # a new process, same cache
+    assert again.complete(msgs, json_mode=True) == "first"

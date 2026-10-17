@@ -1,0 +1,18 @@
+{
+  "items": {
+    "answerable": 228,
+    "out_of_kb": 50
+  },
+  "drafted_share": {
+    "answerable": 0.943,
+    "out_of_kb": 0.14
+  },
+  "grounded_drafts": 222,
+  "ungrounded_drafts": 278,
+  "gpt_oss_calls": 1000,
+  "gpt_oss_tokens_est": 1221800,
+  "expected_days_at_free_cap": 6.1,
+  "judge_calls": 500,
+  "judge_hours_est_at_1_per_min": 8.3,
+  "note": "estimates; real usage per call is printed after each run and replaces them"
+}

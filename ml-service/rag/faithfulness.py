@@ -13,6 +13,11 @@ Status (thresholds in config/grounding.yaml):
   claims are recorded, and the ticket goes to a human queue (P5.5).
 - grounded: otherwise.
 
+A draft whose claim list would overflow the judge's max_tokens (qwen's
+output limit is 1,000 tokens a minute, so it can't simply be raised) is
+judged in two halves against the same sources, recursively up to
+MAX_SPLIT_DEPTH; faithfulness is per claim, so the halves' claims are pooled.
+
 Judge calls are cached on disk (sha256 of model + messages) under
 datasets/raw/llm_cache/judge/, so re-running an evaluation (P7.2) across the
 Groq free tier's daily cap costs nothing for work already done.
@@ -28,7 +33,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from app.llm import LLM, JSONModeError, LLMError
+from app.llm import LLM, JSONModeError, LLMError, TruncatedError
 from app.schemas import ReplyDraft, RetrievedChunk
 from app.settings import REPO_ROOT
 from rag.generator import format_sources
@@ -122,12 +127,49 @@ def parse_claims(text: str) -> list[Claim]:
     return [Claim(**c) for c in claims]
 
 
+MAX_SPLIT_DEPTH = 2
+
+
+def split_halves(body: str) -> tuple[str, str] | None:
+    """Cut a draft near its middle at a paragraph (else sentence) boundary."""
+    for sep in ("\n\n", "\n", ". "):
+        parts = [p for p in body.split(sep) if p.strip()]
+        if len(parts) < 2:
+            continue
+        total = len(body)
+        cut = min(
+            range(1, len(parts)), key=lambda i: abs(sum(len(p) for p in parts[:i]) - total / 2)
+        )
+        return sep.join(parts[:cut]), sep.join(parts[cut:])
+    return None
+
+
 def judge(
     body: str,
     chunks: list[RetrievedChunk],
     llm: LLM,
     model: str = "judge",
     cache: JudgeCache | None = None,
+    _depth: int = 0,
+) -> list[Claim]:
+    try:
+        return _judge_once(body, chunks, llm, model, cache)
+    except TruncatedError:
+        halves = split_halves(body)
+        if halves is None or _depth >= MAX_SPLIT_DEPTH:
+            raise
+        logger.info(
+            "judge output truncated; judging the draft in two halves (depth %d)", _depth + 1
+        )
+        return [c for h in halves for c in judge(h, chunks, llm, model, cache, _depth + 1)]
+
+
+def _judge_once(
+    body: str,
+    chunks: list[RetrievedChunk],
+    llm: LLM,
+    model: str,
+    cache: JudgeCache | None,
 ) -> list[Claim]:
     messages = judge_messages(body, chunks)
     for attempt in range(2):

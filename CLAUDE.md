@@ -42,6 +42,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | One-time Google Calendar OAuth for the meeting scheduler (needs `credentials.json` for a Desktop-app OAuth client) | `make calendar-auth` → `token.json` |
 | Ingest the WixQA help-centre KB into pgvector on DATABASE_URL (idempotent; ~17 min first time) | `make kb` (or `cd ml-service && .venv/bin/python -m rag.kb --folder <dir>` for .md/.html docs) → `results/kb/ingest.json` |
 | Retrieval eval on WixQA QA pairs (recall@1/3/5, MRR; dense vs hybrid; floor analysis) | `make retrieval-eval` → `results/retrieval/` |
+| P7.2 RAG eval: plan (expected days; retrieval only) / floor sweep on p72_dev / the run (cached, resumable; re-run daily at the Groq cap) | `make rag-eval-plan` / `make rag-floor-sweep` / `make rag-eval` (`ARGS="--limit N"`) → `results/rag/` |
 | Seed | `make seed` (not implemented until P8.1) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
@@ -392,6 +393,13 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - **reject also moves the ticket to `human_review`** (reason `draft_rejected`, same transaction; audited; a draft mid-send can't be rejected);
   - demo-only **"eligible for auto-send"** badge (grounded, unedited, faithfulness 1.0, above the floor) with no auto-send;
   - future work and limitations recorded (§3c).
+  - Commit `df4a5fd`.
+- P7.2a RAG evaluation harness (`eval/rag_eval.py`):
+  - items: the 228 WixQA `p72_test` questions + 50 out-of-KB Tobi-Bueck val tickets (seeded, disjoint from the 400 floor tickets); systems: grounded (retrieve → floor → draft → refine → gate) vs ungrounded (SCRIBE draft→refine, judged against the same retrieved chunks);
+  - metrics: faithfulness, hallucination rate, answer relevance and similarity (bge cosine), context recall/precision (gold article ids), abstain rate, abstain precision/recall;
+  - resumable: every LLM call cached on disk (`app.llm.CachingLLM` for drafts, `JudgeCache`), finished rows appended to `datasets/raw/rag_eval/progress.jsonl`, stops cleanly at the daily cap, other LLM errors skip the item until the next run;
+  - judge: a draft whose claim list overflows max_tokens is judged in two halves (`rag.faithfulness.split_halves`, `TruncatedError`), also in the live gate;
+  - `make rag-eval-plan` (printed before starting), `make rag-floor-sweep` (p72_dev), `make rag-eval` (daily).
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -428,7 +436,7 @@ Keep this list current: add items as they arise, remove them when done. Nothing 
 
 | 9 | **Set a real `API_KEY` in `.env`** (any long random string, e.g. `openssl rand -hex 24`). It's still the `.env.example` placeholder, and `make api` refuses to start with it | `.env` | `make api` (the UI asks for the same key) |
 
-Claude's own background item: `make style-aug` once per day (Groq free cap) until 3,978 rows, then `make data && make export-splits` (P3.8b).
+Claude's own background item: `make rag-eval` once per day until all 556 rows are done (P7.2 has priority), then `make style-aug` once per day (Groq free cap) until 3,978 rows, then `make data && make export-splits` (P3.8b).
 
 ## 3b. Deferred decisions (decide in Phase 7; nothing in P4–P6 may depend on them)
 
@@ -466,6 +474,12 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 ## 5. Decisions log
 
+- 2026-10-17 (P7.2a): **RAG evaluation design.**
+  - Metrics are a documented RAGAS-style equivalent, not the `ragas` package (it needs an OpenAI-style stack and several judge calls per item, which the 8 GB Mac and Groq's free caps can't carry). Faithfulness uses the same qwen judge as the gate. The ungrounded (SCRIBE) replies are judged against the same top-5 chunks the grounded system retrieved, so "faithfulness" there means "how much of the answer the KB supports".
+  - WixQA questions carry no ticket metadata, so both systems get category General Inquiry, urgency medium, sentiment neutral.
+  - `make rag-eval-plan` (printed before the run): 228 answerable + 50 out-of-KB; measured drafted share 0.943 answerable / 0.14 out-of-KB → 222 grounded + 278 ungrounded drafts, 1,000 gpt-oss calls, ~1.22M tokens estimated → **6.1 days at the 200k/day cap**; 500 judge calls, ~8.3 h at ~1/min. The 3-item smoke run used about 4.6k gpt-oss tokens per item against 5.1k estimated, so the estimate is a little conservative.
+  - Smoke run finding: a long draft's claim list hit the judge's max_tokens 1000 (which is also qwen's per-minute output limit, so it can't be raised). Fix: judge the draft in two halves against the same sources (up to depth 2) and pool the claims; verified live.
+  - Floor sweep on **p72_dev** (152 answerable, 50 out-of-KB; `results/rag/floor_sweep.json`): keep 85% → floor 0.7484, abstain precision 0.6806 / recall 0.98; keep 90% → 0.7387, 0.75 / 0.96; keep 95% → 0.726, 0.8545 / 0.94; keep 98% → 0.7158, 0.92 / 0.92. The chosen floor stays 0.7177 (set in P5.2); it is not moved from these numbers.
 - 2026-10-15: Go module path is `github.com/RishabhWDB/GroundedTriage`. `go.mod` declares `go 1.22`, the spec's floor, so the other machine can build it; Go 1.26.4 is installed locally.
 - 2026-10-15: ruff, pytest and honcho are installed into `ml-service/.venv` as `[dev]` extras, not globally. The Makefile calls them via `.venv/bin/`.
 - 2026-10-15: Python runtime dependencies are added by the part that first needs them, which keeps `make setup` light on 8 GB RAM. Heavy ML dependencies (torch, transformers) will be optional extras.

@@ -1,0 +1,37 @@
+{
+  "split": "p72_dev",
+  "answerable_n": 152,
+  "out_of_kb_n": 50,
+  "rows": [
+    {
+      "keep": 0.85,
+      "floor": 0.7484,
+      "abstain_precision": 0.6806,
+      "abstain_recall": 0.98,
+      "answerable_abstained": 0.1513
+    },
+    {
+      "keep": 0.9,
+      "floor": 0.7387,
+      "abstain_precision": 0.75,
+      "abstain_recall": 0.96,
+      "answerable_abstained": 0.1053
+    },
+    {
+      "keep": 0.95,
+      "floor": 0.726,
+      "abstain_precision": 0.8545,
+      "abstain_recall": 0.94,
+      "answerable_abstained": 0.0526
+    },
+    {
+      "keep": 0.98,
+      "floor": 0.7158,
+      "abstain_precision": 0.92,
+      "abstain_recall": 0.92,
+      "answerable_abstained": 0.0263
+    }
+  ],
+  "chosen_floor": 0.7177,
+  "note": "the floor is not moved from these numbers or the final eval (Phase 5 review)"
+}
