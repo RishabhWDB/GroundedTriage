@@ -428,6 +428,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `docs/deploy.md` (steps, secrets, key rotation, CPU-only profile, costs, what's unverified); `.env.example` documents the new variables and key rotation;
   - `make demo` now runs `scripts/demo.sh`: load → start the ml-service if needed → `worker -once` (fake calendar) → `demo status` → `make dev`;
   - optional `docker-compose.yml` + `deploy/{go,ml}.Dockerfile` + `.dockerignore`: **not verified** (Docker daemon not running).
+  - Commit `6ded062`.
+- P8.3a Docs (skeleton; finalised after P7.4): `README.md` (overview, SCRIBE-vs-system table, architecture diagram, setup, run, evaluation commands, adding fine-tuned models, repo map, licences), `docs/architecture.md` (per-layer design decisions), `docs/demo_script.md` (five-minute walkthrough on the demo tickets, with recovery table). Results point to `results/REPORT.md` (P7.4); no numbers in the docs yet.
   - Commit: backfilled in the next commit.
 ### In progress
 - Phase 7 in Arya's order: P7.2 (RAG eval, multi-day at the free cap) → P7.3 monitoring → P8 parts not tied to final numbers → stop with the consolidated manual checklist. P7.1 / P7.4 wait for Arya's artifacts and labels.
