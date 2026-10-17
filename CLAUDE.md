@@ -39,6 +39,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Auto-format | `make fmt` |
 | Migrate (goose, up only, idempotent; SQL in `migrations/`, embedded) | `make migrate` / `make migrate-status` / `make migrate-verify` (read-only: vector ext, tables, HNSW index, ticket counts) |
 | One Go integration test | `go test -tags integration -count=1 ./internal/store -run TestTicketInsertAndGet` |
+| One-time Google Calendar OAuth for the meeting scheduler (needs `credentials.json` for a Desktop-app OAuth client) | `make calendar-auth` → `token.json` |
 | Seed | `make seed` (not implemented until P8.1) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
@@ -298,6 +299,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P4.4a Meeting extraction: `app/meeting.py` + `POST /extract_meeting` (gpt-oss-120b, JSON mode, temperature 0; relative dates resolved against `received_at`; validated: unparseable, past or >1-year starts, durations outside 5–480 min and unknown timezones become null with a note). The registry builds the LLM lazily (503 without `GROQ_API_KEY`). Tested with `FakeLLM`; **not run live** (that day's gpt-oss TPD was spent on style-aug).
   - Commit `53a4187`.
 - P4.4b Scheduling logic: `internal/scheduler` (`Calendar` interface, `FakeCalendar`, `Scheduler.Schedule` → `booked | counter_offer | no_slot`). Tests: free, busy → counter-offer, outside hours/weekend/overrun, no time, past, fully booked, calendar error, booked slot becomes busy, DST week.
+  - Commit `c769ec7`.
+- P4.4c Google Calendar: `scheduler.GoogleCalendar` (REST v3 `freeBusy` and `events.insert?sendUpdates=all` over an OAuth2 client; refreshed tokens saved back) and `RunInstalledAppFlow` (loopback redirect on 127.0.0.1, state check, PKCE S256, offline access, token file mode 0600); `cmd/calendar-auth` (`make calendar-auth`). Tested against `httptest`, including the whole flow with a fake token endpoint. **Not run against a real Google account** (no credentials configured).
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -731,6 +734,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 - **Supabase connection mode:** use the **Session pooler** connection string (IPv4, port 5432). The Transaction pooler (6543) breaks prepared statements in pgx/psycopg.
 - **pgvector on Supabase** is pre-installed in the `extensions` schema (v0.8.2), not `public`. Any connection that overrides `search_path` must include `extensions`, or you get `type "vector" does not exist`.
+- **Google Calendar is only tested against `httptest`** (FreeBusy, events.insert, the whole OAuth loopback flow). The real API needs a Google Cloud project with the Calendar API enabled, an OAuth client of type Desktop app saved as `credentials.json`, and `make calendar-auth` once. A test-mode consent screen only allows listed test users, and their refresh tokens expire after 7 days.
 - **Zendesk is only tested against an `httptest` mock**, since no Zendesk account is configured. The incremental export also requires an admin API token.
 - **Email adapter not tested against a real mailbox:** IMAP_*/SMTP_* aren't configured. `IMAPClient` is untested beyond compiling. `SMTPMailer` is tested against an in-process fake SMTP server (no TLS, no auth). Gmail needs an app password, plus IMAP enabled.
 - **DB latency (`cmd/dbping`, 2026-10-15):** after the move to ap-south-1 (Mumbai):
