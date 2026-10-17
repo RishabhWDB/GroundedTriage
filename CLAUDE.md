@@ -280,14 +280,18 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `triage/emb_fast_tier.py`, `triage/train_emb_fast_tier.py` (`make fast-tier-emb[-aug]`);
   - `ood-eval` scores the variants and writes `results/ood/muted_review.md`;
   - P2.3 baseline results marked **SUPERSEDED**; the manual-work and deferred-decision sections were added.
+  - Commit `d245924`.
+- P4.1 Rule engine:
+  - `config/routing_rules.yaml` (first match; required default last);
+  - `internal/routing` `ParseRules`/`LoadRules` (strict YAML, validated against the taxonomy, urgency scale, actions and queues), `RuleSet.Evaluate` → `model.Route` (reason = matched rule), `Engine` with hot reload (content-hash polling; an invalid edit keeps the old rules).
+  - Table-driven tests cover every shipped rule plus the default.
   - Commit: backfilled in the next commit.
 
 ### In progress
-- none. Phase 3 rework (P3.6–P3.12) is done; waiting for Arya's review of the updated Phase 3 review. Daily: `make style-aug` until 3,978 rows (P3.8b).
+- Phase 4 (routing and actions), run through after the P3.13 review items. Daily: `make style-aug` until 3,978 rows (P3.8b).
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P4.1 Rule engine
 - P4.2 Mute + no-reply detection
 - P4.3 Queues + SLA escalation
 - P4.4 Meeting scheduler
@@ -445,6 +449,11 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P4.1): Routing rules:
+  - Conditions: `ingest_status`, `category`, `urgency`, `tier`, `low_confidence`, `possible_spam`, `no_reply`, and `min_confidence` (inclusive) / `max_confidence` (exclusive). They only read the classification contract, so the rules work with whatever models exist (no dependence on the deferred decisions).
+  - Actions: `mute | queue | reply | schedule`; queues must be declared. Priority 1 (most urgent) to 4; when omitted it comes from urgency (critical 1, high 2, medium 3, low 4), or 3 without a classification. SLA is added in P4.3.
+  - Shipped order: skipped ticket → human_review P3; Spam → mute; possible spam → `possible_spam` queue (never muted); **critical → human_review P1 (before no-reply, so automated outage alerts are queued)**; no-reply → mute; low_confidence → human_review; Meeting → schedule; Technical/Billing/General → reply (a draft for agent review, P5); Feature → `product` queue; default → human_review P3.
+  - Hot reload polls the file's sha256 (no fsnotify dependency; works with editors that replace files). An invalid edit is logged once and the previous rules stay active. YAML is decoded with `KnownFields`, so typos are errors.
 - 2026-10-17 (P3.13): Embedding fast tier (review item; **no accept/reject decision**, see §3b):
   - `BAAI/bge-small-en-v1.5` (384-d, the model P5 will use for the KB): CLS pooling, L2-normalised, inputs truncated to 256 tokens, fp16 on MPS. Embeddings are cached by sha256(model | max_length | text) in `datasets/raw/emb_cache/*.npz` (gitignored, 28 MB for 19.5k texts).
   - Balanced LR, C from {0.25, 1, 4, 16, 64} by val macro-F1 (C=16), uncalibrated (as in P3.12). The LR artifact is 8 KB; the embedder comes from the HF cache (~130 MB).

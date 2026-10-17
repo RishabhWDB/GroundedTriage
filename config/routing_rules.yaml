@@ -1,0 +1,72 @@
+# Routing rules (P4.1): first match wins; the last rule must be the default
+# (no `when`). Read by internal/routing; reloaded when this file changes
+# (an invalid edit is logged and the previous rules stay active).
+#
+# when (all given conditions must hold; omitted = any):
+#   ingest_status: accepted | skipped
+#   category:      [list of config/taxonomy.yaml categories]
+#   urgency:       [low, medium, high, critical]
+#   tier:          [fast, deep, spam_filter]
+#   low_confidence: true | false     (fast tier accepted below tau, no deep tier)
+#   possible_spam:  true | false     (spam filter review band)
+#   no_reply:       true | false     (P4.2: no-reply sender, newsletter, automated notice, FYI)
+#   min_confidence / max_confidence: category confidence bounds, inclusive / exclusive
+# then:
+#   action:   mute | queue | reply | schedule
+#   queue:    queue name (any of `queues` below)
+#   priority: 1 (most urgent) .. 4; omitted = from urgency (critical 1, high 2, medium 3, low 4)
+#
+# A Route always carries the matched rule name in `reason`. Rules only use the
+# classification contract, so they work with whatever models are loaded.
+version: 1
+
+queues: [technical, billing, product, general, meetings, human_review, possible_spam, spam, muted]
+
+rules:
+  - name: skipped-ticket
+    when: {ingest_status: skipped}
+    then: {action: queue, queue: human_review, priority: 3}
+
+  - name: spam
+    when: {category: [Spam]}
+    then: {action: mute, queue: spam, priority: 4}
+
+  - name: possible-spam
+    when: {possible_spam: true}
+    then: {action: queue, queue: possible_spam, priority: 4}
+
+  # Before no-reply: an automated "production down" alert is still queued.
+  - name: critical
+    when: {urgency: [critical]}
+    then: {action: queue, queue: human_review, priority: 1}
+
+  - name: no-reply
+    when: {no_reply: true}
+    then: {action: mute, queue: muted, priority: 4}
+
+  - name: low-confidence
+    when: {low_confidence: true}
+    then: {action: queue, queue: human_review}
+
+  - name: meeting
+    when: {category: [Meeting Scheduling]}
+    then: {action: schedule, queue: meetings}
+
+  - name: technical
+    when: {category: [Technical Issue]}
+    then: {action: reply, queue: technical}
+
+  - name: billing
+    when: {category: [Billing]}
+    then: {action: reply, queue: billing}
+
+  - name: feature-request
+    when: {category: [Feature Request]}
+    then: {action: queue, queue: product}
+
+  - name: general
+    when: {category: [General Inquiry]}
+    then: {action: reply, queue: general}
+
+  - name: default
+    then: {action: queue, queue: human_review, priority: 3}
