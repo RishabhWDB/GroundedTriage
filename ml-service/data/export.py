@@ -3,7 +3,8 @@
     python -m data.export        # == make export-splits
 
 Creates datasets/export/groundedtriage-splits-<test content hash[:12]>.tar.gz
-containing processed/{train,val,test}.parquet, processed/manifest.json,
+containing every split in processed/manifest.json (topic train/val/test,
+train_urgency, spam_* and, when built, train_style_aug), the manifest,
 config/taxonomy.yaml (categories + urgency scale), datasets/README.md (card)
 and docs/model_artifacts.md. Files are verified against the manifest first,
 and the archive is deterministic (sorted members, fixed mtime/owner).
@@ -54,7 +55,8 @@ def _add(tar: tarfile.TarFile, arcname: str, data: bytes) -> None:
 def export(root: Path = REPO_ROOT, processed: Path = PROCESSED, out_dir: Path = EXPORT_DIR) -> Path:
     manifest = verify(processed)
     tag = manifest["splits"]["test"]["content_sha256"][:12]
-    files = {f"processed/{p.name}": p for p in sorted(processed.glob("*.parquet"))}
+    # Only the splits in the manifest: a stale parquet from an older build is never shipped.
+    files = {f"processed/{n}.parquet": processed / f"{n}.parquet" for n in manifest["splits"]}
     files["processed/manifest.json"] = processed / "manifest.json"
     for rel in EXTRA_FILES:
         path = root / rel

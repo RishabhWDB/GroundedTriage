@@ -230,13 +230,20 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `data/spamassassin.py` also builds **ham** (`20030228_easy_ham`, `_easy_ham_2`, `_hard_ham`): 4,150 messages → 4,089 rows (10 non-English, 51 duplicates, 316 truncated). No category, `source_dataset=spamassassin_ham`, ids `sah-*`;
   - `config/taxonomy.yaml` `filter_categories: [Spam]`, with `app.taxonomy.topic_categories()` (5) and `filter_categories()`;
   - `summary.md` (gitignored) convention.
+  - Commit `23d8fce`.
+- P3.7 Rebuild for two tasks:
+  - one group-aware assignment over Tobi-Bueck + spam + ham + synthetic meetings (one RNG per label × origin stratum);
+  - **topic** splits with 5 classes (`train` 15,910 capped at 8,715 / `val` 3,545 / `test` 3,545 / `train_urgency` 16,258);
+  - **spam-filter** splits `spam_train` 20,476 / `spam_val` 4,388 / `spam_test` 4,388 (`is_spam`);
+  - the audit covers both tasks (0 cross-split near-duplicate pairs);
+  - the export ships only manifest splits;
+  - `docs/model_artifacts.md` is 5-class. Export tag **`e2552b04338b`**.
   - Commit: backfilled in the next commit.
 
 ### In progress
 - Phase 3 rework after the review (2026-10-17): a two-stage spam filter plus a 5-class topic classifier, a style-augmentation file, and the OOD evaluation set. Run P3.6–P3.12 through, then print an updated Phase 3 review.
 
 ### To do
-- P3.7 Rebuild: 5-class topic splits, spam-filter splits, re-export, 5-class `docs/model_artifacts.md`
 - P3.8 Optional `train_style_aug` (gpt-oss-120b informal paraphrases of ~25% of train)
 - P3.9 Binary spam filter (train, threshold at ≤ 1% support FPR on val, review band)
 - P3.10 Cascade + contract: spam filter first (`tier=spam_filter`, possible-spam flag), migration
@@ -373,6 +380,15 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P3.7): **Two-task rebuild. This supersedes the P2.1h split hashes and export.**
+  - Corpus: Tobi-Bueck 23,228 + SpamAssassin spam 1,553 + ham 4,089 + synthetic meetings 400, minus 18 cross-source duplicate bodies = 29,252 rows. Near-duplicate groups: 1,862 groups covering 4,328 rows (largest 14).
+  - One group-aware 70/15/15 assignment, stratified by **label × origin** (label = category, or "Ham"). Both tasks are cut from it, so a row in one task's train is never in the other task's val/test. **Each stratum now has its own RNG** (seeded by seed + a hash of the stratum), so adding a stratum never reshuffles the others. This change, plus ham joining the near-duplicate corpus, **reshuffled the test split**: only 641 of the 3,545 new topic test rows were in the old test.
+  - **Topic task:** 5 classes. The cap is 5 × the smallest real topic class (Feature Request, 1,743) = **8,715**, so only Technical Issue is cut (628 rows). Train is 15,910: Technical 8,715 / General 2,869 / Billing 2,303 / Feature 1,743 / Meeting 280. Val and test have 3,545 each. `train_urgency` is unchanged in size (16,258).
+  - **Spam task:** every row of each split, with topic tickets **uncapped**. `spam_train` = 1,076 spam vs 2,862 ham + 16,258 Tobi-Bueck + 280 meeting. `spam_val` and `spam_test` = 230 spam vs 613 ham + 3,485 + 60 each.
+  - Hashes: test content `e2552b04338b4d5872aab17662d750294ce894602f3de0752b90c5049e3d0e81` (export `datasets/export/groundedtriage-splits-e2552b04338b.tar.gz`); spam_test `e6997f05…3272`. **The `c6539fff94a1` and `db976b0585b2` archives are stale (6-class).** The archive is regenerated after P3.8 adds `train_style_aug`; the tag stays the same.
+  - **The P2.3 SCRIBE baseline numbers are on the superseded test split** (c6539fff). They stay in `results/baseline/` as a historical snapshot, and P7.1 re-runs the baseline on the new test, under the same conditions as the other systems.
+  - `models/fast_tier/` (6-class, P3.1) is stale until P3.12 retrains it; the loaders switch to 5 topic classes in P3.10.
+  - The audit's diagnostic TF-IDF+LR on the 5-class topic val: macro-F1 0.777, accuracy 0.728 (the old 0.802 was 6-class with the easy Spam class).
 - 2026-10-17 (Phase 3 review): **The style shortcut is a first-class finding for the report.** Decisions:
   - **Q1 = (a), modified: two stages.**
     - **Spam filter (binary):** positives = SpamAssassin spam. Negatives = SpamAssassin ham **plus** support tickets (Tobi-Bueck + synthetic meetings), so writing style or source isn't predictive. Group-aware split with its own train/val/test, reported separately.
@@ -581,6 +597,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 ## 8. Results so far
 
 - Ungrounded hallucination example: `results/examples/ungrounded_hallucination_01.md`. The SCRIBE baseline told a customer "I've processed a refund … within 3–5 business days" with no grounding. P7.2 collects more automatically.
+- Data audit after the P3.7 rebuild: 0 near-duplicate pairs train-pool~val, train-pool~test and val~test across both tasks (29,252-row corpus). Topic diagnostic TF-IDF+LR on val: macro-F1 0.777, accuracy 0.728 (5 classes).
 - **Fast tier on val (P3.1, `results/fast_tier/`, `fast-20261016012651-6f7999df`; val only, test untouched):**
   - Macro-F1 **0.825**, accuracy 0.788 (n=3,775). Real only = without Meeting (n=3,715): macro-F1 **0.790**, accuracy 0.785.
   - Per-class F1: Technical 0.835, Billing 0.675, Feature 0.951, General Inquiry 0.491, Spam 1.000, Meeting 1.000. General Inquiry is the weak class (P 0.53 / R 0.45).
@@ -594,7 +611,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - 74 rows are predicted critical; gold has no critical, so all 74 count as errors.
   - Fired groups: urgency 551, impact 215, deadline 88, low 17, escalation 10, negative 2. The Tobi-Bueck texts rarely use escalation or negative phrasing.
   - For reference only (different split): SCRIBE's sentiment-as-urgency on test has macro-F1 0.357 / MAE 0.750. The heuristic is closer on the ordinal scale but worse on macro-F1. The fine-tuned urgency model is expected to replace both.
-- **SCRIBE baseline on test (P2.3, `results/baseline/`, test content `c6539fff…`, n=3,775, MPS, 2026-10-16):**
+- **SCRIBE baseline on the superseded test split (P2.3, `results/baseline/`, test content `c6539fff…`, n=3,775, MPS, 2026-10-16; re-run on the new test in P7.1):**
   - Overall macro-F1 **0.522**, accuracy 0.527 (weighted F1 0.557).
   - Real only = without Meeting Scheduling (n=3,715, 5 classes): macro-F1 **0.479**, accuracy 0.521. Synthetic Meeting rows (n=60): recall 0.917.
   - Per class F1: Technical 0.657 (P 0.83 / R 0.55), Billing 0.444 (R 0.32), Feature 0.573, General Inquiry 0.368 (P 0.25 / R 0.73), Spam 0.349 (P 0.96 / R 0.21), Meeting 0.738 (P 0.62 / R 0.92).

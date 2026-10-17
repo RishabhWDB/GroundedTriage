@@ -33,7 +33,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_recall_fscore_support
 
 from app.settings import REPO_ROOT
-from app.taxonomy import categories
+from app.taxonomy import topic_categories
 from data.build import OUT_DIR
 from data.neardup import NEAR_DUP, similar_pairs, vectorizer
 from data.textclean import dedupe_key
@@ -155,7 +155,7 @@ def fit_eval(train: pd.DataFrame, val: pd.DataFrame, col: str) -> tuple[dict, np
     clf = LogisticRegression(class_weight="balanced", max_iter=2000, random_state=SEED)
     clf.fit(xtr, train["category"])
     pred = clf.predict(vec.transform(val[col].fillna("")))
-    labels = categories()
+    labels = topic_categories()  # the topic task (Spam is the spam filter's)
     p, r, f, n = precision_recall_fscore_support(
         val["category"], pred, labels=labels, zero_division=0
     )
@@ -213,13 +213,14 @@ def synthetic_section(syn: pd.DataFrame) -> dict:
 def load() -> dict[str, pd.DataFrame]:
     return {
         n: pd.read_parquet(OUT_DIR / f"{n}.parquet")
-        for n in ("train", "val", "test", "train_urgency")
+        for n in ("train", "val", "test", "train_urgency", "spam_train", "spam_val", "spam_test")
     }
 
 
 def train_pool(splits: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Every row any model trains on: capped train plus the urgency file."""
-    pool = pd.concat([splits["train"], splits["train_urgency"]])
+    """Every row any model trains on: capped topic train, the urgency file and
+    the spam filter's train split."""
+    pool = pd.concat([splits["train"], splits["train_urgency"], splits["spam_train"]])
     return pool.drop_duplicates("id").sort_values("id").reset_index(drop=True)
 
 
@@ -271,7 +272,7 @@ def render(audit: dict, samples: pd.DataFrame) -> str:
         "",
         "### Train → test, per category × origin",
         "",
-        f"Pool: every training row (capped `train` ∪ `train_urgency`, {audit['train_pool_rows']} rows).",
+        f"Pool: every training row (capped `train` ∪ `train_urgency` ∪ `spam_train`, {audit['train_pool_rows']} rows); val/test are the union of both tasks' splits.",
         f"Test rows with a near-duplicate in the pool: {lk['total_test_rows_with_near_dup']} of "
         f"{audit['test_rows']}; pairs: {lk['total_pairs']}. Max-similarity quantiles: "
         f"{lk['max_similarity_quantiles']}.",
@@ -325,24 +326,27 @@ def main() -> int:
     syn = splits["train"].pipe(lambda d: pd.concat([d, splits["val"], splits["test"]]))
     syn = syn[syn["origin"] == "synthetic"].sort_values("id").reset_index(drop=True)
     pool = train_pool(splits)
-    corpus_df = pd.concat([pool, splits["val"], splits["test"]]).sort_values("id")
+    # val/test of both tasks (the topic splits are subsets of the spam splits).
+    val = pd.concat([splits["val"], splits["spam_val"]]).drop_duplicates("id")
+    test = pd.concat([splits["test"], splits["spam_test"]]).drop_duplicates("id")
+    corpus_df = pd.concat([pool, val, test]).sort_values("id")
     corpus = corpus_df["text"].tolist()
     manifest = json.loads((OUT_DIR / "manifest.json").read_text())
-    build_rows = sum(manifest["splits"][k]["rows"] for k in ("train", "val", "test")) + sum(
-        manifest["train_cap_removed"].values()
-    )
+    build_rows = sum(manifest["splits"][k]["rows"] for k in ("spam_train", "spam_val", "spam_test"))
     if build_rows != len(corpus):
         logger.warning("audit corpus %d rows != build corpus %d", len(corpus), build_rows)
-    parts = {"train_pool": pool, "val": splits["val"], "test": splits["test"]}
+    # Ham has no category; label it so per-category tables keep those rows.
+    pool, val, test = (d.assign(category=d["category"].fillna("Ham")) for d in (pool, val, test))
+    parts = {"train_pool": pool, "val": val, "test": test}
     audit = {
         "synthetic": synthetic_section(syn),
-        "leakage": leakage_table(pool, splits["test"], corpus=corpus),
+        "leakage": leakage_table(pool, test, corpus=corpus),
         "cross_split_pairs": cross_split_pairs(parts, corpus),
         "corpus_rows": len(corpus),
         "corpus_matches_build": build_rows == len(corpus),
         "shortcut": shortcut_check(splits["train"], splits["val"]),
         "train_pool_rows": len(pool),
-        "test_rows": len(splits["test"]),
+        "test_rows": len(test),
     }
     samples = syn.sample(n=N_SAMPLES, random_state=SEED).sort_values("id")
     audit["synthetic"]["sample_ids"] = samples["id"].tolist()

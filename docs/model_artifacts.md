@@ -5,6 +5,10 @@ fine-tuned **outside this repo** on the GPU PC. This repo only exports the
 training data and loads the finished artifacts. This page is the contract for
 both directions.
 
+> **2026-10-17 (Phase 3 rework): the deep tier is a 5-class topic model.**
+> Exports tagged `c6539fff94a1` or older are 6-class and superseded; use the
+> newest `groundedtriage-splits-<tag>.tar.gz` (the tag is in `datasets/README.md`).
+
 ## 1. Export the training data (Mac → PC)
 
 ```bash
@@ -16,10 +20,12 @@ The archive contains:
 
 | path | what |
 |---|---|
-| `processed/train.parquet`, `val.parquet`, `test.parquet` | the category splits (`train` is capped, val/test are not) |
-| `processed/train_urgency.parquet` | the urgency model's train file: every uncapped train row with an urgency label |
+| `processed/train.parquet`, `val.parquet`, `test.parquet` | the **topic** splits, 5 classes, no Spam (`train` is capped, val/test are not) |
+| `processed/train_urgency.parquet` | the urgency model's train file: every uncapped topic train row with an urgency label |
+| `processed/train_style_aug.parquet` | **optional** (P3.8): informal-style paraphrases of ~25% of `train`, same labels, `origin=augmented`; for the with/without ablation |
+| `processed/spam_train.parquet`, `spam_val.parquet`, `spam_test.parquet` | the binary spam filter's splits (`is_spam`); the filter is trained **in this repo**, so the PC can ignore them |
 | `processed/manifest.json` | seed, fractions, train cap, per-split row counts and SHA-256s |
-| `config/taxonomy.yaml` | the 6 categories (canonical order) and the urgency scale |
+| `config/taxonomy.yaml` | the 6 categories (canonical order), `filter_categories: [Spam]` and the urgency scale |
 | `datasets/README.md` | dataset card: sources, licences, build steps, counts |
 | `docs/model_artifacts.md` | this file |
 
@@ -30,7 +36,9 @@ The archive contains:
 | `id` | str | unique across splits |
 | `source_dataset` | str | `tobi_bueck`, `spamassassin`, `synthetic_meetings` |
 | `origin` | str | `real` or `synthetic`; report metrics overall and per origin |
-| `category` | str | one of the 6 taxonomy names |
+| `category` | str or null | topic splits: one of the 5 topic names; spam splits: Spam, a topic name, or **null for ham** |
+| `is_spam` | bool | spam splits only |
+| `aug_of` | str | `train_style_aug` only: the `id` of the train row it paraphrases |
 | `urgency` | str or null | `low` / `medium` / `high`; **null** for spam and synthetic rows |
 | `subject`, `body` | str | cleaned text |
 | `text` | str | **the model input**: `subject + "\n\n" + body` (body only if no subject); defined in `ml-service/app/textinput.py`. Train on this column so serving matches |
@@ -38,12 +46,18 @@ The archive contains:
 Rules for training:
 
 - **Deep tier**: train on `train`, select on `val`, never touch `test`.
-  Labels are `category`; class order = `config/taxonomy.yaml` order.
-  - `train` is capped at 5x the smallest *real* class (`train_cap` in
+  Labels are `category`: the **5 topic classes** (taxonomy order without
+  Spam: Technical Issue, Billing, Feature Request, General Inquiry, Meeting
+  Scheduling). Spam is not a topic class any more: a separate binary spam
+  filter (trained in this repo) decides it before the topic classifier runs.
+  - **Ablation (optional):** train once on `train` and once on
+    `train ∪ train_style_aug`; select both on `val` (never on augmented
+    rows). Record which in `model_card.json` (`"style_aug": true|false`).
+  - `train` is capped at 5x the smallest *real* topic class (`train_cap` in
     `manifest.json`); the rest of the imbalance must be handled with
     **class-weighted cross-entropy**, weights from the `train` class
     frequencies: `w_c = N / (K * n_c)` (sklearn's "balanced"), with N the
-    number of train rows, K = 6 classes and n_c the rows of class c.
+    number of train rows, K = 5 classes and n_c the rows of class c.
     No further downsampling or oversampling.
 - **Urgency model**: train on `train_urgency`, select on the `val` rows with
   non-null `urgency`, never touch `test`. Labels: `low`, `medium`, `high`
@@ -85,9 +99,9 @@ Both are Hugging Face `AutoModelForSequenceClassification` directories
 `{"0": "<label>", "1": "<label>", ...}`: ids are consecutive from 0 and must
 match the model's output logits.
 
-- **deep_tier**: exactly the 6 taxonomy names, in any id order:
-  `Technical Issue`, `Billing`, `Feature Request`, `General Inquiry`, `Spam`,
-  `Meeting Scheduling`.
+- **deep_tier**: exactly the **5 topic names**, in any id order:
+  `Technical Issue`, `Billing`, `Feature Request`, `General Inquiry`,
+  `Meeting Scheduling`. A 6-class label_map (with Spam) is rejected.
 - **urgency**: ordered by severity: `{"0": "low", "1": "medium", "2": "high"}`,
   optionally with `"3": "critical"` if a future dataset provides it.
 
@@ -102,6 +116,7 @@ match the model's output logits.
   "max_length": 256,
   "class_weights": {"Technical Issue": 0.0, "...": 0.0},
   "selected_epoch": 3,
+  "style_aug": false,
   "val_metrics": {"accuracy": 0.0, "macro_f1": 0.0}
 }
 ```

@@ -90,6 +90,15 @@
         "nearest_same_category": 0
       },
       {
+        "category": "Ham",
+        "origin": "real",
+        "test_rows": 613,
+        "test_rows_with_near_dup": 0,
+        "share": 0.0,
+        "near_dup_pairs": 0,
+        "nearest_same_category": 0
+      },
+      {
         "category": "Meeting Scheduling",
         "origin": "synthetic",
         "test_rows": 60,
@@ -120,9 +129,9 @@
     "total_test_rows_with_near_dup": 0,
     "total_pairs": 0,
     "max_similarity_quantiles": {
-      "0.5": 0.6182,
-      "0.9": 0.8555,
-      "0.99": 0.8952
+      "0.5": 0.5981,
+      "0.9": 0.8518,
+      "0.99": 0.8943
     }
   },
   "cross_split_pairs": {
@@ -142,37 +151,32 @@
       "test_rows": 0
     }
   },
-  "corpus_rows": 25164,
+  "corpus_rows": 29252,
   "corpus_matches_build": true,
   "shortcut": {
     "subject": {
-      "accuracy": 0.6474,
-      "macro_f1": 0.7086,
+      "accuracy": 0.6358,
+      "macro_f1": 0.6752,
       "per_class": {
         "Technical Issue": {
-          "precision": 0.7529,
-          "recall": 0.689,
-          "f1": 0.7195
+          "precision": 0.7587,
+          "recall": 0.683,
+          "f1": 0.7189
         },
         "Billing": {
-          "precision": 0.5784,
-          "recall": 0.5314,
-          "f1": 0.5539
+          "precision": 0.546,
+          "recall": 0.5172,
+          "f1": 0.5312
         },
         "Feature Request": {
-          "precision": 0.6732,
-          "recall": 0.7326,
-          "f1": 0.7017
+          "precision": 0.6833,
+          "recall": 0.7674,
+          "f1": 0.7229
         },
         "General Inquiry": {
-          "precision": 0.3308,
-          "recall": 0.4325,
-          "f1": 0.3749
-        },
-        "Spam": {
-          "precision": 0.9266,
-          "recall": 0.8783,
-          "f1": 0.9018
+          "precision": 0.3572,
+          "recall": 0.4618,
+          "f1": 0.4028
         },
         "Meeting Scheduling": {
           "precision": 1.0,
@@ -181,36 +185,31 @@
         }
       },
       "meeting_f1": 1.0,
-      "other_classes_mean_f1": 0.6504
+      "other_classes_mean_f1": 0.5939
     },
     "body": {
-      "accuracy": 0.7301,
-      "macro_f1": 0.7958,
+      "accuracy": 0.7261,
+      "macro_f1": 0.7708,
       "per_class": {
         "Technical Issue": {
-          "precision": 0.8362,
-          "recall": 0.7364,
-          "f1": 0.7831
+          "precision": 0.8307,
+          "recall": 0.7424,
+          "f1": 0.7841
         },
         "Billing": {
-          "precision": 0.6184,
-          "recall": 0.5984,
-          "f1": 0.6082
+          "precision": 0.6871,
+          "recall": 0.6369,
+          "f1": 0.6611
         },
         "Feature Request": {
-          "precision": 0.8906,
-          "recall": 0.9358,
-          "f1": 0.9126
+          "precision": 0.89,
+          "recall": 0.9305,
+          "f1": 0.9098
         },
         "General Inquiry": {
-          "precision": 0.4073,
-          "recall": 0.5642,
-          "f1": 0.4731
-        },
-        "Spam": {
-          "precision": 1.0,
-          "recall": 0.9957,
-          "f1": 0.9978
+          "precision": 0.4309,
+          "recall": 0.5935,
+          "f1": 0.4993
         },
         "Meeting Scheduling": {
           "precision": 1.0,
@@ -219,36 +218,31 @@
         }
       },
       "meeting_f1": 1.0,
-      "other_classes_mean_f1": 0.755
+      "other_classes_mean_f1": 0.7136
     },
     "text": {
-      "accuracy": 0.7354,
-      "macro_f1": 0.802,
+      "accuracy": 0.7278,
+      "macro_f1": 0.7765,
       "per_class": {
         "Technical Issue": {
-          "precision": 0.8332,
-          "recall": 0.7384,
-          "f1": 0.783
+          "precision": 0.8306,
+          "recall": 0.7394,
+          "f1": 0.7824
         },
         "Billing": {
-          "precision": 0.658,
-          "recall": 0.6126,
-          "f1": 0.6345
+          "precision": 0.7248,
+          "recall": 0.641,
+          "f1": 0.6803
         },
         "Feature Request": {
-          "precision": 0.8949,
-          "recall": 0.9332,
-          "f1": 0.9136
+          "precision": 0.9031,
+          "recall": 0.9465,
+          "f1": 0.9243
         },
         "General Inquiry": {
-          "precision": 0.4142,
-          "recall": 0.5805,
-          "f1": 0.4834
-        },
-        "Spam": {
-          "precision": 1.0,
-          "recall": 0.9957,
-          "f1": 0.9978
+          "precision": 0.4222,
+          "recall": 0.6,
+          "f1": 0.4956
         },
         "Meeting Scheduling": {
           "precision": 1.0,
@@ -257,17 +251,17 @@
         }
       },
       "meeting_f1": 1.0,
-      "other_classes_mean_f1": 0.7625
+      "other_classes_mean_f1": 0.7207
     },
     "hard_negative_probe": {
-      "real_val_rows": 3715,
-      "real_val_rows_mentioning_meeting_words": 173,
+      "real_val_rows": 3485,
+      "real_val_rows_mentioning_meeting_words": 144,
       "predicted_meeting_by_subject_model": 0,
       "predicted_meeting_by_text_model": 0,
       "pattern": "\\b(?:meeting|call|zoom|teams|webex|schedul\\w*|reschedul\\w*|calendar|appointment)\\b"
     },
-    "empty_subject_share_val": 0.094
+    "empty_subject_share_val": 0.0996
   },
-  "train_pool_rows": 17614,
-  "test_rows": 3775
+  "train_pool_rows": 20476,
+  "test_rows": 4388
 }

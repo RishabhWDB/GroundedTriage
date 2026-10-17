@@ -9,7 +9,8 @@ rows) and this card are.
 | source_dataset | origin | category | licence / terms | rows used |
 |---|---|---|---|---|
 | tobi_bueck — Tobi-Bueck/customer-support-tickets (Hugging Face), English rows | real | 4 support classes (queue/type rules in config/taxonomy.yaml) | CC-BY-NC-4.0 | 23228 |
-| spamassassin — Apache SpamAssassin public corpus (20030228_spam, 20050311_spam_2), spam only | real | Spam | no formal licence; offered for spam-filter development; not redistributed | 1553 |
+| spamassassin — Apache SpamAssassin public corpus (20030228_spam, 20050311_spam_2) | real | Spam (spam filter positives) | no formal licence; offered for spam-filter development; not redistributed | 1553 |
+| spamassassin_ham — Apache SpamAssassin public corpus (20030228_easy_ham, _easy_ham_2, _hard_ham) | real | none: spam-filter negatives only | as above | 4089 |
 | synthetic_meetings — gpt-oss-120b, seed 42, prompt in data/synthetic_meetings.py | synthetic | Meeting Scheduling | generated for this project | 400 |
 
 Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
@@ -17,16 +18,19 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 ## Build steps
 
 - Tobi-Bueck: 61765 rows → 28261 English → 514 dropped by rule (Human Resources), 1 empty, 4518 duplicate bodies → 23228.
+- SpamAssassin ham: 4150 messages → 0 too short, 10 non-English, 51 duplicates → 4089 (316 truncated).
 - SpamAssassin: 1896 messages → 27 too short, 69 non-English, 247 duplicates → 1553 (127 truncated to 4000 chars).
-- Cross-source duplicate bodies removed: 17.
-- Near-duplicates: word-unigram TF-IDF cosine > 0.9 (`data/neardup.py`), linked into groups (connected components): 1706 groups of 2+ rows covering 3989 rows (largest 14; 2 groups mix categories and are stratified by their majority category). Each group lands in exactly one split.
-- Split: group-aware 70/15/15 stratified by category × origin, seed 42.
-- Train only: classes capped at 5× the smallest real class = 5380 rows; removed {'Technical Issue': 3963}. val/test are not resampled. Remaining imbalance is handled with class weights at training time (docs/model_artifacts.md).
+- Cross-source duplicate bodies removed: 18.
+- Near-duplicates: word-unigram TF-IDF cosine > 0.9 (`data/neardup.py`), linked into groups (connected components): 1862 groups of 2+ rows covering 4328 rows (largest 14; 2 groups mix categories and are stratified by their majority category). Each group lands in exactly one split.
+- Split: group-aware 70/15/15 stratified by label × origin (label = category, or Ham), seed 42, one RNG per stratum. Both tasks below are cut from this one assignment, so no row is in train for one task and in val/test for the other.
+- **Topic task** (`train`/`val`/`test`, fast + deep tiers): the 5 topic categories Technical Issue, Billing, Feature Request, General Inquiry, Meeting Scheduling. Spam is decided by the binary spam filter, not the topic classifier.
+- Topic train only: classes capped at 5× the smallest real topic class = 8715 rows; removed {'Technical Issue': 628}. val/test are not resampled. Remaining imbalance is handled with class weights at training time (docs/model_artifacts.md).
+- **Spam-filter task** (`spam_train`/`spam_val`/`spam_test`, `is_spam`): every row of the split: spam (positives), ham and uncapped support tickets (negatives), so neither writing style nor source predicts the label on its own.
 - `train_urgency`: the uncapped train rows with an urgency label (16258 rows). Same row pool as `train` before the cap, so it shares no rows with val/test.
 - Model input (`text` column): subject + blank line + body (body only when subject is empty) (`app/textinput.py`).
 - Urgency: only Tobi-Bueck rows are labelled (low, medium, high); spam and synthetic rows have none. No English 'critical' rows exist.
 
-## Rows per split by category × origin
+## Topic rows per split by category × origin
 
 |                                     |   train |   val |   test |
 |:------------------------------------|--------:|------:|-------:|
@@ -34,26 +38,37 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 | ('Feature Request', 'real')         |    1743 |   374 |    374 |
 | ('General Inquiry', 'real')         |    2869 |   615 |    615 |
 | ('Meeting Scheduling', 'synthetic') |     280 |    60 |     60 |
-| ('Spam', 'real')                    |    1076 |   230 |    230 |
-| ('Technical Issue', 'real')         |    5380 |  2003 |   2003 |
+| ('Technical Issue', 'real')         |    8715 |  2003 |   2003 |
+
+## Spam-filter splits by is_spam × source
+
+|                               |   spam_train |   spam_val |   spam_test |
+|:------------------------------|-------------:|-----------:|------------:|
+| (False, 'spamassassin_ham')   |         2862 |        613 |         613 |
+| (False, 'synthetic_meetings') |          280 |         60 |          60 |
+| (False, 'tobi_bueck')         |        16258 |       3485 |        3485 |
+| (True, 'spamassassin')        |         1076 |        230 |         230 |
 
 ## Urgency labels per split (`train_urgency` is the urgency model's train file)
 
 | urgency   |   train |   val |   test |   train_urgency |
 |:----------|--------:|------:|-------:|----------------:|
-| (none)    |    1356 |   290 |    290 |               0 |
-| high      |    4459 |  1366 |   1357 |            6348 |
-| low       |    2716 |   690 |    680 |            3243 |
-| medium    |    5120 |  1429 |   1448 |            6667 |
+| (none)    |     280 |    60 |     60 |               0 |
+| high      |    6046 |  1394 |   1312 |            6365 |
+| low       |    3136 |   683 |    702 |            3228 |
+| medium    |    6448 |  1408 |   1471 |            6665 |
 
 ## Split files
 
 | split | rows | file sha256 | content sha256 |
 |---|---|---|---|
-| train | 13651 | `b18b549aa276f9d1f909683acef5ed45d322b73a8e20dccaed988fc70355423b` | `6f7999dffc759ec1da5dc55e4e07b2a7eef3de13282ef828ec25625f384fbb18` |
-| val | 3775 | `93bac4d57ea2c24075c71bbae3033a39df8b85faeb500d1e30c8559fc109fed2` | `cac237f430e4d9378505d9226480c36817315890800a6eb764dff67396a21be7` |
-| test | 3775 | `3faf9091c0c03c0bc2782c7f004891a5588da3202057412b9e09885885f9fcd1` | `c6539fff94a18757de5017c2ad60a0ff29baf9c01473b80d85ed7d4328e2daf3` |
-| train_urgency | 16258 | `55daee85cca9fe3fc9d36820aa3c4a6aab6c41c393d24086041a8c03c8842556` | `2333268bcd60234da488ffcaeabe504e22366daed4673633a75891309ee015f5` |
+| train | 15910 | `c2b8ac0d457a7afaf9e799f8987f7c8ff4a9f1c59e540e8e7f46cd8e7f734784` | `9848709ed9f36dc15ae28e7fd81aee1c11be90cbb0280a4d050aad3256690bbe` |
+| val | 3545 | `0e37f5e7165a9fa840befea514e6ac1278520fc9371e386d9355e981983f112f` | `8401c42557bbf2f298536d6f3f9f9cd6b97532a71a71f426d94522d1d0f0b05e` |
+| test | 3545 | `f4a04e6007a66730669c2a51cb9e63348c8e297f6bc18bfcedb9a865539f3448` | `e2552b04338b4d5872aab17662d750294ce894602f3de0752b90c5049e3d0e81` |
+| train_urgency | 16258 | `b9582ffa0623d38c2fe0d07c76d1ca26d8cc5337831b473fcd1b6540dccea599` | `5c22d71c96cae9ba0bff1ead7166f71b1c87c8dc0da6de05820db9c82d753a40` |
+| spam_train | 20476 | `6403bd7948b329dd735db614ecb346d42f4a6a57b5781630a487ddccc552c833` | `319c633f2aa42f034666c2988ea5f538a7bcc0e8f014e53b014a5f385a7fb3dc` |
+| spam_val | 4388 | `167280a32dcd15a9fb71f53c919036d11b9ec5f2e10e0e398f7bb910c01f6ce5` | `0e883067c5345d7c0cb01b6725a8145cd915e2b836206df64cf5085c6c9e6e3e` |
+| spam_test | 4388 | `20cfb399c45e45cf113d003e0f8710d2a147b1385c31b803fa03e84b438435ef` | `e6997f05fbb2cb20ea502438b93d62cef03b66024b3d78a8f235a635721b3272` |
 
 The content hash is independent of the parquet library version; compare it on the PC
 to confirm the test split is identical.

@@ -71,15 +71,14 @@ def test_assemble_dedupes_caps_and_formats():
     splits, info = assemble(fr + [dup])
     assert info["cross_source_duplicates"] == 3
     total_val_test = len(splits["val"]) + len(splits["test"])
-    assert (
-        total_val_test
-        == round(1000 * 0.15) * 2 + round(200 * 0.15) * 2 + round(100 * 0.15) * 2 + 6 * 2
-    )
+    # Topic splits hold no Spam (the spam filter decides it).
+    assert total_val_test == round(1000 * 0.15) * 2 + round(200 * 0.15) * 2 + 6 * 2
+    assert "Spam" not in set(splits["train"]["category"]) | set(splits["test"]["category"])
     tr = splits["train"]
     assert tr["category"].value_counts().max() <= info["train_cap"]
     r = tr.iloc[0]
     assert r["text"] == model_input(r["subject"], r["body"])
-    assert splits["test"].query("category == 'Spam'")["urgency"].isna().all()
+    assert splits["spam_test"].query("category == 'Spam'")["urgency"].isna().all()
 
 
 def test_train_urgency_is_uncapped_labelled_train():
@@ -87,8 +86,8 @@ def test_train_urgency_is_uncapped_labelled_train():
     tu = splits["train_urgency"]
     assert tu["urgency"].notna().all()
     assert set(tu["category"]) == {"Technical Issue", "Billing"}  # spam/synthetic unlabelled
-    assert (tu["category"] == "Technical Issue").sum() == 700  # uncapped (cap is 5 x 70 spam)
-    assert info["train_cap"] == 350
+    assert (tu["category"] == "Technical Issue").sum() == 700  # uncapped
+    assert info["train_cap"] == 700  # 5 x 140 Billing: Spam no longer sets the topic cap
     assert not set(tu["id"]) & (set(splits["val"]["id"]) | set(splits["test"]["id"]))
 
 
@@ -139,6 +138,39 @@ def test_assemble_puts_near_duplicates_in_one_split():
     )
     splits, info = assemble(fr + [para])
     ids = {base["id"], *para["id"]}
-    homes = {k for k, v in splits.items() if k != "train_urgency" and ids & set(v["id"])}
-    assert len(homes) == 1
+    homes = {
+        k.removeprefix("spam_")
+        for k, v in splits.items()
+        if k != "train_urgency" and ids & set(v["id"])
+    }
+    assert len(homes) == 1  # e.g. train and spam_train: the same split for both tasks
     assert info["near_dup_groups"] >= 1 and info["near_dup_rows_in_groups"] >= 7
+
+
+def ham(n, prefix="ham"):
+    df = rows("Spam", "real", n, prefix)
+    df["category"] = None
+    df["source_dataset"] = "spamassassin_ham"
+    return df
+
+
+def test_spam_splits_share_the_topic_assignment():
+    splits, info = assemble(frames() + [ham(300)])
+    for split in ("train", "val", "test"):
+        s = splits[f"spam_{split}"]
+        assert set(s.columns) >= {"is_spam", "category"}
+        assert s.loc[s["is_spam"], "category"].eq("Spam").all()
+        assert s.loc[~s["is_spam"], "category"].ne("Spam").all()
+        # Every topic row of a split is in the same spam split (uncapped for train).
+        assert set(splits[split]["id"]) <= set(s["id"])
+        assert (s["source_dataset"] == "spamassassin_ham").sum() > 0
+    names = ("spam_train", "spam_val", "spam_test")
+    ids = [set(splits[n]["id"]) for n in names]
+    assert not (ids[0] & ids[1] or ids[0] & ids[2] or ids[1] & ids[2])
+    assert sum(map(len, ids)) == 1000 + 200 + 100 + 40 + 300
+    assert (splits["spam_val"]["source_dataset"] == "spamassassin_ham").sum() == 45
+    assert info["topic_categories"] == [
+        "Technical Issue", "Billing", "Feature Request", "General Inquiry", "Meeting Scheduling"
+    ]  # fmt: skip
+    a = content_sha256(splits["spam_test"])
+    assert a == content_sha256(splits["spam_test"].copy())
