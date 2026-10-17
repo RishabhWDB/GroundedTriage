@@ -138,3 +138,34 @@ func (c *Client) Classify(ctx context.Context, req ClassifyRequest) (model.Class
 	err := c.do(ctx, http.MethodPost, "/classify", req, &out)
 	return out, err
 }
+
+// MeetingRequest is the POST /extract_meeting body.
+type MeetingRequest struct {
+	TicketID        string    `json:"ticket_id"`
+	Subject         string    `json:"subject"`
+	Body            string    `json:"body"`
+	ReceivedAt      time.Time `json:"received_at"`
+	DefaultTimezone string    `json:"default_timezone"`
+}
+
+// MeetingExtraction mirrors ml-service app.meeting.MeetingExtraction.
+type MeetingExtraction struct {
+	TicketID         string     `json:"ticket_id"`
+	IsMeetingRequest bool       `json:"is_meeting_request"`
+	Start            *time.Time `json:"start"`
+	Timezone         string     `json:"timezone"`
+	DurationMinutes  *int       `json:"duration_minutes"`
+	Venue            string     `json:"venue"`
+	VenueDetail      *string    `json:"venue_detail"`
+	TimeText         *string    `json:"time_text"`
+	Action           string     `json:"action"`
+	Notes            []string   `json:"notes"`
+}
+
+// ExtractMeeting calls POST /extract_meeting (an LLM call: allow a longer
+// Timeout than for /classify).
+func (c *Client) ExtractMeeting(ctx context.Context, req MeetingRequest) (MeetingExtraction, error) {
+	var out MeetingExtraction
+	err := c.do(ctx, http.MethodPost, "/extract_meeting", req, &out)
+	return out, err
+}

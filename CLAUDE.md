@@ -301,14 +301,19 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P4.4b Scheduling logic: `internal/scheduler` (`Calendar` interface, `FakeCalendar`, `Scheduler.Schedule` → `booked | counter_offer | no_slot`). Tests: free, busy → counter-offer, outside hours/weekend/overrun, no time, past, fully booked, calendar error, booked slot becomes busy, DST week.
   - Commit `c769ec7`.
 - P4.4c Google Calendar: `scheduler.GoogleCalendar` (REST v3 `freeBusy` and `events.insert?sendUpdates=all` over an OAuth2 client; refreshed tokens saved back) and `RunInstalledAppFlow` (loopback redirect on 127.0.0.1, state check, PKCE S256, offline access, token file mode 0600); `cmd/calendar-auth` (`make calendar-auth`). Tested against `httptest`, including the whole flow with a fake token endpoint. **Not run against a real Google account** (no credentials configured).
+  - Commit `f8eb41b`.
+- P4.4d Meeting step:
+  - migration **00007** `meetings` (one outcome per ticket: booked / counter_offer / no_slot / not_a_meeting, slot, event id, reason, extraction JSON; applied to Mumbai);
+  - `mlclient.ExtractMeeting`; `store.Meetings`; `pipeline.MeetingScheduler` (extract → schedule → store → audit `meeting.<status>`);
+  - the worker runs it after escalation; `MEETING_CALENDAR=google|fake|off`.
+  - Unit tests (fakes) and a DB integration test (stub ml-service + FakeCalendar).
   - Commit: backfilled in the next commit.
 
 ### In progress
-- Phase 4 (routing and actions), run through after the P3.13 review items. Daily: `make style-aug` until 3,978 rows (P3.8b).
+- none. Phase 4 is done; waiting for Arya's Phase 4 review. Daily: `make style-aug` until 3,978 rows (P3.8b).
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P4.4 Meeting scheduler
 - P5.1 KB ingestion
 - P5.2 Retriever
 - P5.3 Draft generator
@@ -463,6 +468,15 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P4.4d): Meeting step:
+  - It runs for tickets whose **current route action is `schedule`** and that have no `meetings` row (one outcome per ticket; `ticket_id` unique).
+  - Extraction (ml-service, LLM, 60 s timeout) → `scheduler.Schedule` with the ticket's sender as the attendee, the venue detail as the location, and "Support call: <subject>" as the summary.
+  - `not_a_meeting` is stored when the extraction says so. The ticket keeps its route; the reply in P5 handles it.
+  - An extraction or calendar failure leaves the ticket pending, to retry on the next run. Audit rows: `meeting.booked | counter_offer | no_slot | not_a_meeting`.
+  - A counter-offer creates **no** calendar event: the proposed slot is for the reply draft (P5/P6), and the event is created when the customer accepts. That acceptance flow is out of scope for P4.
+  - **Calendar choice (`MEETING_CALENDAR`):** `google` (needs `make calendar-auth`), `fake` (in-memory, demo only; bookings are lost on restart), `off`. Unset means `google` when `GOOGLE_TOKEN_FILE` exists, else `off`, so the worker runs without Google credentials. Working hours use `GOOGLE_TIMEZONE`.
+  - The worker steps (classify → route → escalate → meetings) use only the contracts, never the deferred model decisions.
+  - **Not run against DATABASE_URL:** the worker would classify and route the Mumbai demo tickets, which the review said to leave as they are. Migrations 00005–00007 are applied there (additive).
 - 2026-10-17 (P4.4b): Scheduling policy (`scheduler.DefaultConfig`):
   - Mon–Fri 09:00–17:00 in `GOOGLE_TIMEZONE`; 30-minute default duration and slot step; **2 hours' minimum lead**; 14-day search horizon.
   - A requested slot is **booked** (event created, requester invited) only when it's at least 2 hours ahead, falls wholly inside one workday's hours and overlaps no busy interval.

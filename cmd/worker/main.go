@@ -2,7 +2,9 @@
 // stores new tickets (layer 1), classifies accepted tickets through the
 // ml-service's POST /classify (layer 2, ML_SERVICE_URL), routes classified and
 // skipped tickets with config/routing_rules.yaml + config/sla.yaml and
-// escalates SLA breaches (layer 3). Replies are added in later phases.
+// escalates SLA breaches (layer 3), and books or proposes meetings for
+// `schedule` routes (P4.4; MEETING_CALENDAR=google|fake|off). Replies are
+// added in later phases.
 //
 //	go run ./cmd/worker            # poll every WORKER_POLL_INTERVAL (default 60s)
 //	go run ./cmd/worker -once      # one poll, then exit
@@ -11,6 +13,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -18,12 +21,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/RishabhWDB/GroundedTriage/internal/envfile"
 	"github.com/RishabhWDB/GroundedTriage/internal/ingest"
 	"github.com/RishabhWDB/GroundedTriage/internal/mlclient"
 	"github.com/RishabhWDB/GroundedTriage/internal/pipeline"
 	"github.com/RishabhWDB/GroundedTriage/internal/preprocess"
 	"github.com/RishabhWDB/GroundedTriage/internal/routing"
+	"github.com/RishabhWDB/GroundedTriage/internal/scheduler"
 	"github.com/RishabhWDB/GroundedTriage/internal/store"
 )
 
@@ -94,7 +100,12 @@ func main() {
 		Clock: routing.SystemClock{},
 		Audit: store.Audit{Pool: pool},
 	}
-	// After each poll: classify, route, escalate. A failing step is logged and
+	meetings, err := meetingScheduler(ctx, pool, mlURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// After each poll: classify, route, escalate, schedule meetings. A failing step is logged and
 	// the next one still runs (routing also covers skipped tickets).
 	classify := func(ctx context.Context) {
 		if _, err := classifier.ClassifyPending(ctx); err != nil {
@@ -105,6 +116,11 @@ func main() {
 		}
 		if _, err := router.EscalateBreached(ctx); err != nil {
 			slog.Error("worker: escalate", "err", err)
+		}
+		if meetings != nil {
+			if _, err := meetings.SchedulePending(ctx); err != nil {
+				slog.Error("worker: meetings", "err", err)
+			}
 		}
 	}
 
@@ -132,7 +148,13 @@ func main() {
 		slog.Info("worker: route", "routed", rs.Routed, "by_action", rs.ByAction, "err", rerr)
 		es, eerr := router.EscalateBreached(ctx)
 		slog.Info("worker: escalate", "breached", es.Breached, "escalated", es.Escalated, "err", eerr)
-		if failed || err != nil || rerr != nil || eerr != nil {
+		var merr error
+		if meetings != nil {
+			var ms pipeline.MeetingStats
+			ms, merr = meetings.SchedulePending(ctx)
+			slog.Info("worker: meetings", "pending", ms.Pending, "by_status", ms.ByStatus, "failed", ms.Failed, "err", merr)
+		}
+		if failed || err != nil || rerr != nil || eerr != nil || merr != nil {
 			os.Exit(1)
 		}
 		return
@@ -141,4 +163,63 @@ func main() {
 	slog.Info("worker: polling", "sources", len(sources), "interval", interval)
 	poller.Run(ctx, interval)
 	slog.Info("worker stopped")
+}
+
+// meetingScheduler builds the P4.4 step from MEETING_CALENDAR: "google"
+// (needs `make calendar-auth`), "fake" (an in-memory calendar for demos) or
+// "off". Unset means google when the token file exists, otherwise off.
+func meetingScheduler(ctx context.Context, pool *pgxpool.Pool, mlURL string) (*pipeline.MeetingScheduler, error) {
+	tz := os.Getenv("GOOGLE_TIMEZONE")
+	if tz == "" {
+		tz = "UTC"
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return nil, fmt.Errorf("GOOGLE_TIMEZONE=%q: %w", tz, err)
+	}
+	tokenFile := os.Getenv("GOOGLE_TOKEN_FILE")
+	if tokenFile == "" {
+		tokenFile = "token.json"
+	}
+	mode := os.Getenv("MEETING_CALENDAR")
+	if mode == "" {
+		mode = "off"
+		if _, err := os.Stat(tokenFile); err == nil {
+			mode = "google"
+		}
+	}
+	var cal scheduler.Calendar
+	switch mode {
+	case "off":
+		slog.Info("worker: meeting scheduling off (MEETING_CALENDAR=off or no Google token)")
+		return nil, nil
+	case "fake":
+		slog.Warn("worker: MEETING_CALENDAR=fake: meetings are booked in an in-memory calendar (demo only)")
+		cal = &scheduler.FakeCalendar{}
+	case "google":
+		creds := os.Getenv("GOOGLE_CREDENTIALS_FILE")
+		if creds == "" {
+			creds = "credentials.json"
+		}
+		calID := os.Getenv("GOOGLE_CALENDAR_ID")
+		if calID == "" {
+			calID = "primary"
+		}
+		g, err := scheduler.NewGoogleCalendar(ctx, creds, tokenFile, calID)
+		if err != nil {
+			return nil, err
+		}
+		cal = g
+	default:
+		return nil, fmt.Errorf("MEETING_CALENDAR=%q: want google, fake or off", mode)
+	}
+	ml := mlclient.New(mlURL)
+	ml.Timeout = 60 * time.Second // an LLM call
+	return &pipeline.MeetingScheduler{
+		Store:     store.Meetings{Pool: pool},
+		ML:        ml,
+		Scheduler: &scheduler.Scheduler{Calendar: cal, Config: scheduler.DefaultConfig(loc)},
+		Timezone:  tz,
+		Audit:     store.Audit{Pool: pool},
+	}, nil
 }

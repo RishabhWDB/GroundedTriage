@@ -9,7 +9,7 @@ import (
 // RequiredTables are the tables the migrations create; VerifySchema checks each.
 var RequiredTables = []string{
 	"tickets", "classifications", "routes", "kb_documents", "kb_chunks",
-	"reply_drafts", "audit_log", "ingest_checkpoints",
+	"reply_drafts", "audit_log", "ingest_checkpoints", "meetings",
 }
 
 // HNSWIndex is the vector index on kb_chunks.embedding (migration 00002).
