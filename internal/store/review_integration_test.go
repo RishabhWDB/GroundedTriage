@@ -5,6 +5,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +108,13 @@ func TestReviewQueriesAndDraftTransitions(t *testing.T) {
 	if r, err := rv.RejectDraft(ctx, g, "lead", "tone"); err != nil || r.Status != "rejected" {
 		t.Fatalf("reject approved-unsent: %+v %v", r, err)
 	}
+	if rt, _, _ := routes.Latest(ctx, bill); rt.Queue != "human_review" || rt.Action != "queue" ||
+		!strings.HasSuffix(rt.Reason, "; draft_rejected") {
+		t.Fatalf("route after reject %+v", rt)
+	}
+	if _, err := rv.RejectDraft(ctx, g, "lead", "again"); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("rejecting twice: %v", err)
+	}
 	if _, err := rv.ApproveDraft(ctx, "00000000-0000-0000-0000-000000000000", "x", ""); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("missing draft: %v", err)
 	}
@@ -116,7 +124,7 @@ func TestReviewQueriesAndDraftTransitions(t *testing.T) {
 		t.Fatal(err)
 	}
 	if sum.Tickets != 3 || sum.ByCategory["unclassified"] != 1 || sum.ByTier["deep"] != 1 || sum.OpenRoutes != 2 ||
-		sum.SLABreachedOpen != 1 || sum.ByAction["reply"] != 1 || *sum.AbstainRate != 0.5 || sum.TopSenders[0].Sender != "a@x.com" ||
+		sum.SLABreachedOpen != 1 || sum.ByAction["queue"] != 2 || *sum.AbstainRate != 0.5 || sum.TopSenders[0].Sender != "a@x.com" ||
 		sum.TopSenders[0].Tickets != 2 || sum.DraftsByStatus["rejected"] != 1 {
 		t.Fatalf("summary %+v", sum)
 	}

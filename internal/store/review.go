@@ -334,10 +334,33 @@ func (r Review) ApproveDraft(ctx context.Context, id, reviewer, note string) (Dr
 		"(status = 'grounded' or (edited and status = 'abstained')) and btrim(body) <> ''", reviewer, note)
 }
 
-// RejectDraft rejects a draft that hasn't been sent.
+// RejectDraft rejects a draft that hasn't been sent and, in the same
+// transaction, moves the ticket's current route to the human_review queue
+// (action queue, reason "draft_rejected" appended).
 func (r Review) RejectDraft(ctx context.Context, id, reviewer, note string) (DraftView, error) {
-	return r.transition(ctx, id, "status = 'rejected', reviewer = $2, review_note = $3, reviewed_at = now()",
-		"status in ('grounded', 'abstained', 'approved') and sent_at is null", reviewer, note)
+	tx, err := r.Pool.Begin(ctx)
+	if err != nil {
+		return DraftView{}, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after commit
+	d, err := scanDraft(tx.QueryRow(ctx, "update reply_drafts set status = 'rejected', reviewer = $2, review_note = $3, "+
+		"reviewed_at = now(), updated_at = now() where id = $1 and status in ('grounded', 'abstained', 'approved') "+
+		"and sent_at is null and send_started_at is null returning "+draftCols, id, reviewer, note))
+	if errors.Is(err, ErrNotFound) {
+		if _, gerr := r.GetDraft(ctx, id); errors.Is(gerr, ErrNotFound) {
+			return d, ErrNotFound
+		}
+		return d, ErrConflict
+	}
+	if err != nil {
+		return d, err
+	}
+	if _, err := tx.Exec(ctx, `
+		update routes set queue = 'human_review', action = 'queue', reason = reason || '; draft_rejected', updated_at = now()
+		where id = (select id from routes where ticket_id = $1 order by created_at desc, id desc limit 1)`, d.TicketID); err != nil {
+		return d, err
+	}
+	return d, tx.Commit(ctx)
 }
 
 // EditDraft replaces the subject and body of an unsent, unapproved draft and

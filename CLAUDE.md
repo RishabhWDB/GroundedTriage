@@ -387,10 +387,15 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P6.4 Dashboard:
   - `#/dashboard` in the UI renders `GET /metrics/summary`. Tiles: tickets, open routes, SLA breached (red when > 0), escalated, deep-tier share, abstain rate, average faithfulness, models loaded. Bar charts: volume by source and category, urgency, tier, actions, drafts by status, top senders.
   - The mapping is a pure `dashboard.js` model, tested with `node --test` (run by `go test ./internal/ui` when Node is installed, skipped otherwise).
+  - Commit `2dc4d18`.
+- P6.5 Phase 6 review follow-ups:
+  - **reject also moves the ticket to `human_review`** (reason `draft_rejected`, same transaction; audited; a draft mid-send can't be rejected);
+  - demo-only **"eligible for auto-send"** badge (grounded, unedited, faithfulness 1.0, above the floor) with no auto-send;
+  - future work and limitations recorded (§3c).
   - Commit: backfilled in the next commit.
 
 ### In progress
-- none. Phase 6 is done; waiting for Arya's Phase 6 review. Leftover gpt-oss budget: live re-check of the reasoning-off judge (P5.4), then style-aug (P3.8b).
+- Phase 7 in Arya's order: P7.2 (RAG eval, multi-day at the free cap) → P7.3 monitoring → P8 parts not tied to final numbers → stop with the consolidated manual checklist. P7.1 / P7.4 wait for Arya's artifacts and labels.
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
@@ -441,6 +446,10 @@ Claude's own background item: `make style-aug` once per day (Groq free cap) unti
 - **SLAs are wall-clock** (Phase 4 review Q2): no business-hours or holiday calendar. Business-hours SLAs are future work.
 - **Groq free tier:** gpt-oss-120b is capped at 200k tokens/day (rolling). Style-aug completes over several days, and P7.2 (judge-heavy) needs several days, so its runs are resumable and cached.
 - The **style shortcut** (P3.5a/P3.12): models trained on LLM-written tickets transfer poorly to human-written mail. Reported via the OOD set.
+- **Negative result (report it):** a cross-encoder reranker (ms-marco-MiniLM-L-6-v2 over the dense top-20) **lowered** WixQA recall@1 0.43 → 0.36 (expert) and 0.34 → 0.29 (simulated), and tripled latency (p50 154 → 457 ms) (P5.6).
+- **Auto-send policies** (e.g. send grounded drafts with faithfulness 1.0 and high retrieval scores without review) are future work. Human approval is mandatory now; the UI only shows an "eligible for auto-send" badge.
+- **User accounts / RBAC** are future work. The capstone uses one shared API key.
+- **Deploy security (P8.2):** HTTPS only; the API key is never in page source or the JS bundle (the agent types it; it lives in that browser's localStorage); rotate it by changing `API_KEY` in the environment, as documented from `.env.example`.
 
 ## 4. Model artifacts
 
@@ -552,6 +561,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (Phase 6 review): reject → also `human_review` (`draft_rejected`); human approval stays mandatory (the auto-send badge is demo-only); a single API key for the capstone (RBAC is future work); deploy requires HTTPS, keeps the key out of page source, and documents rotation. **Phase 7 order:** P7.2 first (start now, within the daily cap) + the judge-labelling CLI → P7.3 → P8 parts not tied to final numbers → P7.1/P7.4 last (they need Arya's artifacts and labels), then a consolidated checklist.
 - 2026-10-17 (P6.3): **Exactly one send per approval, and never a blind resend.**
   - The sender **claims** a draft first: a conditional `UPDATE … FOR UPDATE SKIP LOCKED` sets `send_started_at`. Two workers never claim the same draft (an integration test runs two senders concurrently: 6 approvals → 6 sends).
   - It then calls the adapter. Success → `status=sent`, `sent_at`, and the ticket's route `resolved`, in one transaction. A **known** adapter error → `send_error` recorded and the claim released, so the next run retries, up to `MaxAttempts` (5).

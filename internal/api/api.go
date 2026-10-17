@@ -287,8 +287,7 @@ func (s *Server) afterReview(c *gin.Context, action string, d store.DraftView, e
 	}
 	if s.Audit != nil {
 		if aerr := s.Audit.Write(c.Request.Context(), store.AuditEntry{Actor: d.Reviewer, EntityType: "draft",
-			EntityID: d.ID, Action: action, Details: map[string]any{"ticket_id": d.TicketID, "status": d.Status,
-				"note": d.ReviewNote, "edited": d.Edited}}); aerr != nil {
+			EntityID: d.ID, Action: action, Details: reviewDetails(action, d)}); aerr != nil {
 			s.log().Warn("api: audit write failed", "err", aerr)
 		}
 	}
@@ -305,7 +304,7 @@ func (s *Server) approve(c *gin.Context) {
 func (s *Server) reject(c *gin.Context) {
 	if id, b, ok := s.reviewInput(c, false); ok {
 		d, err := s.Store.RejectDraft(c.Request.Context(), id, b.Reviewer, b.Note)
-		s.afterReview(c, "draft.rejected", d, err)
+		s.afterReview(c, "draft.rejected", d, err) // the store also moved the ticket to human_review
 	}
 }
 
@@ -334,4 +333,12 @@ func (s *Server) summary(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+func reviewDetails(action string, d store.DraftView) map[string]any {
+	m := map[string]any{"ticket_id": d.TicketID, "status": d.Status, "note": d.ReviewNote, "edited": d.Edited}
+	if action == "draft.rejected" {
+		m["route_queue"], m["route_reason"] = "human_review", "draft_rejected"
+	}
+	return m
 }

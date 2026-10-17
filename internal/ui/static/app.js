@@ -27,6 +27,10 @@ function el(tag, attrs = {}, ...children) {
 const $ = (sel) => document.querySelector(sel);
 const fmtTime = (t) => (t ? new Date(t).toLocaleString() : "—");
 const pct = (x) => (x === null || x === undefined ? "—" : `${Math.round(x * 100)}%`);
+// Demo-only signal (no auto-send exists): grounded, unedited, faithfulness 1.0.
+// A grounded draft's retrieval was above the gate's floor (below it, drafts abstain).
+const autoSendEligible = (d) => d.status === "grounded" && !d.edited && d.faithfulness_score === 1 &&
+  d.retrieval_max_score !== null && d.retrieval_max_score !== undefined;
 const badge = (text, cls) => el("span", { class: `badge ${cls || String(text).replace(/\s+/g, "_")}` }, text);
 
 function toast(msg) {
@@ -155,7 +159,8 @@ async function loadInbox() {
       el("td", {}, t.tier ? badge(t.tier) : "—", t.low_confidence ? [" ", badge("low conf.", "low_confidence")] : null),
       el("td", {}, t.urgency ? badge(t.urgency) : "—"),
       el("td", {}, t.queue || "—"),
-      el("td", {}, t.draft_status ? badge(t.draft_status) : "—"),
+      el("td", {}, t.draft_status ? badge(t.draft_status) : "—",
+        t.draft_status === "grounded" && t.faithfulness_score === 1 ? [" ", badge("auto-send eligible", "eligible")] : null),
       el("td", {}, pct(t.faithfulness_score)));
     tbody.append(row);
   }
@@ -271,7 +276,10 @@ async function loadDraft(ticketId) {
   const claims = Array.isArray(d.claims) ? d.claims : [];
   const unsupported = Array.isArray(d.unsupported_claims) ? d.unsupported_claims : [];
   card.replaceChildren(
-    el("h3", {}, "Draft reply ", badge(d.status), d.edited ? [" ", badge("edited", "abstained")] : null),
+    el("h3", {}, "Draft reply ", badge(d.status), d.edited ? [" ", badge("edited", "abstained")] : null,
+      autoSendEligible(d) ? [" ", el("span", { class: "badge eligible", title:
+        "Grounded, faithfulness 1.0, retrieval above the floor. Shown for the demo only: every reply still needs human approval." },
+      "eligible for auto-send")] : null),
     kv([["Faithfulness", d.faithfulness_score === null ? "not judged" : pct(d.faithfulness_score)],
       ["Retrieval", d.retrieval_max_score === null ? "—" : `best ${d.retrieval_max_score.toFixed(3)} (${d.retrieval_mode})`],
       ["Abstained", d.abstain_reason], ["Reviewed", d.reviewer ? `${d.reviewer}, ${fmtTime(d.reviewed_at)}` : ""],
