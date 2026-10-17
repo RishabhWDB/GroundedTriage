@@ -336,18 +336,19 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `/retrieve` reports `retrieval_floor` + `below_floor`;
   - judge defaults changed for Groq's qwen OTPM limit;
   - `JSONModeError` used by the judge, meeting extraction and style-aug.
+  - Commit `ba524fd`.
+- P5.5 Pipeline wiring (Go):
+  - `mlclient.Retrieve/Draft/Verify`; `store.ReplyDrafts` (`PendingReplies`, `Insert`, `Latest`); `store.Routes.Reassign`; migration **00009** (`reply_drafts`: `abstain_reason`, `retrieval_max_score`, `retrieval_mode`, `claims`, `retrieved_chunk_ids`; applied to Mumbai);
+  - `pipeline.Replier` (retrieve → skip drafting below the floor → draft → verify → store; abstained → `human_review` with the reason; audit `reply.grounded|abstained`);
+  - the worker runs it last (`RETRIEVAL_HYBRID`).
+  - End-to-end integration test with a stubbed ml-service.
   - Commit: backfilled in the next commit.
 
 ### In progress
-- Phase 5 (grounded reply), after P3.14. gpt-oss-120b budget: P5 development first; style-aug and the live `/extract_meeting` check only with leftover budget.
+- none. Phase 5 is done; waiting for Arya's Phase 5 review. Leftover gpt-oss budget: live re-check of the reasoning-off judge (P5.4), then style-aug (P3.8b).
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P5.1 KB ingestion
-- P5.2 Retriever
-- P5.3 Draft generator
-- P5.4 Faithfulness gate + abstain
-- P5.5 Pipeline wiring
 - P6.1 REST API
 - P6.2 Agent review UI
 - P6.3 Outbound reply
@@ -508,6 +509,14 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P5.5): Reply step (Go):
+  - Runs for tickets whose **current route action is `reply`** and that have no `reply_drafts` row (10 per run; each costs up to 3 LLM calls).
+  - Retrieve (k=5, dense unless `RETRIEVAL_HYBRID=true`). **No chunks, or `below_floor` → stored as abstained with no drafting or judging** (no tokens).
+  - Otherwise draft → verify, then store the `ReplyDraft` plus the review details: abstain reason, retrieval max score and mode, per-claim judgements, retrieved chunk ids.
+  - **Abstained → `Routes.Reassign` to `human_review`** (action becomes `queue`, the reason is appended, priority and SLA are kept). Grounded drafts wait for agent review (P6); nothing is sent automatically.
+  - An ml-service failure leaves the ticket pending for the next run. One audit row per ticket: `reply.grounded` / `reply.abstained`.
+  - Worker order: poll → classify → route → escalate → meetings → replies. The ml client timeout for replies is 120 s (LLM calls).
+  - **Not run against DATABASE_URL** (the Mumbai demo tickets stay untouched, as asked). The end-to-end test runs on TEST_DATABASE_URL with a stubbed ml-service: sample CSV → ingest → classify → route → "Charged twice" gets a stored grounded draft citing `kb1:0`; "Library hours" abstains below the floor and moves to `human_review`; a re-run drafts nothing.
 - 2026-10-17 (P5.4): Faithfulness gate:
   - **One judge call per draft** (qwen3.8-27b, a different family from the drafter; temperature 0, JSON) does both the claim split and the support judgement: `{claims: [{claim, cited, supported, reason}]}`. Greetings, sign-offs, empathy and questions to the customer aren't claims. A claim that an action was or will be taken is supported only if a source says so. `faithfulness_score` = supported / all, and **1.0 when the draft makes no factual claims** (such a draft is still reviewed by an agent).
   - **Abstain rules** (`config/grounding.yaml`): no chunks; best retrieval cosine < **retrieval_floor 0.7177**; `faithfulness_score` < **0.9**. Abstentions record the reason and the unsupported claims. The floor and empty-retrieval checks run before the judge, so they cost no tokens.

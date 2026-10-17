@@ -149,3 +149,17 @@ func (r Routes) Escalate(ctx context.Context, o OpenRoute, newPriority int, newD
 	}
 	return tag.RowsAffected() == 1, nil
 }
+
+// Reassign moves a ticket's current route to another queue (e.g. an abstained
+// draft goes to human review), keeping its priority and SLA and appending the
+// reason. It returns false when the ticket has no route.
+func (r Routes) Reassign(ctx context.Context, ticketID, queue, reason string) (bool, error) {
+	tag, err := r.Pool.Exec(ctx, `
+		update routes set queue = $2, action = 'queue', reason = reason || '; ' || $3, updated_at = now()
+		where id = (select id from routes where ticket_id = $1 order by created_at desc, id desc limit 1)`,
+		ticketID, queue, reason)
+	if err != nil {
+		return false, fmt.Errorf("reassign route of %s: %w", ticketID, err)
+	}
+	return tag.RowsAffected() == 1, nil
+}

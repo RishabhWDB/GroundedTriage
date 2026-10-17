@@ -3,8 +3,9 @@
 // ml-service's POST /classify (layer 2, ML_SERVICE_URL), routes classified and
 // skipped tickets with config/routing_rules.yaml + config/sla.yaml and
 // escalates SLA breaches (layer 3), and books or proposes meetings for
-// `schedule` routes (P4.4; MEETING_CALENDAR=google|fake|off). Replies are
-// added in later phases.
+// `schedule` routes (P4.4; MEETING_CALENDAR=google|fake|off), and drafts
+// grounded replies for `reply` routes (P5.5: retrieve -> draft -> verify;
+// abstentions go to human_review). Sending happens after agent approval (P6).
 //
 //	go run ./cmd/worker            # poll every WORKER_POLL_INTERVAL (default 60s)
 //	go run ./cmd/worker -once      # one poll, then exit
@@ -104,6 +105,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	replyML := mlclient.New(mlURL)
+	replyML.Timeout = 120 * time.Second // drafting and judging are LLM calls
+	replier := &pipeline.Replier{
+		Drafts: store.ReplyDrafts{Pool: pool},
+		Routes: store.Routes{Pool: pool},
+		ML:     replyML,
+		Audit:  store.Audit{Pool: pool},
+		Hybrid: os.Getenv("RETRIEVAL_HYBRID") == "true",
+	}
 
 	// After each poll: classify, route, escalate, schedule meetings. A failing step is logged and
 	// the next one still runs (routing also covers skipped tickets).
@@ -121,6 +131,9 @@ func main() {
 			if _, err := meetings.SchedulePending(ctx); err != nil {
 				slog.Error("worker: meetings", "err", err)
 			}
+		}
+		if _, err := replier.ReplyPending(ctx); err != nil {
+			slog.Error("worker: replies", "err", err)
 		}
 	}
 
@@ -154,7 +167,10 @@ func main() {
 			ms, merr = meetings.SchedulePending(ctx)
 			slog.Info("worker: meetings", "pending", ms.Pending, "by_status", ms.ByStatus, "failed", ms.Failed, "err", merr)
 		}
-		if failed || err != nil || rerr != nil || eerr != nil || merr != nil {
+		rp, perr := replier.ReplyPending(ctx)
+		slog.Info("worker: replies", "pending", rp.Pending, "grounded", rp.Grounded, "abstained", rp.Abstained,
+			"failed", rp.Failed, "err", perr)
+		if failed || err != nil || rerr != nil || eerr != nil || merr != nil || perr != nil {
 			os.Exit(1)
 		}
 		return

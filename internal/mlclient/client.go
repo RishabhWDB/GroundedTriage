@@ -169,3 +169,91 @@ func (c *Client) ExtractMeeting(ctx context.Context, req MeetingRequest) (Meetin
 	err := c.do(ctx, http.MethodPost, "/extract_meeting", req, &out)
 	return out, err
 }
+
+// RetrieveRequest is the POST /retrieve body.
+type RetrieveRequest struct {
+	TicketID string `json:"ticket_id"`
+	Subject  string `json:"subject"`
+	Body     string `json:"body"`
+	K        int    `json:"k"`
+	Hybrid   bool   `json:"hybrid"`
+}
+
+// RetrieveResponse is the POST /retrieve result.
+type RetrieveResponse struct {
+	TicketID string                 `json:"ticket_id"`
+	Mode     string                 `json:"mode"`
+	MaxScore float64                `json:"max_score"`
+	Chunks   []model.RetrievedChunk `json:"chunks"`
+	// The faithfulness gate's floor (config/grounding.yaml) and whether
+	// MaxScore is below it (then the draft would abstain anyway).
+	RetrievalFloor float64 `json:"retrieval_floor"`
+	BelowFloor     bool    `json:"below_floor"`
+}
+
+// Retrieve calls POST /retrieve.
+func (c *Client) Retrieve(ctx context.Context, req RetrieveRequest) (RetrieveResponse, error) {
+	var out RetrieveResponse
+	err := c.do(ctx, http.MethodPost, "/retrieve", req, &out)
+	return out, err
+}
+
+// DraftRequest is the POST /draft body.
+type DraftRequest struct {
+	TicketID string                 `json:"ticket_id"`
+	Subject  string                 `json:"subject"`
+	Body     string                 `json:"body"`
+	Category string                 `json:"category"`
+	Urgency  string                 `json:"urgency"`
+	Chunks   []model.RetrievedChunk `json:"chunks"`
+}
+
+// GeneratedDraft mirrors ml-service rag.generator.GeneratedDraft.
+type GeneratedDraft struct {
+	TicketID         string   `json:"ticket_id"`
+	Subject          string   `json:"subject"`
+	Body             string   `json:"body"`
+	Citations        []string `json:"citations"`
+	InvalidCitations []int    `json:"invalid_citations"`
+	Refined          bool     `json:"refined"`
+	Notes            []string `json:"notes"`
+}
+
+// Draft calls POST /draft (two LLM calls).
+func (c *Client) Draft(ctx context.Context, req DraftRequest) (GeneratedDraft, error) {
+	var out GeneratedDraft
+	err := c.do(ctx, http.MethodPost, "/draft", req, &out)
+	return out, err
+}
+
+// VerifyRequest is the POST /verify body.
+type VerifyRequest struct {
+	TicketID  string                 `json:"ticket_id"`
+	Subject   string                 `json:"subject"`
+	Body      string                 `json:"body"`
+	Citations []string               `json:"citations"`
+	Chunks    []model.RetrievedChunk `json:"chunks"`
+}
+
+// Claim is one judged atomic claim.
+type Claim struct {
+	Claim     string `json:"claim"`
+	Cited     []int  `json:"cited"`
+	Supported bool   `json:"supported"`
+	Reason    string `json:"reason"`
+}
+
+// Verification mirrors ml-service rag.faithfulness.Verification.
+type Verification struct {
+	Draft             model.ReplyDraft `json:"draft"`
+	Claims            []Claim          `json:"claims"`
+	AbstainReason     string           `json:"abstain_reason"`
+	RetrievalMaxScore float64          `json:"retrieval_max_score"`
+}
+
+// Verify calls POST /verify (one judge LLM call, cached by the ml-service).
+func (c *Client) Verify(ctx context.Context, req VerifyRequest) (Verification, error) {
+	var out Verification
+	err := c.do(ctx, http.MethodPost, "/verify", req, &out)
+	return out, err
+}
