@@ -1,51 +1,51 @@
 {
   "card": {
-    "version": "spam-20261017045337-319c633f",
+    "version": "spam-20261017061237-9bb8ad84",
     "task": "spam",
     "model": "tfidf(word 1-2 + char_wb 3-5) + LR (balanced), binary is_spam",
-    "trained_at": "2026-10-17T04:53:37+00:00",
+    "trained_at": "2026-10-17T06:12:37+00:00",
     "trained_on": {
-      "spam_train_content_sha256": "319c633f2aa42f034666c2988ea5f538a7bcc0e8f014e53b014a5f385a7fb3dc"
+      "spam_train_content_sha256": "9bb8ad8458e6024c2d65a6db25d38a811ca9ed7f979e16e855325cd8d2326fff"
     },
-    "C": 16.0,
+    "C": 4.0,
     "sklearn_version": "1.9.1",
-    "spam_threshold": 0.019484791904687885,
-    "review_threshold": 0.005204929504543544,
+    "spam_threshold": 0.03264911845326424,
+    "review_threshold": 0.011608960106968881,
     "threshold_rule": "lowest scores with support-ticket FPR <= 0.01 (mute) and <= 0.05 (review) on spam_val",
     "default_rule": "support_and_ham",
     "rules": {
       "support": {
-        "spam_threshold": 0.019484791904687885,
-        "review_threshold": 0.005204929504543544,
+        "spam_threshold": 0.03264911845326424,
+        "review_threshold": 0.011608960106968881,
         "description": "lowest scores with support-ticket FPR <= 0.01 (mute) and <= 0.05 (review) on spam_val"
       },
       "support_and_ham": {
-        "spam_threshold": 0.4364949464797974,
-        "review_threshold": 0.09414790570735933,
+        "spam_threshold": 0.5655351877212526,
+        "review_threshold": 0.19851727783679965,
         "description": "as 'support', and also ham FPR <= 0.01 (mute) and <= 0.05 (review) on spam_val"
       }
     },
     "val_metrics": {
       "recall_at_mute": 1.0,
       "fpr_support_at_mute": 0.0099,
-      "average_precision": 0.9958
+      "average_precision": 0.9935
     }
   },
   "c_selection": [
     {
       "C": 1.0,
-      "val_average_precision": 0.9907,
-      "fit_s": 15.8
+      "val_average_precision": 0.9904,
+      "fit_s": 16.5
     },
     {
       "C": 4.0,
-      "val_average_precision": 0.9937,
-      "fit_s": 16.8
+      "val_average_precision": 0.9935,
+      "fit_s": 14.8
     },
     {
       "C": 16.0,
-      "val_average_precision": 0.9958,
-      "fit_s": 16.5
+      "val_average_precision": 0.9904,
+      "fit_s": 14.0
     }
   ],
   "val": {
@@ -64,34 +64,34 @@
       },
       "ham": {
         "n": 613,
-        "muted_as_spam": 0.1974,
-        "review_band": 0.2382,
-        "passed": 0.5644
+        "muted_as_spam": 0.3181,
+        "review_band": 0.3246,
+        "passed": 0.3573
       },
       "recall_at_mute": 1.0,
       "recall_at_review": 1.0,
       "fpr_support_at_mute": 0.0099,
-      "fpr_ham_at_mute": 0.1974
+      "fpr_ham_at_mute": 0.3181
     },
     "ranking": {
-      "average_precision": 0.9958,
-      "roc_auc": 0.9998
+      "average_precision": 0.9935,
+      "roc_auc": 0.9997
     },
     "score_quantiles_by_group": {
       "spam": [
-        0.9981,
-        0.9999,
-        1.0
+        0.9945,
+        0.9996,
+        0.9999
       ],
       "support": [
-        0.0002,
-        0.0026,
-        0.0188
+        0.0013,
+        0.0069,
+        0.0326
       ],
       "ham": [
-        0.004,
-        0.0503,
-        0.4342
+        0.0168,
+        0.1218,
+        0.5556
       ]
     }
   },
@@ -105,58 +105,58 @@
       },
       "support": {
         "n": 3545,
-        "muted_as_spam": 0.0099,
-        "review_band": 0.0449,
-        "passed": 0.9453
+        "muted_as_spam": 0.0096,
+        "review_band": 0.0471,
+        "passed": 0.9433
       },
       "ham": {
         "n": 613,
-        "muted_as_spam": 0.2104,
-        "review_band": 0.2594,
-        "passed": 0.5302
+        "muted_as_spam": 0.3458,
+        "review_band": 0.3361,
+        "passed": 0.3181
       },
       "recall_at_mute": 1.0,
       "recall_at_review": 1.0,
-      "fpr_support_at_mute": 0.0099,
-      "fpr_ham_at_mute": 0.2104
+      "fpr_support_at_mute": 0.0096,
+      "fpr_ham_at_mute": 0.3458
     },
     "ranking": {
-      "average_precision": 0.9929,
-      "roc_auc": 0.9996
+      "average_precision": 0.9903,
+      "roc_auc": 0.9995
     },
     "score_quantiles_by_group": {
       "spam": [
-        0.9981,
-        1.0,
-        1.0
+        0.9942,
+        0.9997,
+        0.9999
       ],
       "support": [
-        0.0002,
-        0.003,
-        0.0194
+        0.0012,
+        0.0077,
+        0.0321
       ],
       "ham": [
-        0.0048,
-        0.0544,
-        0.7091
+        0.0194,
+        0.1136,
+        0.8448
       ]
     }
   },
   "alternative_support_and_ham": {
-    "spam_threshold": 0.4364949464797974,
-    "review_threshold": 0.09414790570735933,
+    "spam_threshold": 0.5655351877212526,
+    "review_threshold": 0.19851727783679965,
     "val": {
       "spam": {
         "n": 230,
-        "muted_as_spam": 0.9783,
+        "muted_as_spam": 0.9739,
         "review_band": 0.0174,
-        "passed": 0.0043
+        "passed": 0.0087
       },
       "support": {
         "n": 3545,
         "muted_as_spam": 0.0,
-        "review_band": 0.0008,
-        "passed": 0.9992
+        "review_band": 0.0,
+        "passed": 1.0
       },
       "ham": {
         "n": 613,
@@ -164,8 +164,8 @@
         "review_band": 0.0392,
         "passed": 0.9511
       },
-      "recall_at_mute": 0.9783,
-      "recall_at_review": 0.9957,
+      "recall_at_mute": 0.9739,
+      "recall_at_review": 0.9913,
       "fpr_support_at_mute": 0.0,
       "fpr_ham_at_mute": 0.0098
     },
@@ -179,27 +179,27 @@
       "support": {
         "n": 3545,
         "muted_as_spam": 0.0,
-        "review_band": 0.0017,
-        "passed": 0.9983
+        "review_band": 0.0003,
+        "passed": 0.9997
       },
       "ham": {
         "n": 613,
-        "muted_as_spam": 0.0212,
-        "review_band": 0.0424,
-        "passed": 0.9364
+        "muted_as_spam": 0.0196,
+        "review_band": 0.0343,
+        "passed": 0.9462
       },
       "recall_at_mute": 0.9783,
       "recall_at_review": 0.9957,
       "fpr_support_at_mute": 0.0,
-      "fpr_ham_at_mute": 0.0212
+      "fpr_ham_at_mute": 0.0196
     }
   },
   "run": {
-    "git_commit": "4317f15",
+    "git_commit": "d9a17ee",
     "machine": "arm64 Darwin 25.5.0",
     "python": "3.11.14",
-    "peak_rss_mb": 891.2,
-    "swap_usage_at_end": "total = 7168.00M  used = 6720.12M  free = 447.88M  (encrypted)",
+    "peak_rss_mb": 970.1,
+    "swap_usage_at_end": "total = 8192.00M  used = 7523.12M  free = 668.88M  (encrypted)",
     "date": "2026-10-17",
     "split": "spam_val+spam_test"
   }

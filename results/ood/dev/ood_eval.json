@@ -60,12 +60,12 @@
         "n": 17,
         "correct": 9,
         "accuracy": 0.5294,
-        "macro_f1": 0.2455,
-        "non_spam_muted": 6,
+        "macro_f1": 0.2725,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 8,
         "spam_n": 8,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "enron_spam": {
@@ -84,39 +84,39 @@
         "n": 9,
         "correct": 1,
         "accuracy": 0.1111,
-        "macro_f1": 0.125,
-        "non_spam_muted": 6,
+        "macro_f1": 0.1667,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       }
     },
     "cascade[support_and_ham]": {
       "all": {
         "n": 17,
-        "correct": 9,
-        "accuracy": 0.5294,
-        "macro_f1": 0.3333,
+        "correct": 6,
+        "accuracy": 0.3529,
+        "macro_f1": 0.2705,
         "non_spam_muted": 0,
         "non_spam_n": 9,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
-        "non_spam_in_review": 4,
-        "spam_in_review": 1
+        "non_spam_in_review": 2,
+        "spam_in_review": 3
       },
       "enron_spam": {
         "n": 8,
-        "correct": 7,
-        "accuracy": 0.875,
-        "macro_f1": 0.9333,
+        "correct": 4,
+        "accuracy": 0.5,
+        "macro_f1": 0.6667,
         "non_spam_muted": 0,
         "non_spam_n": 0,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
         "non_spam_in_review": 0,
-        "spam_in_review": 1
+        "spam_in_review": 3
       },
       "sample_emails": {
         "n": 9,
@@ -127,7 +127,7 @@
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       }
     },
@@ -168,12 +168,12 @@
         "n": 17,
         "correct": 9,
         "accuracy": 0.5294,
-        "macro_f1": 0.2455,
-        "non_spam_muted": 6,
+        "macro_f1": 0.2725,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 8,
         "spam_n": 8,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "enron_spam": {
@@ -192,39 +192,39 @@
         "n": 9,
         "correct": 1,
         "accuracy": 0.1111,
-        "macro_f1": 0.125,
-        "non_spam_muted": 6,
+        "macro_f1": 0.1667,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       }
     },
     "cascade[support_and_ham|aug]": {
       "all": {
         "n": 17,
-        "correct": 9,
-        "accuracy": 0.5294,
-        "macro_f1": 0.3333,
+        "correct": 6,
+        "accuracy": 0.3529,
+        "macro_f1": 0.2705,
         "non_spam_muted": 0,
         "non_spam_n": 9,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
-        "non_spam_in_review": 4,
-        "spam_in_review": 1
+        "non_spam_in_review": 2,
+        "spam_in_review": 3
       },
       "enron_spam": {
         "n": 8,
-        "correct": 7,
-        "accuracy": 0.875,
-        "macro_f1": 0.9333,
+        "correct": 4,
+        "accuracy": 0.5,
+        "macro_f1": 0.6667,
         "non_spam_muted": 0,
         "non_spam_n": 0,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
         "non_spam_in_review": 0,
-        "spam_in_review": 1
+        "spam_in_review": 3
       },
       "sample_emails": {
         "n": 9,
@@ -235,7 +235,7 @@
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       }
     },
@@ -276,12 +276,12 @@
         "n": 17,
         "correct": 9,
         "accuracy": 0.5294,
-        "macro_f1": 0.2788,
-        "non_spam_muted": 6,
+        "macro_f1": 0.2725,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 8,
         "spam_n": 8,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "enron_spam": {
@@ -301,38 +301,38 @@
         "correct": 1,
         "accuracy": 0.1111,
         "macro_f1": 0.1667,
-        "non_spam_muted": 6,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       }
     },
     "cascade[support_and_ham|emb]": {
       "all": {
         "n": 17,
-        "correct": 9,
-        "accuracy": 0.5294,
-        "macro_f1": 0.3867,
+        "correct": 6,
+        "accuracy": 0.3529,
+        "macro_f1": 0.3333,
         "non_spam_muted": 0,
         "non_spam_n": 9,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
-        "non_spam_in_review": 4,
-        "spam_in_review": 1
+        "non_spam_in_review": 2,
+        "spam_in_review": 3
       },
       "enron_spam": {
         "n": 8,
-        "correct": 7,
-        "accuracy": 0.875,
-        "macro_f1": 0.9333,
+        "correct": 4,
+        "accuracy": 0.5,
+        "macro_f1": 0.6667,
         "non_spam_muted": 0,
         "non_spam_n": 0,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
         "non_spam_in_review": 0,
-        "spam_in_review": 1
+        "spam_in_review": 3
       },
       "sample_emails": {
         "n": 9,
@@ -343,7 +343,7 @@
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       }
     },
@@ -384,12 +384,12 @@
         "n": 17,
         "correct": 9,
         "accuracy": 0.5294,
-        "macro_f1": 0.2788,
-        "non_spam_muted": 6,
+        "macro_f1": 0.2725,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 8,
         "spam_n": 8,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "enron_spam": {
@@ -409,38 +409,38 @@
         "correct": 1,
         "accuracy": 0.1111,
         "macro_f1": 0.1667,
-        "non_spam_muted": 6,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       }
     },
     "cascade[support_and_ham|emb_aug]": {
       "all": {
         "n": 17,
-        "correct": 9,
-        "accuracy": 0.5294,
-        "macro_f1": 0.3867,
+        "correct": 6,
+        "accuracy": 0.3529,
+        "macro_f1": 0.3167,
         "non_spam_muted": 0,
         "non_spam_n": 9,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
-        "non_spam_in_review": 4,
-        "spam_in_review": 1
+        "non_spam_in_review": 2,
+        "spam_in_review": 3
       },
       "enron_spam": {
         "n": 8,
-        "correct": 7,
-        "accuracy": 0.875,
-        "macro_f1": 0.9333,
+        "correct": 4,
+        "accuracy": 0.5,
+        "macro_f1": 0.6667,
         "non_spam_muted": 0,
         "non_spam_n": 0,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
         "non_spam_in_review": 0,
-        "spam_in_review": 1
+        "spam_in_review": 3
       },
       "sample_emails": {
         "n": 9,
@@ -451,7 +451,7 @@
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       }
     },
@@ -534,14 +534,14 @@
     "cascade[support]": {
       "all": {
         "n": 76,
-        "correct": 11,
-        "accuracy": 0.1447,
-        "macro_f1": 0.0821,
-        "non_spam_muted": 58,
+        "correct": 10,
+        "accuracy": 0.1316,
+        "macro_f1": 0.0661,
+        "non_spam_muted": 61,
         "non_spam_n": 66,
         "spam_caught": 9,
         "spam_n": 10,
-        "non_spam_in_review": 7,
+        "non_spam_in_review": 5,
         "spam_in_review": 1
       },
       "enron_spam": {
@@ -560,51 +560,51 @@
         "n": 9,
         "correct": 1,
         "accuracy": 0.1111,
-        "macro_f1": 0.125,
-        "non_spam_muted": 6,
+        "macro_f1": 0.1667,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "twitter": {
         "n": 59,
-        "correct": 2,
-        "accuracy": 0.0339,
-        "macro_f1": 0.0247,
-        "non_spam_muted": 52,
+        "correct": 1,
+        "accuracy": 0.0169,
+        "macro_f1": 0.007,
+        "non_spam_muted": 54,
         "non_spam_n": 57,
         "spam_caught": 1,
         "spam_n": 2,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 3,
         "spam_in_review": 1
       }
     },
     "cascade[support_and_ham]": {
       "all": {
         "n": 76,
-        "correct": 26,
-        "accuracy": 0.3421,
-        "macro_f1": 0.2773,
-        "non_spam_muted": 7,
+        "correct": 23,
+        "accuracy": 0.3026,
+        "macro_f1": 0.2525,
+        "non_spam_muted": 2,
         "non_spam_n": 66,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 10,
-        "non_spam_in_review": 23,
-        "spam_in_review": 2
+        "non_spam_in_review": 18,
+        "spam_in_review": 3
       },
       "enron_spam": {
         "n": 8,
-        "correct": 7,
-        "accuracy": 0.875,
-        "macro_f1": 0.9333,
+        "correct": 4,
+        "accuracy": 0.5,
+        "macro_f1": 0.6667,
         "non_spam_muted": 0,
         "non_spam_n": 0,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
         "non_spam_in_review": 0,
-        "spam_in_review": 1
+        "spam_in_review": 3
       },
       "sample_emails": {
         "n": 9,
@@ -615,20 +615,20 @@
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "twitter": {
         "n": 59,
         "correct": 17,
         "accuracy": 0.2881,
-        "macro_f1": 0.1505,
-        "non_spam_muted": 7,
+        "macro_f1": 0.1433,
+        "non_spam_muted": 2,
         "non_spam_n": 57,
         "spam_caught": 0,
         "spam_n": 2,
-        "non_spam_in_review": 19,
-        "spam_in_review": 1
+        "non_spam_in_review": 16,
+        "spam_in_review": 0
       }
     },
     "fast_only[aug]": {
@@ -676,14 +676,14 @@
     "cascade[support|aug]": {
       "all": {
         "n": 76,
-        "correct": 11,
-        "accuracy": 0.1447,
-        "macro_f1": 0.0821,
-        "non_spam_muted": 58,
+        "correct": 10,
+        "accuracy": 0.1316,
+        "macro_f1": 0.0661,
+        "non_spam_muted": 61,
         "non_spam_n": 66,
         "spam_caught": 9,
         "spam_n": 10,
-        "non_spam_in_review": 7,
+        "non_spam_in_review": 5,
         "spam_in_review": 1
       },
       "enron_spam": {
@@ -702,51 +702,51 @@
         "n": 9,
         "correct": 1,
         "accuracy": 0.1111,
-        "macro_f1": 0.125,
-        "non_spam_muted": 6,
+        "macro_f1": 0.1667,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "twitter": {
         "n": 59,
-        "correct": 2,
-        "accuracy": 0.0339,
-        "macro_f1": 0.0247,
-        "non_spam_muted": 52,
+        "correct": 1,
+        "accuracy": 0.0169,
+        "macro_f1": 0.007,
+        "non_spam_muted": 54,
         "non_spam_n": 57,
         "spam_caught": 1,
         "spam_n": 2,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 3,
         "spam_in_review": 1
       }
     },
     "cascade[support_and_ham|aug]": {
       "all": {
         "n": 76,
-        "correct": 30,
-        "accuracy": 0.3947,
-        "macro_f1": 0.3514,
-        "non_spam_muted": 7,
+        "correct": 28,
+        "accuracy": 0.3684,
+        "macro_f1": 0.3362,
+        "non_spam_muted": 2,
         "non_spam_n": 66,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 10,
-        "non_spam_in_review": 23,
-        "spam_in_review": 2
+        "non_spam_in_review": 18,
+        "spam_in_review": 3
       },
       "enron_spam": {
         "n": 8,
-        "correct": 7,
-        "accuracy": 0.875,
-        "macro_f1": 0.9333,
+        "correct": 4,
+        "accuracy": 0.5,
+        "macro_f1": 0.6667,
         "non_spam_muted": 0,
         "non_spam_n": 0,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
         "non_spam_in_review": 0,
-        "spam_in_review": 1
+        "spam_in_review": 3
       },
       "sample_emails": {
         "n": 9,
@@ -757,20 +757,20 @@
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "twitter": {
         "n": 59,
-        "correct": 21,
-        "accuracy": 0.3559,
-        "macro_f1": 0.2399,
-        "non_spam_muted": 7,
+        "correct": 22,
+        "accuracy": 0.3729,
+        "macro_f1": 0.2524,
+        "non_spam_muted": 2,
         "non_spam_n": 57,
         "spam_caught": 0,
         "spam_n": 2,
-        "non_spam_in_review": 19,
-        "spam_in_review": 1
+        "non_spam_in_review": 16,
+        "spam_in_review": 0
       }
     },
     "fast_only[emb]": {
@@ -821,11 +821,11 @@
         "correct": 11,
         "accuracy": 0.1447,
         "macro_f1": 0.0831,
-        "non_spam_muted": 58,
+        "non_spam_muted": 61,
         "non_spam_n": 66,
         "spam_caught": 9,
         "spam_n": 10,
-        "non_spam_in_review": 7,
+        "non_spam_in_review": 5,
         "spam_in_review": 1
       },
       "enron_spam": {
@@ -845,50 +845,50 @@
         "correct": 1,
         "accuracy": 0.1111,
         "macro_f1": 0.1667,
-        "non_spam_muted": 6,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "twitter": {
         "n": 59,
         "correct": 2,
         "accuracy": 0.0339,
-        "macro_f1": 0.0283,
-        "non_spam_muted": 52,
+        "macro_f1": 0.0292,
+        "non_spam_muted": 54,
         "non_spam_n": 57,
         "spam_caught": 1,
         "spam_n": 2,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 3,
         "spam_in_review": 1
       }
     },
     "cascade[support_and_ham|emb]": {
       "all": {
         "n": 76,
-        "correct": 29,
-        "accuracy": 0.3816,
-        "macro_f1": 0.3903,
-        "non_spam_muted": 7,
+        "correct": 28,
+        "accuracy": 0.3684,
+        "macro_f1": 0.3962,
+        "non_spam_muted": 2,
         "non_spam_n": 66,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 10,
-        "non_spam_in_review": 23,
-        "spam_in_review": 2
+        "non_spam_in_review": 18,
+        "spam_in_review": 3
       },
       "enron_spam": {
         "n": 8,
-        "correct": 7,
-        "accuracy": 0.875,
-        "macro_f1": 0.9333,
+        "correct": 4,
+        "accuracy": 0.5,
+        "macro_f1": 0.6667,
         "non_spam_muted": 0,
         "non_spam_n": 0,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
         "non_spam_in_review": 0,
-        "spam_in_review": 1
+        "spam_in_review": 3
       },
       "sample_emails": {
         "n": 9,
@@ -899,20 +899,20 @@
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "twitter": {
         "n": 59,
-        "correct": 20,
-        "accuracy": 0.339,
-        "macro_f1": 0.2815,
-        "non_spam_muted": 7,
+        "correct": 22,
+        "accuracy": 0.3729,
+        "macro_f1": 0.311,
+        "non_spam_muted": 2,
         "non_spam_n": 57,
         "spam_caught": 0,
         "spam_n": 2,
-        "non_spam_in_review": 19,
-        "spam_in_review": 1
+        "non_spam_in_review": 16,
+        "spam_in_review": 0
       }
     },
     "fast_only[emb_aug]": {
@@ -963,11 +963,11 @@
         "correct": 11,
         "accuracy": 0.1447,
         "macro_f1": 0.0831,
-        "non_spam_muted": 58,
+        "non_spam_muted": 61,
         "non_spam_n": 66,
         "spam_caught": 9,
         "spam_n": 10,
-        "non_spam_in_review": 7,
+        "non_spam_in_review": 5,
         "spam_in_review": 1
       },
       "enron_spam": {
@@ -987,50 +987,50 @@
         "correct": 1,
         "accuracy": 0.1111,
         "macro_f1": 0.1667,
-        "non_spam_muted": 6,
+        "non_spam_muted": 7,
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 3,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "twitter": {
         "n": 59,
         "correct": 2,
         "accuracy": 0.0339,
-        "macro_f1": 0.0283,
-        "non_spam_muted": 52,
+        "macro_f1": 0.0292,
+        "non_spam_muted": 54,
         "non_spam_n": 57,
         "spam_caught": 1,
         "spam_n": 2,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 3,
         "spam_in_review": 1
       }
     },
     "cascade[support_and_ham|emb_aug]": {
       "all": {
         "n": 76,
-        "correct": 31,
-        "accuracy": 0.4079,
-        "macro_f1": 0.4099,
-        "non_spam_muted": 7,
+        "correct": 30,
+        "accuracy": 0.3947,
+        "macro_f1": 0.4115,
+        "non_spam_muted": 2,
         "non_spam_n": 66,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 10,
-        "non_spam_in_review": 23,
-        "spam_in_review": 2
+        "non_spam_in_review": 18,
+        "spam_in_review": 3
       },
       "enron_spam": {
         "n": 8,
-        "correct": 7,
-        "accuracy": 0.875,
-        "macro_f1": 0.9333,
+        "correct": 4,
+        "accuracy": 0.5,
+        "macro_f1": 0.6667,
         "non_spam_muted": 0,
         "non_spam_n": 0,
-        "spam_caught": 7,
+        "spam_caught": 4,
         "spam_n": 8,
         "non_spam_in_review": 0,
-        "spam_in_review": 1
+        "spam_in_review": 3
       },
       "sample_emails": {
         "n": 9,
@@ -1041,20 +1041,20 @@
         "non_spam_n": 9,
         "spam_caught": 0,
         "spam_n": 0,
-        "non_spam_in_review": 4,
+        "non_spam_in_review": 2,
         "spam_in_review": 0
       },
       "twitter": {
         "n": 59,
-        "correct": 22,
-        "accuracy": 0.3729,
-        "macro_f1": 0.3038,
-        "non_spam_muted": 7,
+        "correct": 24,
+        "accuracy": 0.4068,
+        "macro_f1": 0.3342,
+        "non_spam_muted": 2,
         "non_spam_n": 57,
         "spam_caught": 0,
         "spam_n": 2,
-        "non_spam_in_review": 19,
-        "spam_in_review": 1
+        "non_spam_in_review": 16,
+        "spam_in_review": 0
       }
     },
     "scribe": {
@@ -1105,13 +1105,13 @@
       "fast_tier": "fast-20261017043430-9848709e"
     },
     "cascade[support]": {
-      "spam_filter": "spam-20261017045337-319c633f:support",
+      "spam_filter": "spam-20261017061237-9bb8ad84:support",
       "fast_tier": "fast-20261017043430-9848709e",
       "tau": "0.7",
       "urgency": "heuristic"
     },
     "cascade[support_and_ham]": {
-      "spam_filter": "spam-20261017045337-319c633f:support_and_ham",
+      "spam_filter": "spam-20261017061237-9bb8ad84:support_and_ham",
       "fast_tier": "fast-20261017043430-9848709e",
       "tau": "0.7",
       "urgency": "heuristic"
@@ -1120,13 +1120,13 @@
       "fast_tier": "fast-20261017044330-9848709e"
     },
     "cascade[support|aug]": {
-      "spam_filter": "spam-20261017045337-319c633f:support",
+      "spam_filter": "spam-20261017061237-9bb8ad84:support",
       "fast_tier": "fast-20261017044330-9848709e",
       "tau": "0.7",
       "urgency": "heuristic"
     },
     "cascade[support_and_ham|aug]": {
-      "spam_filter": "spam-20261017045337-319c633f:support_and_ham",
+      "spam_filter": "spam-20261017061237-9bb8ad84:support_and_ham",
       "fast_tier": "fast-20261017044330-9848709e",
       "tau": "0.7",
       "urgency": "heuristic"
@@ -1135,13 +1135,13 @@
       "fast_tier": "fast-emb-20261017055200-9848709e"
     },
     "cascade[support|emb]": {
-      "spam_filter": "spam-20261017045337-319c633f:support",
+      "spam_filter": "spam-20261017061237-9bb8ad84:support",
       "fast_tier": "fast-emb-20261017055200-9848709e",
       "tau": "0.7",
       "urgency": "heuristic"
     },
     "cascade[support_and_ham|emb]": {
-      "spam_filter": "spam-20261017045337-319c633f:support_and_ham",
+      "spam_filter": "spam-20261017061237-9bb8ad84:support_and_ham",
       "fast_tier": "fast-emb-20261017055200-9848709e",
       "tau": "0.7",
       "urgency": "heuristic"
@@ -1150,13 +1150,13 @@
       "fast_tier": "fast-emb-20261017055228-9848709e"
     },
     "cascade[support|emb_aug]": {
-      "spam_filter": "spam-20261017045337-319c633f:support",
+      "spam_filter": "spam-20261017061237-9bb8ad84:support",
       "fast_tier": "fast-emb-20261017055228-9848709e",
       "tau": "0.7",
       "urgency": "heuristic"
     },
     "cascade[support_and_ham|emb_aug]": {
-      "spam_filter": "spam-20261017045337-319c633f:support_and_ham",
+      "spam_filter": "spam-20261017061237-9bb8ad84:support_and_ham",
       "fast_tier": "fast-emb-20261017055228-9848709e",
       "tau": "0.7",
       "urgency": "heuristic"
@@ -1166,11 +1166,11 @@
     }
   },
   "run": {
-    "git_commit": "3ae6085",
+    "git_commit": "d9a17ee",
     "machine": "arm64 Darwin 25.5.0",
     "python": "3.11.14",
-    "peak_rss_mb": 667.0,
-    "swap_usage_at_end": "total = 10240.00M  used = 9148.06M  free = 1091.94M  (encrypted)",
+    "peak_rss_mb": 665.2,
+    "swap_usage_at_end": "total = 10240.00M  used = 8897.12M  free = 1342.88M  (encrypted)",
     "date": "2026-10-17"
   }
 }

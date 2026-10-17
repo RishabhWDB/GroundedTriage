@@ -220,6 +220,17 @@ def style_aug_split(train: pd.DataFrame, aug: pd.DataFrame) -> pd.DataFrame:
     return aug[AUG_COLUMNS].sort_values("id").reset_index(drop=True)
 
 
+def add_aug_negatives(spam_train: pd.DataFrame, aug: pd.DataFrame) -> pd.DataFrame:
+    """spam_train plus the style-aug rows as spam-filter NEGATIVES (P3.14):
+    informal, human-style legitimate support text, so the filter stops reading
+    informality as spam. Train only; spam_val/test never change. Each aug row
+    paraphrases a topic train row, so it adds no cross-split leakage."""
+    if aug.empty:
+        return spam_train
+    neg = aug.drop(columns=["aug_of"]).assign(is_spam=False)
+    return pd.concat([spam_train, neg[SPAM_COLUMNS]]).sort_values("id").reset_index(drop=True)
+
+
 def _counts(splits: dict[str, pd.DataFrame], col: str) -> pd.DataFrame:
     return (
         pd.DataFrame({k: v[col].value_counts(dropna=False) for k, v in splits.items()})
@@ -285,7 +296,7 @@ def write_card(splits, info, stats, manifest) -> str:
         f"- Split: group-aware 70/15/15 stratified by label × origin (label = category, or Ham), seed {SEED}, one RNG per stratum. Both tasks below are cut from this one assignment, so no row is in train for one task and in val/test for the other.",
         f"- **Topic task** (`train`/`val`/`test`, fast + deep tiers): the 5 topic categories {', '.join(info['topic_categories'])}. Spam is decided by the binary spam filter, not the topic classifier.",
         f"- Topic train only: classes capped at {CAP_RATIO}× the smallest real topic class = {info['train_cap']} rows; removed {info['train_cap_removed']}. val/test are not resampled. Remaining imbalance is handled with class weights at training time (docs/model_artifacts.md).",
-        "- **Spam-filter task** (`spam_train`/`spam_val`/`spam_test`, `is_spam`): every row of the split: spam (positives), ham and uncapped support tickets (negatives), so neither writing style nor source predicts the label on its own.",
+        "- **Spam-filter task** (`spam_train`/`spam_val`/`spam_test`, `is_spam`): every row of the split: spam (positives), ham and uncapped support tickets (negatives), so neither writing style nor source predicts the label on its own. `spam_train` also gets the `train_style_aug` rows as negatives (informal legitimate support text; P3.14); `spam_val`/`spam_test` never include them.",
         *(
             [
                 f"- `train_style_aug` (optional, train only): {info['style_aug_rows']} of a planned ~{info['style_aug_target']} informal-style paraphrases of `train` rows by gpt-oss-120b (`data/style_aug.py`, seed and prompt in the module; `origin=augmented`, `aug_of` = source id). For the with/without ablation; never in val/test."
@@ -337,6 +348,7 @@ def main() -> int:
         aug = pd.read_json(STYLE_AUG_PATH, lines=True, dtype={"urgency": object})
         splits["train_style_aug"] = style_aug_split(splits["train"], aug)
         info["style_aug_rows"] = len(splits["train_style_aug"])
+        splits["spam_train"] = add_aug_negatives(splits["spam_train"], splits["train_style_aug"])
         info["style_aug_target"] = round(len(splits["train"]) * 0.25)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)

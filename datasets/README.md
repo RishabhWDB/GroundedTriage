@@ -25,8 +25,8 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 - Split: group-aware 70/15/15 stratified by label × origin (label = category, or Ham), seed 42, one RNG per stratum. Both tasks below are cut from this one assignment, so no row is in train for one task and in val/test for the other.
 - **Topic task** (`train`/`val`/`test`, fast + deep tiers): the 5 topic categories Technical Issue, Billing, Feature Request, General Inquiry, Meeting Scheduling. Spam is decided by the binary spam filter, not the topic classifier.
 - Topic train only: classes capped at 5× the smallest real topic class = 8715 rows; removed {'Technical Issue': 628}. val/test are not resampled. Remaining imbalance is handled with class weights at training time (docs/model_artifacts.md).
-- **Spam-filter task** (`spam_train`/`spam_val`/`spam_test`, `is_spam`): every row of the split: spam (positives), ham and uncapped support tickets (negatives), so neither writing style nor source predicts the label on its own.
-- `train_style_aug` (optional, train only): 589 of a planned ~3978 informal-style paraphrases of `train` rows by gpt-oss-120b (`data/style_aug.py`, seed and prompt in the module; `origin=augmented`, `aug_of` = source id). For the with/without ablation; never in val/test.
+- **Spam-filter task** (`spam_train`/`spam_val`/`spam_test`, `is_spam`): every row of the split: spam (positives), ham and uncapped support tickets (negatives), so neither writing style nor source predicts the label on its own. `spam_train` also gets the `train_style_aug` rows as negatives (informal legitimate support text; P3.14); `spam_val`/`spam_test` never include them.
+- `train_style_aug` (optional, train only): 633 of a planned ~3978 informal-style paraphrases of `train` rows by gpt-oss-120b (`data/style_aug.py`, seed and prompt in the module; `origin=augmented`, `aug_of` = source id). For the with/without ablation; never in val/test.
 - `train_urgency`: the uncapped train rows with an urgency label (16258 rows). Same row pool as `train` before the cap, so it shares no rows with val/test.
 - Model input (`text` column): subject + blank line + body (body only when subject is empty) (`app/textinput.py`).
 - Urgency: only Tobi-Bueck rows are labelled (low, medium, high); spam and synthetic rows have none. No English 'critical' rows exist.
@@ -46,6 +46,7 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 |                               |   spam_train |   spam_val |   spam_test |
 |:------------------------------|-------------:|-----------:|------------:|
 | (False, 'spamassassin_ham')   |         2862 |        613 |         613 |
+| (False, 'style_aug')          |          633 |          0 |           0 |
 | (False, 'synthetic_meetings') |          280 |         60 |          60 |
 | (False, 'tobi_bueck')         |        16258 |       3485 |        3485 |
 | (True, 'spamassassin')        |         1076 |        230 |         230 |
@@ -54,10 +55,10 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 
 | urgency   |   train |   val |   test |   train_urgency |   train_style_aug |
 |:----------|--------:|------:|-------:|----------------:|------------------:|
-| (none)    |     280 |    60 |     60 |               0 |                 9 |
-| high      |    6046 |  1394 |   1312 |            6365 |               222 |
-| low       |    3136 |   683 |    702 |            3228 |               110 |
-| medium    |    6448 |  1408 |   1471 |            6665 |               248 |
+| (none)    |     280 |    60 |     60 |               0 |                10 |
+| high      |    6046 |  1394 |   1312 |            6365 |               236 |
+| low       |    3136 |   683 |    702 |            3228 |               120 |
+| medium    |    6448 |  1408 |   1471 |            6665 |               267 |
 
 ## Split files
 
@@ -67,10 +68,10 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 | val | 3545 | `0e37f5e7165a9fa840befea514e6ac1278520fc9371e386d9355e981983f112f` | `8401c42557bbf2f298536d6f3f9f9cd6b97532a71a71f426d94522d1d0f0b05e` |
 | test | 3545 | `f4a04e6007a66730669c2a51cb9e63348c8e297f6bc18bfcedb9a865539f3448` | `e2552b04338b4d5872aab17662d750294ce894602f3de0752b90c5049e3d0e81` |
 | train_urgency | 16258 | `b9582ffa0623d38c2fe0d07c76d1ca26d8cc5337831b473fcd1b6540dccea599` | `5c22d71c96cae9ba0bff1ead7166f71b1c87c8dc0da6de05820db9c82d753a40` |
-| spam_train | 20476 | `6403bd7948b329dd735db614ecb346d42f4a6a57b5781630a487ddccc552c833` | `319c633f2aa42f034666c2988ea5f538a7bcc0e8f014e53b014a5f385a7fb3dc` |
+| spam_train | 21109 | `c047ea37beb236ccd8b5a2234865cbf391ad3226448001d8d6eeb213f6ffe0ab` | `9bb8ad8458e6024c2d65a6db25d38a811ca9ed7f979e16e855325cd8d2326fff` |
 | spam_val | 4388 | `167280a32dcd15a9fb71f53c919036d11b9ec5f2e10e0e398f7bb910c01f6ce5` | `0e883067c5345d7c0cb01b6725a8145cd915e2b836206df64cf5085c6c9e6e3e` |
 | spam_test | 4388 | `20cfb399c45e45cf113d003e0f8710d2a147b1385c31b803fa03e84b438435ef` | `e6997f05fbb2cb20ea502438b93d62cef03b66024b3d78a8f235a635721b3272` |
-| train_style_aug | 589 | `09bb7957fe16bc0de37abe3749884c993e2db139568765dc7d2205cfbb20c5d0` | `91da5bb5b1851f2652a5bc8ae6c5fc506aac722d740abc667d3b7362cc701751` |
+| train_style_aug | 633 | `aa510b8c55e89ff7170c1f1798de20993429e7c54017e56d695cfec4558e08c7` | `78d12f6325c9032d8a1ef9ceaba20f94cde55ae31ac7bb09d71cd92525118e14` |
 
 The content hash is independent of the parquet library version; compare it on the PC
 to confirm the test split is identical.

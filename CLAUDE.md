@@ -307,10 +307,14 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `mlclient.ExtractMeeting`; `store.Meetings`; `pipeline.MeetingScheduler` (extract → schedule → store → audit `meeting.<status>`);
   - the worker runs it after escalation; `MEETING_CALENDAR=google|fake|off`.
   - Unit tests (fakes) and a DB integration test (stub ml-service + FakeCalendar).
+  - Commit `d9a17ee`.
+- P3.14 Spam-filter blind spot:
+  - `train_style_aug` rows are added as **negatives in `spam_train` only** (`data.build.add_aug_negatives`); spam_val/test and every topic split are unchanged (same hashes);
+  - spam filter retrained with the same threshold rules; export `e2552b04338b` regenerated (spam_train 21,109; train_style_aug 633).
   - Commit: backfilled in the next commit.
 
 ### In progress
-- none. Phase 4 is done; waiting for Arya's Phase 4 review. Daily: `make style-aug` until 3,978 rows (P3.8b).
+- Phase 5 (grounded reply), after P3.14. gpt-oss-120b budget: P5 development first; style-aug and the live `/extract_meeting` check only with leftover budget.
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
@@ -348,6 +352,8 @@ Keep this list current: add items as they arise, remove them when done. Nothing 
 | 6 | PC training: deep tier (5 topic classes; once with `train` and once with `train ∪ train_style_aug`, recording `style_aug` in `model_card.json`) and the urgency model (`train_urgency`). Contract in `docs/model_artifacts.md` | export `datasets/export/groundedtriage-splits-e2552b04338b.tar.gz`. It's regenerated with the same tag once style-aug finishes; take the newest file | — |
 | 7 | Drop in artifacts: copy to `models/deep_tier/` and `models/urgency/` (a second deep tier, e.g. the aug variant, can live in another folder for comparison) | `models/` | `make setup-models` → `make ml` and `curl localhost:8001/health` (models_loaded true; reasons in the log) → `make urgency-eval` → `make tune-tau` → `make ood-eval`. Restart the ml-service after copying weights |
 
+| 8 | Google Calendar for the meeting scheduler (optional; the worker runs without it): in Google Cloud, enable the Calendar API, create an OAuth client of type **Desktop app**, save its JSON as `credentials.json` (gitignored), add yourself as a test user, set `GOOGLE_TIMEZONE` | repo root, `.env` | `make calendar-auth` → `token.json`; the worker then uses Google automatically (or set `MEETING_CALENDAR=google`). Test-mode tokens expire after 7 days, so re-run it then |
+
 Claude's own background item: `make style-aug` once per day (Groq free cap) until 3,978 rows, then `make data && make export-splits` (P3.8b).
 
 ## 3b. Deferred decisions (decide in Phase 7; nothing in P4–P6 may depend on them)
@@ -356,7 +362,16 @@ Claude's own background item: `make style-aug` once per day (Groq free cap) unti
 - **Whether the fast tier stays in the cascade** at all (OOD may show it adds nothing over the deep tier).
 - **Which fast tier:** TF-IDF + LR vs bge-small embeddings + LR (P3.13), each with and without style-aug.
 - **Prefit calibration** (calibrate on half of val, tune τ on the other half): skipped unless the deep tier needs it.
+- **Hybrid fallback option:** if the deep tier doesn't beat SCRIBE on reviewed ood-dev, evaluate a hybrid where low-confidence tickets fall back to zero-shot (SCRIBE-style BART-MNLI) or an LLM classifier. Decide with the reviewed OOD data.
+- **Spam thresholds**, after Arya's muted-row review: P3.14 traded Enron recall for fewer muted informal tickets (see §8).
 - Already chosen on val + ood-dev, revisitable then: spam rule `support_and_ham`; fast tier uncalibrated; τ = 0.7 untuned until the deep tier exists.
+
+## 3c. Future work and limitations (carry into results/REPORT.md)
+
+- **Accepted counter-offers aren't booked automatically** (Phase 4 review Q1). A customer's reply accepting a proposed slot needs reply threading (P6.3) and a re-extraction; deferred as future work.
+- **SLAs are wall-clock** (Phase 4 review Q2): no business-hours or holiday calendar. Business-hours SLAs are future work.
+- **Groq free tier:** gpt-oss-120b is capped at 200k tokens/day (rolling). Style-aug completes over several days, and P7.2 (judge-heavy) needs several days, so its runs are resumable and cached.
+- The **style shortcut** (P3.5a/P3.12): models trained on LLM-written tickets transfer poorly to human-written mail. Reported via the OOD set.
 
 ## 4. Model artifacts
 
@@ -468,6 +483,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (Phase 4 review): Q1, auto-booking accepted counter-offers → future work (§3c). Q2, wall-clock SLAs are fine → limitation (§3c). Q3, fix the spam filter's informal-text blind spot now → P3.14.
+  - **Token budget:** P5 development has priority for the daily gpt-oss-120b cap. Style-aug runs only on leftover budget, as does the deferred live `/extract_meeting` check. P7.2 judge runs must be resumable and cached across days.
+  - Phase 7 option recorded in §3b: a hybrid zero-shot / LLM fallback for low-confidence tickets.
+- 2026-10-17 (P3.14): Style-aug rows as spam-filter negatives:
+  - `add_aug_negatives` appends `train_style_aug` (633 rows now, `is_spam=false`, `source_dataset=style_aug`) to `spam_train` only. Every aug row paraphrases a topic **train** row, so there's no cross-split leakage. spam_val/test are unchanged, so before/after is a like-for-like comparison. As more style-aug rows arrive, `make data` feeds them into both the topic `train_style_aug` and the spam negatives.
+  - Same threshold rules re-derived on spam_val: `support_and_ham` mute ≥ **0.5655** (was 0.4365), review ≥ 0.1033; `support` mute ≥ 0.0326 (was 0.0195).
+  - **Trade-off:** ood-dev Enron spam caught by the default cascade fell **7/8 → 4/8** (reviewed corpus labels). Enron's lower-cased tokenised text looks like the informal negatives, so the filter got more lenient on informal-looking spam too. In exchange, the muted ood-dev Twitter rows went **7 → 2** (preliminary labels). Thresholds weren't touched beyond the same rules; the decision is in Phase 7 with reviewed data.
 - 2026-10-17 (P4.4d): Meeting step:
   - It runs for tickets whose **current route action is `schedule`** and that have no `meetings` row (one outcome per ticket; `ticket_id` unique).
   - Extraction (ml-service, LLM, 60 s timeout) → `scheduler.Schedule` with the ticket's sender as the attendee, the venue detail as the location, and "Support call: <subject>" as the summary.
@@ -779,6 +801,17 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Style-aug ablation (+589 rows): macro-F1 0.823, accuracy 0.795, ECE 0.077.
   - Coverage at τ = 0.7: 82% of val at 0.860 accuracy.
   - Not comparable with the P3.1 6-class 0.825 (different classes and split).
+- **Spam filter before → after P3.14 (spam_test, n=4,388; thresholds re-derived on spam_val by the same rules):**
+
+  | rule | mute threshold | spam recall (mute / +review) | support FPR | ham FPR | ham in review | AP |
+  |---|---|---|---|---|---|---|
+  | `support_and_ham` (default), before | 0.4365 | 0.978 / 0.996 | 0.000 | 0.021 | 0.042 | 0.993 |
+  | `support_and_ham` (default), after | 0.5655 | 0.978 / 0.996 | 0.000 | 0.020 | 0.034 | 0.990 |
+  | `support`, before | 0.0195 | 1.000 / 1.000 | 0.0099 | 0.210 | 0.259 | |
+  | `support`, after | 0.0326 | 1.000 / 1.000 | 0.0096 | 0.346 | 0.336 | |
+
+  - ood-dev, default cascade: muted Twitter rows (preliminary labels) **7 → 2** (still muted: tw-1576489 at 0.58, tw-2122609 at 0.83).
+  - Reviewed Enron spam caught **7/8 → 4/8**; reviewed sample emails muted 0/9 → 0/9.
 - **Embedding vs TF-IDF fast tier (P3.13; val, 5 topic classes):**
   - Embedding + LR: macro-F1 **0.7141**, accuracy 0.6463, real-only 0.6447, **ECE 0.0182**. TF-IDF: 0.823 / 0.795 / 0.778 / ECE 0.070.
   - With 589 style-aug rows: 0.7121 / 0.6477.

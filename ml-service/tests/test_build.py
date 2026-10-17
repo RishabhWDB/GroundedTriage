@@ -202,3 +202,28 @@ def test_style_aug_split_keeps_train_sources_only():
     with pytest.raises(ValueError, match="disagree"):
         style_aug_split(train, bad)
     assert style_aug_split(train, aug.iloc[:0]).empty
+
+
+def test_aug_negatives_only_enter_spam_train():
+    from data.build import add_aug_negatives, style_aug_split
+
+    splits, _ = assemble(frames() + [ham(50)])
+    src = splits["train"].iloc[:4]
+    aug = pd.DataFrame(
+        {
+            "id": [f"aug-{i}" for i in src["id"]],
+            "aug_of": list(src["id"]),
+            "source_dataset": "style_aug",
+            "origin": "augmented",
+            "category": list(src["category"]),
+            "urgency": list(src["urgency"]),
+            "subject": "hey",
+            "body": "so the app keeps crashing lol",
+        }
+    )
+    tsa = style_aug_split(splits["train"], aug)
+    out = add_aug_negatives(splits["spam_train"], tsa)
+    assert len(out) == len(splits["spam_train"]) + 4
+    added = out[out["source_dataset"] == "style_aug"]
+    assert (~added["is_spam"]).all() and out["id"].is_unique
+    assert add_aug_negatives(splits["spam_train"], tsa.iloc[:0]) is splits["spam_train"]
