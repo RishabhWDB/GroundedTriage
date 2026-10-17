@@ -245,3 +245,6 @@ datasets/out/
 
 # Go build output
 /bin/
+
+# Latest status update / phase review, rewritten each part for copy-paste
+/summary.md

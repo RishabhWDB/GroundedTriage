@@ -33,6 +33,12 @@ categories:
       a request to schedule, reschedule or confirm a meeting, call, demo or
       onboarding session
 
+# Categories decided by a dedicated binary filter rather than the topic
+# classifier (Phase 3 review, 2026-10-17). The topic classifier (fast + deep
+# tiers) is trained on the other five; Classification.category can still be
+# Spam, set by the spam filter (tier "spam_filter").
+filter_categories: [Spam]
+
 # Categories from SCRIBE / the original spec that were dropped, with reasons.
 dropped_categories:
   Work: not a support-ticket topic; no clean labelled source
@@ -67,7 +73,8 @@ mappings:
       - {when: {queue: [Human Resources]}, drop: true}
     urgency_map: {very_low: low, low: low, medium: medium, high: high, critical: critical}
   spam:
-    # Spam rows only (no ham); corpus chosen in P2.1 — see datasets/README.md.
+    # SpamAssassin spam rows are the Spam class; its ham rows (P3.6) are
+    # negatives for the spam filter only and have no topic category.
     category: Spam
   synthetic_meetings:
     category: Meeting Scheduling

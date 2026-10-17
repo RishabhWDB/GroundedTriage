@@ -1,4 +1,9 @@
-"""Builder for the SpamAssassin public corpus — spam messages only (no ham).
+"""Builder for the SpamAssassin public corpus: spam, and (since P3.6) ham.
+
+Spam rows are the Spam class. Ham rows (legitimate personal and mailing-list
+mail, also human-written) are negatives for the binary spam filter only
+(P3.9): they have no topic category, so the filter cannot use "human-written
+vs LLM-written" as a spam cue.
 
 Source: https://spamassassin.apache.org/old/publiccorpus/ (Apache SpamAssassin
 project). No formal licence: offered "as a service to spam filter developers";
@@ -31,8 +36,13 @@ logger = logging.getLogger(__name__)
 DetectorFactory.seed = 0  # deterministic language detection
 
 BASE_URL = "https://spamassassin.apache.org/old/publiccorpus/"
-# Latest assembled version of each spam set (older versions overlap them).
+# Latest assembled version of each set (older versions overlap them).
 ARCHIVES = ["20030228_spam.tar.bz2", "20050311_spam_2.tar.bz2"]
+HAM_ARCHIVES = [
+    "20030228_easy_ham.tar.bz2",
+    "20030228_easy_ham_2.tar.bz2",
+    "20030228_hard_ham.tar.bz2",
+]
 MAX_BODY_CHARS = 4000
 MIN_BODY_CHARS = 20
 COLUMNS = ["id", "source_dataset", "origin", "subject", "body", "category", "urgency"]
@@ -50,9 +60,9 @@ class BuildStats:
     archive_sha256: dict[str, str] = field(default_factory=dict)
 
 
-def download(raw_dir: Path) -> list[Path]:
+def download(raw_dir: Path, archives: list[str] = ARCHIVES) -> list[Path]:
     out = []
-    for name in ARCHIVES:
+    for name in archives:
         path = raw_dir / "spamassassin" / name
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -101,9 +111,16 @@ def is_english(text: str) -> bool:
         return False
 
 
-def build_frame(messages: list[tuple[str, bytes]]) -> tuple[pd.DataFrame, BuildStats]:
+def build_frame(
+    messages: list[tuple[str, bytes]], kind: str = "spam"
+) -> tuple[pd.DataFrame, BuildStats]:
+    """kind="spam": category Spam, source spamassassin, ids sa-*.
+    kind="ham": no category, source spamassassin_ham, ids sah-*."""
+    if kind not in ("spam", "ham"):
+        raise ValueError(f"kind must be spam or ham, got {kind!r}")
     st = BuildStats(messages=len(messages))
-    category = mapping("spam")["category"]
+    category = mapping("spam")["category"] if kind == "spam" else None
+    source, prefix = ("spamassassin", "sa-") if kind == "spam" else ("spamassassin_ham", "sah-")
     rows, seen = [], set()
     for name, raw in messages:
         try:
@@ -125,17 +142,17 @@ def build_frame(messages: list[tuple[str, bytes]]) -> tuple[pd.DataFrame, BuildS
         seen.add(key)
         if len(body) > MAX_BODY_CHARS:
             body, st.truncated = body[:MAX_BODY_CHARS], st.truncated + 1
-        rid = "sa-" + hashlib.sha1(name.encode()).hexdigest()[:12]
-        rows.append((rid, "spamassassin", "real", subject, body, category, None))
+        rid = prefix + hashlib.sha1(name.encode()).hexdigest()[:12]
+        rows.append((rid, source, "real", subject, body, category, None))
     df = pd.DataFrame(rows, columns=COLUMNS)
     st.rows_out = len(df)
     return df, st
 
 
-def build(raw_dir: Path) -> tuple[pd.DataFrame, BuildStats]:
-    archives = download(raw_dir)
+def build(raw_dir: Path, kind: str = "spam") -> tuple[pd.DataFrame, BuildStats]:
+    archives = download(raw_dir, ARCHIVES if kind == "spam" else HAM_ARCHIVES)
     messages = [m for a in archives for m in iter_messages(a)]
-    df, st = build_frame(messages)
+    df, st = build_frame(messages, kind)
     for a in archives:
         st.archive_sha256[a.name] = hashlib.sha256(a.read_bytes()).hexdigest()
     return df, st

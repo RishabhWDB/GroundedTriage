@@ -1,4 +1,5 @@
-"""Loads config/taxonomy.yaml: the six categories, urgency scale and dataset mappings."""
+"""Loads config/taxonomy.yaml: the six categories (five topic + Spam via the filter),
+urgency scale and dataset mappings."""
 
 from functools import lru_cache
 from pathlib import Path
@@ -17,6 +18,17 @@ def load_taxonomy(path: Path = TAXONOMY_PATH) -> dict[str, Any]:
 
 def categories() -> list[str]:
     return [c["name"] for c in load_taxonomy()["categories"]]
+
+
+def filter_categories() -> list[str]:
+    """Categories set by a dedicated filter (Spam), not the topic classifier."""
+    return list(load_taxonomy().get("filter_categories", []))
+
+
+def topic_categories() -> list[str]:
+    """The topic classifier's labels (fast + deep tiers): categories minus filter ones."""
+    skip = set(filter_categories())
+    return [c for c in categories() if c not in skip]
 
 
 def category_descriptions() -> dict[str, str]:

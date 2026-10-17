@@ -225,12 +225,23 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - Integration test against a stub ml-service; live Go→ml-service test passes.
   - Commit `906561f`.
 - P3.5a Out-of-domain check: `eval/sample_check.py` (`make sample-check`) runs the cascade and SCRIBE on the 22 hand-written sample emails → `results/ood/`. **The fast tier gets 6/22 (13 predicted Spam); SCRIBE gets 19/22.** It learned source style, not only topic (see §5 and §8).
+  - Commit `888720b`.
+- P3.6 Spam-filter data source and taxonomy split:
+  - `data/spamassassin.py` also builds **ham** (`20030228_easy_ham`, `_easy_ham_2`, `_hard_ham`): 4,150 messages → 4,089 rows (10 non-English, 51 duplicates, 316 truncated). No category, `source_dataset=spamassassin_ham`, ids `sah-*`;
+  - `config/taxonomy.yaml` `filter_categories: [Spam]`, with `app.taxonomy.topic_categories()` (5) and `filter_categories()`;
+  - `summary.md` (gitignored) convention.
   - Commit: backfilled in the next commit.
 
 ### In progress
-- none. Phase 3 is done; waiting for Arya's Phase 3 review. **Open blocker:** the Spam source-style shortcut (§5, P3.5a) must be decided before the deep tier is trained on the PC.
+- Phase 3 rework after the review (2026-10-17): a two-stage spam filter plus a 5-class topic classifier, a style-augmentation file, and the OOD evaluation set. Run P3.6–P3.12 through, then print an updated Phase 3 review.
 
 ### To do
+- P3.7 Rebuild: 5-class topic splits, spam-filter splits, re-export, 5-class `docs/model_artifacts.md`
+- P3.8 Optional `train_style_aug` (gpt-oss-120b informal paraphrases of ~25% of train)
+- P3.9 Binary spam filter (train, threshold at ≤ 1% support FPR on val, review band)
+- P3.10 Cascade + contract: spam filter first (`tier=spam_filter`, possible-spam flag), migration
+- P3.11 OOD evaluation set (Twitter customer support, team-written template, non-SpamAssassin spam) + `make ood-eval` gate
+- P3.12 Re-run the fast tier, urgency eval and OOD eval; before/after; updated Phase 3 review
 - P4.1 Rule engine
 - P4.2 Mute + no-reply detection
 - P4.3 Queues + SLA escalation
@@ -362,6 +373,20 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (Phase 3 review): **The style shortcut is a first-class finding for the report.** Decisions:
+  - **Q1 = (a), modified: two stages.**
+    - **Spam filter (binary):** positives = SpamAssassin spam. Negatives = SpamAssassin ham **plus** support tickets (Tobi-Bueck + synthetic meetings), so writing style or source isn't predictive. Group-aware split with its own train/val/test, reported separately.
+    - **Operating point:** chosen on val for **FPR ≤ 1% on support tickets**, because a muted real customer is the costliest error. Scores between a lower bound and that threshold go to a **"possible spam — review"** queue instead of mute. Report FPR and recall at the chosen point.
+    - **Topic classifier (fast + deep tiers): 5 classes, no Spam.** The contract is unchanged: `Classification.category` can still be Spam, set by the filter with `tier="spam_filter"`.
+    - **Rebuild and re-export** with a new manifest/hash and the 5-class label_map documented in `docs/model_artifacts.md`.
+    - Also export an **optional `train_style_aug`**: ~25% of train tickets paraphrased by gpt-oss-120b into informal, human customer-email style (label-preserving, `origin=augmented`, train only, fixed seed and prompt committed). Arya trains with and without it as an ablation.
+  - **Q2 = yes: a human-written OOD evaluation set** (~200 rows, never trained on):
+    - ~150 inbound customer messages from Customer Support on Twitter (Kaggle `thoughtvector/customer-support-on-twitter`; check the licence), mapped to the 5 topic classes + Spam, LLM pre-labelled with `needs_review=true`; Arya verifies. Rows that fit no class are dropped.
+    - A template CSV for ~40 emails written by Arya's team (support-style, including informal and meeting-request ones).
+    - ~20 spam emails from a corpus other than SpamAssassin (e.g. Enron-spam), to test whether the filter generalises.
+    - **`make ood-eval` replaces `make sample-check`** (it includes the 22 sample emails) and scores every system (SCRIBE, fast tier, cascade, later the deep tier). It's a **required gate before any model is accepted**, and OOD is reported alongside test as a headline in P7.
+  - **Q3:** keep CalibratedClassifierCV for now; revisit prefit-on-half-of-val after the 5-class rebuild.
+  - After the rebuild, re-run the fast tier, urgency eval and OOD check, and report before/after (especially the fast tier on the 22 samples).
 - 2026-10-16 (P3.5a): **Finding: source-style shortcut for Spam.**
   - On the 22 hand-written sample emails, the fast tier is right on 6 and predicts Spam for 13, often at high confidence: "API returning 500 errors" → Spam 0.96; "Refund for annual plan downgrade" → Spam 0.95. SCRIBE gets 19/22 with 1 Spam.
   - The fast tier's strongest Spam features are common informal words (`all`, `no`, `will`, `get`, `your`, `here`, `from`), not only spam cues (`click here`, `free`, `http`).
@@ -510,6 +535,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 - **Commits:** `<type>(<scope>): <summary>  [P<phase>.<part>]`, with a bullet body. Types are `feat|fix|test|docs|chore|refactor`. Commit once per part. Never push, branch or rewrite history; Arya pushes.
 - **Before committing:** `make lint` and `make test` must pass.
+- **Status updates and phase reviews** are also written to `summary.md` in the repo root, rewritten each time with only the latest updates (gitignored), so Arya can copy them in one go. Still print them in the chat too.
 - **Ingestion:** new adapters implement `ingest.Source` and register a `Factory` under their type. Use `ingest.FakeSource` in tests that need a source. Adapter output files go under `datasets/out/`, which is gitignored.
 - **Layout:** follows BUILDPROMPT §2:
   - Go entrypoints in `cmd/`, packages in `internal/`;

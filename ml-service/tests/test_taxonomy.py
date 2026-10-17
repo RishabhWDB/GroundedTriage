@@ -29,3 +29,11 @@ def test_mapping_targets_are_known_categories():
     assert set(tb["urgency_map"].values()) <= set(taxonomy.urgency_scale())
     assert taxonomy.mapping("spam")["category"] in cats
     assert taxonomy.mapping("synthetic_meetings")["category"] in cats
+
+
+def test_topic_and_filter_categories():
+    from app.taxonomy import categories, filter_categories, topic_categories
+
+    assert filter_categories() == ["Spam"]
+    assert topic_categories() == [c for c in categories() if c != "Spam"]
+    assert len(topic_categories()) == 5

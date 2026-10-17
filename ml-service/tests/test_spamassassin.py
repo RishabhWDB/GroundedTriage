@@ -65,3 +65,12 @@ def test_iter_messages_reads_without_extracting(tmp_path):
     got = list(iter_messages(path))
     assert got == [("spam/0001.abc", PLAIN)]
     assert not (tmp_path / "spam").exists()
+
+
+def test_build_frame_ham_has_no_category():
+    df, st = build_frame([("easy_ham/0001", PLAIN)], kind="ham")
+    assert st.rows_out == 1
+    assert df.category.isna().all() and set(df.source_dataset) == {"spamassassin_ham"}
+    assert df.id.iloc[0].startswith("sah-")
+    spam, _ = build_frame([("easy_ham/0001", PLAIN)])
+    assert spam.id.iloc[0] != df.id.iloc[0]  # same member name, different id space
