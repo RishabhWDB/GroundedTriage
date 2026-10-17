@@ -1,0 +1,55 @@
+Id,Sender,Subject,Body,Label,Kind,WixQA_Id,Retrieval_Max_Score,Expected_Outcome
+demo-01,maya.chen@bloomstudio.co,Cost of upgrading my email plan,"Hi,
+
+I'm sending more newsletters than my current email marketing plan allows. How much would it cost to upgrade it, and where do I do that?
+
+Thanks,
+Maya",Billing,wixqa,62adb14a9e9e1a3b,0.8502,ground
+demo-02,raj@yogaloft.in,discounts on plans?,"hey, I sell class packages as pricing plans on my site. can I give people a discount when they pay for a plan? like 20% off or a fixed amount?",General Inquiry,wixqa,d8fb2746cc7d55e9,0.7772,ground
+demo-03,owner@lunabakery.com,Payout still not in my bank account,"Hello,
+
+I've had several orders paid through Wix Payments but the money still hasn't arrived in my bank account. What should I check?
+
+Regards,
+Luna Bakery",Billing,wixqa,b3491fc7d7a17b10,0.7888,ground
+demo-04,tom.r@fieldnotes.blog,Deleting items from a CMS collection,"Hi there, I have an old CMS collection full of test entries. How do I delete items from it, ideally several at once?",Technical Issue,wixqa,91d93b20d69ff960,0.8712,ground
+demo-05,sara@kilnandco.com,Manual payment not in payment history,"A customer paid me through the pay button using the manual/offline option, but I can't see the payment anywhere in my payment history. Where did it go?",Billing,wixqa,4bbe29254b2b2b03,0.7765,ground
+demo-06,marketing@greenpath.org,Download visitor reports Dec 15 - Jan 15,"Hello, our board wants the website traffic reports for December 15 to January 15. Can I download the analytics reports for that period, and in which formats?
+
+Best,
+Greenpath Marketing",General Inquiry,wixqa,c0fff8ce12158baf,0.7575,ground
+demo-07,dev@pixelmugs.shop,Redesigning my store's product page,"I'm redesigning the product page of my Wix Store and need help customizing the layout, how the product images are displayed, and the text on the buy button.",Technical Issue,wixqa,9524c663194aa78b,0.8969,ground
+demo-08,finance@tramontana.es,Wix Payments error about region/currency,We keep getting an error from Wix Payments that mentions our region or currency and payments are being declined. Which countries and currencies are supported?,Billing,wixqa,83208f6116e135b3,0.8404,ground
+demo-09,jo@handmadebyjo.uk,Can't update the T&C checkbox at checkout,I'm trying to change the terms & conditions checkbox at checkout in Wix Stores and can't find where. I do have a Products section in my dashboard. How do I update it?,Technical Issue,wixqa,ee6a22ff2f21c830,0.7962,ground
+demo-10,info@coastalphysio.com.au,Site not showing up on Google,"Hi,
+
+Our site isn't being indexed by Google. It's published and not password protected, so I don't understand why. What else should we check?
+
+Thanks,
+Coastal Physio",Technical Issue,wixqa,5c2e4b272b2636cc,0.7685,ground
+demo-11,amir@routeone.travel,Old pages still on Google after SEO update,"My old pages still appear in Google search even though I updated the SEO, removed the old URLs and submitted the new sitemap. Why is this still happening?",Technical Issue,wixqa,0f758b2531b2bd90,0.7808,ground
+demo-12,admin@northloop.studio,Verification documents denied (company details),Our Wix Payments verification documents were rejected - specifically the company details. What do the documents need to show?,Billing,wixqa,9398a3ce71cde1ef,0.7880,ground
+demo-13,lea.m@papercranes.fr,cancel premium within 14 days??,i bought premium 5 days ago and want to cancel inside the 14 day window but i cannot find any cancel button anywhere. how do i do it,Billing,wixqa,7d77f67ea6dacb23,0.7920,ground
+demo-14,social@brightnest.co,Connecting our business Instagram,We want to connect our business Instagram account to our Wix site so the feed shows up. What do we need before we start?,Technical Issue,wixqa,21a3aa84938a65bf,0.8659,ground
+demo-15,hello@quietforest.design,Empty space on the sides on big screens,"On large monitors my site has empty space on the left and right edges. Why is that, and how can I fix it in the Wix Editor?",Technical Issue,wixqa,daf094e3de305ce8,0.7622,ground
+demo-16,k.ortiz@lumencorp.com,VPN keeps dropping,Since this morning our company VPN client disconnects every 10 minutes on my Windows laptop. Other colleagues are fine. Can you help?,Technical Issue,out_of_kb,,0.5883,abstain
+demo-17,reception@drpatel-dental.com,Printer offline,The office printer shows as offline on all our PCs even though it's switched on and connected to the network. We need to print patient forms today.,Technical Issue,out_of_kb,,0.6717,abstain
+demo-18,b.nguyen@harborlogistics.net,Outlook keeps asking for my password,"Outlook on my Mac keeps asking for my password every few minutes, even after I enter the right one. How do I stop this?",Technical Issue,out_of_kb,,0.6317,abstain
+demo-19,ines@casaverde.pt,Warranty for my laptop battery,My laptop battery only lasts 40 minutes now. It's 14 months old. Is it still covered by the warranty and how do I claim a replacement?,General Inquiry,out_of_kb,,0.5978,abstain
+demo-20,priya.s@nimbusretail.com,Call to walk through our store setup,"Hi,
+
+Could we book a 30-minute video call on Thursday at 3pm to go through our online store setup with your team? Zoom works for us.
+
+Thanks,
+Priya",Meeting Scheduling,meeting,,0.7349,schedule
+demo-21,daniel@orbitfitness.io,Meeting about our payments integration,"Hello, I'd like to schedule a 45 minute meeting next Tuesday at 10am to discuss our payments integration. Please send a calendar invite.
+
+Daniel",Meeting Scheduling,meeting,,0.7090,schedule
+demo-22,winner-notice@lotto-claims.biz,"CONGRATULATIONS!!! You have WON $1,500,000","Dear Lucky Winner,
+
+Your email address has been selected in our international lottery and you have won ONE MILLION FIVE HUNDRED THOUSAND US DOLLARS. To claim your prize send your full name, bank account number and a processing fee of $250 to our claims agent today. Act now, this offer expires in 48 hours!!!
+
+Click here to claim: http://lotto-claims.biz/claim",Spam,spam,,0.7051,mute
+demo-23,deals@cheap-meds-online.ru,Cheap pharmacy - 90% OFF - no prescription,"Best prices on Viagra, Cialis and more. No prescription needed! Discreet worldwide shipping. Buy now and save 90%. Unsubscribe here: http://cheap-meds-online.ru/u",Spam,spam,,0.6073,mute
+demo-24,m.kowalski@brightdesk.pl,Charged twice for order 48213,"Hi, my credit card was charged twice for order #48213 on the 3rd (2 x 89.00 EUR). Please refund the duplicate charge.",Billing,billing,,0.7415,draft (gate decides)
+demo-25,accounts@tidewater-co.com,Need a VAT invoice for last quarter,"Hello, our accountant needs proper VAT invoices for all our payments to you from July to September, with our company VAT number on them. Can you send them?",Billing,billing,,0.7157,abstain

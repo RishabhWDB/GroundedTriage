@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: kb retrieval-eval monitoring-ref judge-sample judge-label judge-score rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
+.PHONY: demo demo-status demo-reset demo-expect kb retrieval-eval monitoring-ref judge-sample judge-label judge-score rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -158,5 +158,16 @@ judge-score: ## P7.2: judge vs human accuracy + Cohen's kappa (ARGS=--with-llm a
 monitoring-ref: ## P7.3: regenerate the PSI reference distribution (val category shares) -> config/monitoring.yaml
 	cd $(ML_DIR) && $(VPY) -m eval.monitoring_ref
 
-seed: ## Seed demo data (implemented in P8.1)
-	@echo "seed: not implemented yet (P8.1)"; exit 1
+seed: demo ## Alias of make demo
+
+demo: ## P8.1: load the 25 demo tickets (Ids demo-*) into DATABASE_URL (additive), then run the worker once
+	go run ./cmd/demo load
+
+demo-status: ## P8.1: expected vs actual outcome per demo ticket
+	go run ./cmd/demo status
+
+demo-reset: ## P8.1: delete ONLY demo-tagged tickets (+ their classifications, routes, drafts, meetings, audit rows); asks to type "reset demo"
+	go run ./cmd/demo reset
+
+demo-expect: ## P8.1: re-measure each demo ticket's retrieval score and expected outcome (no LLM calls) -> datasets/demo/demo_tickets.csv
+	cd $(ML_DIR) && $(VPY) -m eval.demo_expect

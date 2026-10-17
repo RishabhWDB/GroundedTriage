@@ -45,7 +45,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | P7.2 RAG eval: plan (expected days; retrieval only) / floor sweep on p72_dev / the run (cached, resumable; re-run daily at the Groq cap) | `make rag-eval-plan` / `make rag-floor-sweep` / `make rag-eval` (`ARGS="--limit N"`) → `results/rag/` |
 | Judge validation: sample claims from the RAG run / label them (interactive) / score judges vs human (κ) | `make judge-sample` / `make judge-label` / `make judge-score ARGS=--with-llm` → `results/rag/judge_validation.*` |
 | Monitoring reference distribution for PSI (after a data rebuild) | `make monitoring-ref` → `config/monitoring.yaml` |
-| Seed | `make seed` (not implemented until P8.1) |
+| Demo tickets (P8.1): load (additive, Ids `demo-*`) / expected vs actual / reset ONLY demo rows (typed confirmation) / re-measure expectations | `make demo` (= `make seed`) → `go run ./cmd/worker -once` → `make demo-status`; `make demo-reset`; `make demo-expect` (see `datasets/demo/README.md`) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
 | Worker: one poll + classify / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s; classifies via `ML_SERVICE_URL`) |
@@ -81,7 +81,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 2. Open http://127.0.0.1:8080/. It redirects to `/ui/`. Enter the API key, then your name in **Reviewer** (top right).
 3. **Inbox:** set the status filter to *All*. The 21 Mumbai demo tickets are listed, unclassified (the worker hasn't run on them). Check that filters and paging work, and that a breached SLA shows in red.
 4. **Upload:** use *Upload CSV* with `datasets/sample_emails.csv`. Expect "0 new" (all duplicates) on the demo DB.
-5. **Pipeline:** with `make ml` running, `go run ./cmd/worker -once` classifies, routes and drafts. **This writes to the demo DB.** Until the P8.1 demo seed exists, do it only if you're happy to change the demo rows.
+5. **Pipeline:** `make demo` loads the 25 demo tickets; with `make ml` running, `go run ./cmd/worker -once` classifies, routes, schedules and drafts (**this also processes the 21 older sample tickets** in the DB). `make demo-status` compares with the expected outcomes; `make demo-reset` removes only the demo rows.
 6. **Ticket view:** open a ticket. Check:
    - the classification card shows the tier, low-confidence/possible-spam badges, urgency with *model* or *heuristic*, and model versions;
    - the route card shows the queue, priority, SLA and reason; Meeting tickets show the meeting outcome;
@@ -414,6 +414,10 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `make monitoring-ref` regenerates the reference.
   - Commit: backfilled in the next commit.
 
+- P8.1 Demo setup:
+  - `datasets/demo/demo_tickets.csv`: 25 hand-written tickets (15 WixQA `demo`-split questions rewritten as emails, 4 out-of-KB, 2 meeting, 2 spam, 2 non-KB billing), with the measured best retrieval score and expected outcome per row (`eval/demo_expect.py`, `make demo-expect`; no LLM calls) and a README;
+  - `cmd/demo` (`make demo` = `make seed`, `make demo-status`, `make demo-reset`) and `store.Demo`: load is additive and refuses untagged rows; reset deletes only CSV tickets with Id `demo-*` (cascading their classifications, routes, drafts, meetings, plus their audit rows) in one transaction after typing `reset demo`; status prints expected vs actual;
+  - integration test: reset leaves a real CSV row, a Zendesk `demo-77` and `xdemo-01` untouched. Read-only check on Mumbai: 0 demo rows yet.
 ### In progress
 - Phase 7 in Arya's order: P7.2 (RAG eval, multi-day at the free cap) → P7.3 monitoring → P8 parts not tied to final numbers → stop with the consolidated manual checklist. P7.1 / P7.4 wait for Arya's artifacts and labels.
 
@@ -488,6 +492,9 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 ## 5. Decisions log
 
+- 2026-10-17 (P8.1): **Demo data is tagged by Id, not a separate schema.** Every demo row has `Id = demo-NN` (CSV external_id), so `make demo-reset` can delete exactly those (`source='csv' and external_id like 'demo-%'`) with cascades, after a typed confirmation and a row-count check inside the transaction. A separate schema would need its own migrations, KB copy and search_path in every service. The 21 older sample tickets are not demo-tagged and are never touched by reset.
+  - The expected outcome per row is **measured** (`make demo-expect`: retrieval only, against the live KB) rather than assumed. Measured 2026-10-17: all 15 WixQA rows clear the floor 0.7177 (scores 0.7575–0.8969); for 4 of them the gold article isn't in the top 5 (demo-05, 08, 09, 10). The out-of-KB rows score 0.5883–0.6717 → abstain. demo-24 (duplicate charge, 0.7415) is drafted and left to the judge; demo-25 (VAT invoices, 0.7157) abstains. Meeting rows → schedule, spam → mute.
+  - Not loaded into Mumbai yet: loading and running the worker are Arya's demo-day steps (checklist), since the worker also processes the 21 older tickets.
 - 2026-10-17 (P7.3): **Monitoring design.**
   - **PSI reference = the val split's category shares, Spam included** (the categorised rows of `spam_val`, 3,775 rows: Technical 0.5306, Billing 0.1306, Feature 0.0991, General 0.1629, Spam 0.0609, Meeting 0.0159). `train` is capped, so its shares aren't natural; val is stratified from the same pool. PSI = Σ (p−q)·ln(p/q) with shares floored at 1e-4; the current distribution is each ticket's latest classification made that UTC day. **Alert at PSI > 0.2**; no PSI below 30 classified tickets (too noisy at demo volume).
   - **Latency per stage:** the worker times every ml-service call (retries included) through `mlclient.Client.Observe`, buffers them, and writes one COPY per cycle into `stage_timings`, so timing costs no extra round-trips per ticket. End-to-end `ingest_to_classified` and `ingest_to_draft` come from row timestamps. p50/p95 via `percentile_cont`.
