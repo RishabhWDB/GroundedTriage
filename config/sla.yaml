@@ -1,0 +1,17 @@
+# SLA targets (P4.3), read by internal/routing.LoadSLA.
+#
+# A route's sla_due_at = the moment it is routed + the target for its
+# priority (1 = most urgent). Muted routes get no SLA. The SLA clock starts at
+# routing time, not at the ticket's received_at, so back-filled or re-ingested
+# history doesn't arrive already breached.
+#
+# Escalation job (worker, every poll): an open route past sla_due_at moves up
+# one priority level (4 -> 3 -> 2 -> 1) and gets a new deadline for its new
+# priority; at priority 1 the deadline is re-armed. Every escalation writes an
+# audit_log row (sla.escalated / sla.breached_p1).
+version: 1
+targets:
+  1: 1h
+  2: 4h
+  3: 24h
+  4: 72h

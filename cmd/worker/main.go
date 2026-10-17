@@ -1,7 +1,8 @@
 // Command worker polls enabled ingestion sources (config/sources.yaml),
-// stores new tickets (layer 1) and classifies accepted tickets through the
-// ml-service's POST /classify (layer 2, ML_SERVICE_URL). Routing and replies
-// are added in later phases.
+// stores new tickets (layer 1), classifies accepted tickets through the
+// ml-service's POST /classify (layer 2, ML_SERVICE_URL), routes classified and
+// skipped tickets with config/routing_rules.yaml + config/sla.yaml and
+// escalates SLA breaches (layer 3). Replies are added in later phases.
 //
 //	go run ./cmd/worker            # poll every WORKER_POLL_INTERVAL (default 60s)
 //	go run ./cmd/worker -once      # one poll, then exit
@@ -22,12 +23,15 @@ import (
 	"github.com/RishabhWDB/GroundedTriage/internal/mlclient"
 	"github.com/RishabhWDB/GroundedTriage/internal/pipeline"
 	"github.com/RishabhWDB/GroundedTriage/internal/preprocess"
+	"github.com/RishabhWDB/GroundedTriage/internal/routing"
 	"github.com/RishabhWDB/GroundedTriage/internal/store"
 )
 
 func main() {
 	once := flag.Bool("once", false, "poll every source once and exit")
 	sourcesPath := flag.String("sources", "config/sources.yaml", "sources config file")
+	rulesPath := flag.String("rules", "config/routing_rules.yaml", "routing rules (hot-reloaded)")
+	slaPath := flag.String("sla", "config/sla.yaml", "SLA targets")
 	flag.Parse()
 
 	if err := envfile.Load(); err != nil {
@@ -75,9 +79,32 @@ func main() {
 		ML:    mlclient.New(mlURL),
 		Audit: store.Audit{Pool: pool},
 	}
+	engine, err := routing.NewEngine(*rulesPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	sla, err := routing.LoadSLA(*slaPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	router := &pipeline.Router{
+		Store: store.Routes{Pool: pool},
+		Rules: engine,
+		SLA:   sla,
+		Clock: routing.SystemClock{},
+		Audit: store.Audit{Pool: pool},
+	}
+	// After each poll: classify, route, escalate. A failing step is logged and
+	// the next one still runs (routing also covers skipped tickets).
 	classify := func(ctx context.Context) {
 		if _, err := classifier.ClassifyPending(ctx); err != nil {
 			slog.Error("worker: classify", "err", err)
+		}
+		if _, err := router.RoutePending(ctx); err != nil {
+			slog.Error("worker: route", "err", err)
+		}
+		if _, err := router.EscalateBreached(ctx); err != nil {
+			slog.Error("worker: escalate", "err", err)
 		}
 	}
 
@@ -101,11 +128,16 @@ func main() {
 		stats, err := classifier.ClassifyPending(ctx)
 		slog.Info("worker: classify", "pending", stats.Pending, "classified", stats.Classified,
 			"failed", stats.Failed, "err", err)
-		if failed || err != nil {
+		rs, rerr := router.RoutePending(ctx)
+		slog.Info("worker: route", "routed", rs.Routed, "by_action", rs.ByAction, "err", rerr)
+		es, eerr := router.EscalateBreached(ctx)
+		slog.Info("worker: escalate", "breached", es.Breached, "escalated", es.Escalated, "err", eerr)
+		if failed || err != nil || rerr != nil || eerr != nil {
 			os.Exit(1)
 		}
 		return
 	}
+	go engine.Watch(ctx, 5*time.Second) // hot reload of the routing rules
 	slog.Info("worker: polling", "sources", len(sources), "interval", interval)
 	poller.Run(ctx, interval)
 	slog.Info("worker stopped")

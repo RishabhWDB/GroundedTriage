@@ -287,6 +287,13 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - Table-driven tests cover every shipped rule plus the default.
   - Commit `36147b5`.
 - P4.2 Mute + no-reply detection: `routing.DetectNoReply(ticket)` → (bool, reason). Spam (filter) and no-reply route to `mute` with the reason in `Route.reason` (e.g. `rule no-reply: newsletter (unsubscribe)`).
+  - Commit `0815ba0`.
+- P4.3 Queues + SLA escalation:
+  - `config/sla.yaml` (P1 1h / P2 4h / P3 24h / P4 72h) and `routing.SLAPolicy` (`Apply`, `Escalate`, `Clock`);
+  - `store.Routes` (`Insert`, `Latest`, `Unrouted`, `Breached`, optimistic `Escalate`); migration **00006** (route `status`, `escalations`, `escalated_at`; applied to Mumbai);
+  - `pipeline.Router` (`RoutePending`, `EscalateBreached`, audit `route.run` / `sla.escalated` / `sla.breached_p1`);
+  - the worker classifies → routes → escalates after each poll and hot-reloads the rules.
+  - Fake-clock unit tests and a DB integration test.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -294,7 +301,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P4.3 Queues + SLA escalation
 - P4.4 Meeting scheduler
 - P5.1 KB ingestion
 - P5.2 Retriever
@@ -450,6 +456,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P4.3): SLA and escalation:
+  - **The SLA clock starts at routing time** (`now` + the priority's target), not at `received_at`, so back-filled or re-ingested history doesn't arrive already breached. Muted routes have no SLA.
+  - The escalation job (every worker poll) takes open routes past `sla_due_at`: priority −1 (4→3→2→1) and a fresh deadline for the new priority. At P1 the deadline is re-armed and audited as `sla.breached_p1`; otherwise `sla.escalated` (old/new priority, old/new due, escalation count).
+  - The update is conditional on `status='open'` and the deadline the job read, so a stale or concurrent run can't escalate the same breach twice.
+  - One current route per ticket, escalated in place (`escalations`, `escalated_at`); history lives in `audit_log`. `status` stays `open` until an agent resolves it (P6). No business-hours calendar; the targets are wall-clock.
+  - Routing covers skipped tickets (no classification) and accepted tickets once classified; accepted tickets still waiting for classification aren't routed. One `route.run` audit row per run, with by-action/by-queue counts and up to 100 muted ticket ids with reasons.
+  - Worker order after each poll: classify → route → escalate; a failing step is logged and the next still runs. `-once` exits 1 if any step failed. The rules are hot-reloaded every 5 s in loop mode.
 - 2026-10-17 (P4.2): No-reply detection is conservative and ordered; the first hit is the reason:
   1. sender local part `noreply`/`no-reply`/`do-not-reply`/`donotreply`/`mailer-daemon`/`postmaster`/`bounce(s)`/`notification(s)`/`newsletter(s)`/`news`/`marketing`/`mailer` (plus `+tag` variants);
   2. automated subject (`[Automated]`, `Automatic reply`, `Out of office`, `Undeliverable`, …);
