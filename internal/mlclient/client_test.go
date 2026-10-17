@@ -128,3 +128,39 @@ func TestClassifyPostsTicket(t *testing.T) {
 		t.Fatalf("decoded %+v", c)
 	}
 }
+
+func TestObserveOncePerCallWithRetries(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			_, _ = w.Write([]byte(healthJSON))
+			return
+		}
+		if atomic.AddInt32(&calls, 1) == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"chunks":[],"max_score":0}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv.URL)
+	var stages []string
+	var lastErr error
+	c.Observe = func(stage string, d time.Duration, err error) {
+		stages = append(stages, stage)
+		lastErr = err
+		if d <= 0 {
+			t.Errorf("duration %v", d)
+		}
+	}
+	if _, err := c.Health(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Retrieve(context.Background(), RetrieveRequest{Body: "q"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(stages) != 1 || stages[0] != "retrieve" || lastErr != nil {
+		t.Fatalf("stages = %v, err = %v (health is not observed; one call despite a retry)", stages, lastErr)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -37,6 +38,11 @@ type Store interface {
 	Summary(ctx context.Context, now time.Time) (store.Summary, error)
 }
 
+// DailyMetrics reads the P7.3 monitoring rows (store.Monitoring).
+type DailyMetrics interface {
+	Daily(ctx context.Context, days int, now time.Time) ([]store.DailyMetric, error)
+}
+
 // CSVIngester ingests an uploaded CSV file (layer-1 ingestion for one file).
 type CSVIngester interface {
 	IngestCSV(ctx context.Context, path string) (fetched int, stats preprocess.Stats, err error)
@@ -55,6 +61,7 @@ type AuditWriter interface {
 // Server holds the API's dependencies.
 type Server struct {
 	Store     Store
+	Daily     DailyMetrics // optional; GET /metrics/daily returns no rows without it
 	Ingest    CSVIngester
 	ML        HealthChecker
 	Audit     AuditWriter
@@ -132,6 +139,7 @@ func (s *Server) Register(r gin.IRouter) {
 	g.POST("/drafts/:id/edit", s.edit)
 	g.POST("/ingest/csv", s.ingestCSV)
 	g.GET("/metrics/summary", s.summary)
+	g.GET("/metrics/daily", s.daily)
 }
 
 func isUUID(id string) bool {
@@ -333,6 +341,30 @@ func (s *Server) summary(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// MaxDailyDays caps GET /metrics/daily?days=.
+const MaxDailyDays = 90
+
+func (s *Server) daily(c *gin.Context) {
+	days := 14
+	if v := c.Query("days"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > MaxDailyDays {
+			fail(c, http.StatusBadRequest, CodeBadRequest, fmt.Sprintf("days must be 1..%d", MaxDailyDays))
+			return
+		}
+		days = n
+	}
+	rows := []store.DailyMetric{}
+	if s.Daily != nil {
+		var err error
+		if rows, err = s.Daily.Daily(c.Request.Context(), days, s.now()); err != nil {
+			s.storeErr(c, err, "daily metrics")
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"days": days, "metrics": rows})
 }
 
 func reviewDetails(action string, d store.DraftView) map[string]any {

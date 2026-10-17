@@ -341,7 +341,9 @@ function openEditor(d, act) {
 // ---------- dashboard (P6.4) ----------
 
 async function loadDashboard() {
-  const m = window.dashboardModel(await api("/metrics/summary"));
+  const [summary, daily] = await Promise.all([api("/metrics/summary"),
+    api("/metrics/daily?days=14").catch((e) => ({ error: e.message }))]);
+  const m = window.dashboardModel(summary);
   $("#tiles").replaceChildren(...m.tiles.map((t) =>
     el("div", { class: "tile" }, el("div", { class: `v${t.alert ? " breached" : ""}` }, t.value), el("div", { class: "k" }, t.key))));
   $("#charts").replaceChildren(...m.charts.map((c) => el("div", { class: "card" }, el("h3", {}, c.title),
@@ -351,6 +353,28 @@ async function loadDashboard() {
       return el("div", { class: "bar" }, el("span", { title: b.label }, b.label), el("div", { class: "track" }, fill), el("span", {}, b.value));
     }) : el("p", { class: "note" }, "No data yet."))),
     el("p", { class: "note" }, `Generated ${fmtTime(m.generatedAt)}. Refresh the page to update.`));
+  renderMonitoring(daily);
+}
+
+// ---------- monitoring (P7.3) ----------
+
+function renderMonitoring(daily) {
+  const box = $("#monitoring");
+  if (daily.error) {
+    box.replaceChildren(el("h3", {}, "Monitoring"), el("p", { class: "error" }, daily.error));
+    return;
+  }
+  const mon = window.monitoringModel(daily);
+  box.replaceChildren(
+    el("h3", {}, "Monitoring (last 14 days)"),
+    mon.latestAlert ? el("p", { class: "breached" }, "Category drift alert: today's PSI is above the threshold.") : null,
+    mon.rows.length ? el("div", { class: "scroll" }, el("table", {},
+      el("thead", {}, el("tr", {}, mon.columns.map((c) => el("th", {}, c)))),
+      el("tbody", { class: "static" }, mon.rows.map((r) => el("tr", {}, r.cells.map((c, i) =>
+        el("td", { class: i === 1 && r.alert ? "breached" : undefined }, c))))))) :
+      el("p", { class: "note" }, "No monitoring rows yet (the worker writes them after each poll)."),
+    el("p", { class: "note" }, "PSI compares each day's categories with the reference in config/monitoring.yaml; " +
+      "flagged above psi_alert (0.2). SLA breach rate covers routes created that day."));
 }
 
 route();

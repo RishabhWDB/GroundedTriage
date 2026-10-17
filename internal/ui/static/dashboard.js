@@ -49,6 +49,44 @@
     return { tiles, charts, generatedAt: s.generated_at };
   }
 
-  if (typeof module !== "undefined" && module.exports) module.exports = { dashboardModel };
-  else root.dashboardModel = dashboardModel;
+  // Monitoring table (P7.3) from GET /metrics/daily: one row per day, newest
+  // first; PSI cells flagged when the job marked them (PSI > psi_alert).
+  const LATENCY = "latency_p95_ms.";
+  function monitoringModel(resp) {
+    const days = new Map();
+    const stages = new Set();
+    for (const r of (resp && resp.metrics) || []) {
+      const day = String(r.day).slice(0, 10);
+      const d = days.get(day) || { day, psi: "—", alert: false, abstain: "—", sla: "—", latency: {} };
+      const detail = r.detail || {};
+      if (r.metric === "category_psi") {
+        d.psi = r.value === null || r.value === undefined
+          ? `— (${detail.classified ?? 0} < ${detail.min_tickets ?? "?"} tickets)` : r.value.toFixed(3);
+        d.alert = detail.alert === true;
+      } else if (r.metric === "abstain_rate") d.abstain = pct(r.value);
+      else if (r.metric === "sla_breach_rate") d.sla = pct(r.value);
+      else if (r.metric.startsWith(LATENCY)) {
+        const st = r.metric.slice(LATENCY.length);
+        stages.add(st);
+        d.latency[st] = r.value === null ? "—" : `${Math.round(r.value)} (n=${detail.n ?? 0})`;
+      }
+      days.set(day, d);
+    }
+    const st = [...stages].sort();
+    const rows = [...days.values()].sort((a, b) => b.day.localeCompare(a.day)).map((d) => ({
+      alert: d.alert,
+      cells: [d.day, d.psi, d.abstain, d.sla, ...st.map((s) => d.latency[s] ?? "—")],
+    }));
+    return {
+      columns: ["Day (UTC)", "Category PSI", "Abstain rate", "SLA breach rate", ...st.map((s) => `p95 ${s} (ms)`)],
+      rows,
+      latestAlert: rows.length > 0 && rows[0].alert,
+    };
+  }
+
+  if (typeof module !== "undefined" && module.exports) module.exports = { dashboardModel, monitoringModel };
+  else {
+    root.dashboardModel = dashboardModel;
+    root.monitoringModel = monitoringModel;
+  }
 })(typeof window !== "undefined" ? window : globalThis);

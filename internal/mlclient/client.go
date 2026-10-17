@@ -23,6 +23,10 @@ type Client struct {
 	Timeout    time.Duration
 	MaxRetries int
 	Backoff    time.Duration
+	// Observe, when set, is called once per call (retries included) with the
+	// stage name (the path without its slash, e.g. "classify"), the
+	// wall-clock duration and the final error. Used for monitoring (P7.3).
+	Observe func(stage string, d time.Duration, err error)
 }
 
 // New returns a Client with defaults suited to a local ml-service.
@@ -71,15 +75,17 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 	return h, err
 }
 
-func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
+func (c *Client) do(ctx context.Context, method, path string, in, out any) (err error) {
+	if c.Observe != nil && path != "/health" {
+		start := time.Now()
+		defer func() { c.Observe(strings.TrimPrefix(path, "/"), time.Since(start), err) }()
+	}
 	var body []byte
 	if in != nil {
-		var err error
 		if body, err = json.Marshal(in); err != nil {
 			return err
 		}
 	}
-	var err error
 	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
 		if attempt > 0 {
 			select {

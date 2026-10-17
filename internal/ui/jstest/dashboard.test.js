@@ -45,3 +45,24 @@ test("empty summary and unreachable ml-service", () => {
   assert.strictEqual(tile["Models loaded"], "ml-service unreachable");
   assert.ok(m.charts.every((c) => Array.isArray(c.bars)));
 });
+
+const { monitoringModel } = require("../static/dashboard.js");
+
+test("monitoring: rows per day, newest first, PSI alert and stage columns", () => {
+  const m = monitoringModel({ days: 14, metrics: [
+    { day: "2026-10-16T00:00:00Z", metric: "category_psi", value: null, detail: { classified: 3, min_tickets: 30, alert: false } },
+    { day: "2026-10-17T00:00:00Z", metric: "category_psi", value: 0.3141, detail: { alert: true } },
+    { day: "2026-10-17T00:00:00Z", metric: "abstain_rate", value: 0.25, detail: {} },
+    { day: "2026-10-17T00:00:00Z", metric: "sla_breach_rate", value: null, detail: {} },
+    { day: "2026-10-17T00:00:00Z", metric: "latency_p95_ms.verify", value: 1499.6, detail: { n: 3 } },
+    { day: "2026-10-16T00:00:00Z", metric: "latency_p95_ms.classify", value: 80, detail: { n: 40 } },
+  ] });
+  assert.deepStrictEqual(m.columns.slice(4), ["p95 classify (ms)", "p95 verify (ms)"]);
+  assert.strictEqual(m.rows[0].cells[0], "2026-10-17");
+  assert.deepStrictEqual(m.rows[0].cells.slice(1), ["0.314", "25%", "—", "—", "1500 (n=3)"]);
+  assert.strictEqual(m.rows[0].alert, true);
+  assert.strictEqual(m.latestAlert, true);
+  assert.strictEqual(m.rows[1].cells[1], "— (3 < 30 tickets)");
+  assert.strictEqual(m.rows[1].cells[4], "80 (n=40)");
+  assert.strictEqual(monitoringModel({ metrics: [] }).latestAlert, false);
+});

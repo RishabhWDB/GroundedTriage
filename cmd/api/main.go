@@ -79,6 +79,7 @@ func main() {
 	defer pool.Close()
 	apiSrv := &api.Server{
 		Store:     store.Review{Pool: pool},
+		Daily:     store.Monitoring{Pool: pool},
 		Ingest:    api.FileIngester{Ingestor: &preprocess.Ingestor{Store: store.Tickets{Pool: pool}}},
 		ML:        ml,
 		Audit:     store.Audit{Pool: pool},

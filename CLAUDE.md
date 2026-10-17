@@ -44,6 +44,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Retrieval eval on WixQA QA pairs (recall@1/3/5, MRR; dense vs hybrid; floor analysis) | `make retrieval-eval` → `results/retrieval/` |
 | P7.2 RAG eval: plan (expected days; retrieval only) / floor sweep on p72_dev / the run (cached, resumable; re-run daily at the Groq cap) | `make rag-eval-plan` / `make rag-floor-sweep` / `make rag-eval` (`ARGS="--limit N"`) → `results/rag/` |
 | Judge validation: sample claims from the RAG run / label them (interactive) / score judges vs human (κ) | `make judge-sample` / `make judge-label` / `make judge-score ARGS=--with-llm` → `results/rag/judge_validation.*` |
+| Monitoring reference distribution for PSI (after a data rebuild) | `make monitoring-ref` → `config/monitoring.yaml` |
 | Seed | `make seed` (not implemented until P8.1) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
@@ -71,6 +72,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | **Final systems only:** score ood-test once (every run is logged) | `make ood-eval-test` → `results/ood/test/`, `results/ood/test_log.jsonl` |
 | REST API (needs `API_KEY` in `.env`, not the placeholder) | `make api`; e.g. `curl -H "X-API-Key: $KEY" localhost:8080/tickets?status=open`; spec in `docs/openapi.yaml` |
 | Agent review UI | `make api` (or `make dev`), open http://127.0.0.1:8080/ (manual test below) |
+| Daily monitoring rows (written by the worker after each poll) | `curl -H "X-API-Key: $KEY" localhost:8080/metrics/daily?days=14`, or the Dashboard's monitoring table |
 | Evaluate the proposed system | not implemented yet (P7) |
 
 ### Manual UI test (P6.2)
@@ -403,6 +405,13 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `make rag-eval-plan` (printed before starting), `make rag-floor-sweep` (p72_dev), `make rag-eval` (daily).
   - Commit `f950ada`.
 - P7.2b Judge-validation labelling (`eval/judge_labels.py`): `sample` draws ~80 claims from the run, half judged-unsupported / half supported, alternating systems; each row shows the claim with its cited source text (all retrieved chunks when uncited), and the judge's verdicts go to a separate file that labelling never shows. `label` is an interactive y/n/unsure CLI that saves after each answer; `score` gives accuracy, Cohen's κ and confusion counts for the gate judge and, with `--with-llm`, a per-claim qwen and gpt-oss-120b verdict (cached). Below 60 labels it's marked PRELIMINARY. §3a item 10.
+  - Commit `83bcf87`.
+- P7.3 Monitoring:
+  - migration **00012** (`stage_timings`, `metrics_daily`, `routes.resolved_at` backfilled from `updated_at`; applied to Mumbai, `migrate verify` OK with 11 tables); outbound sets `resolved_at`;
+  - `mlclient.Client.Observe` hook → `monitoring.Recorder` (buffered, one COPY per worker cycle);
+  - `internal/monitoring` (`PSI`, `Compute`, `Job`): after every poll the worker recomputes yesterday and today (UTC) → `metrics_daily`: `category_psi` (vs `config/monitoring.yaml`, alert > 0.2, none below 30 classified tickets), `abstain_rate`, `sla_breach_rate`, `latency_p95_ms.<stage>` (ml-service calls + ingest_to_classified / ingest_to_draft from timestamps);
+  - `GET /metrics/daily?days=` (OpenAPI documented) and a dashboard monitoring table that flags PSI alerts;
+  - `make monitoring-ref` regenerates the reference.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -479,6 +488,12 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 ## 5. Decisions log
 
+- 2026-10-17 (P7.3): **Monitoring design.**
+  - **PSI reference = the val split's category shares, Spam included** (the categorised rows of `spam_val`, 3,775 rows: Technical 0.5306, Billing 0.1306, Feature 0.0991, General 0.1629, Spam 0.0609, Meeting 0.0159). `train` is capped, so its shares aren't natural; val is stratified from the same pool. PSI = Σ (p−q)·ln(p/q) with shares floored at 1e-4; the current distribution is each ticket's latest classification made that UTC day. **Alert at PSI > 0.2**; no PSI below 30 classified tickets (too noisy at demo volume).
+  - **Latency per stage:** the worker times every ml-service call (retries included) through `mlclient.Client.Observe`, buffers them, and writes one COPY per cycle into `stage_timings`, so timing costs no extra round-trips per ticket. End-to-end `ingest_to_classified` and `ingest_to_draft` come from row timestamps. p50/p95 via `percentile_cont`.
+  - **SLA breach rate** = routes created that day with an SLA that were resolved after the deadline or are still open past it now. A day's rate can rise until its routes resolve, which is why the job recomputes yesterday too. `routes.resolved_at` was added for this; earlier resolved routes were backfilled from `updated_at` (outbound was the only writer of `resolved`).
+  - **Abstain rate** = drafts created that day with an abstain reason / drafts created that day (same definition as the summary).
+  - Not run live against DATABASE_URL (the worker isn't run on the demo rows); covered by unit tests (PSI known values, floor, symmetry, thresholds, job day boundaries in a non-UTC zone) and a DB integration test on TEST_DATABASE_URL.
 - 2026-10-17 (P7.2a): **RAG evaluation design.**
   - Metrics are a documented RAGAS-style equivalent, not the `ragas` package (it needs an OpenAI-style stack and several judge calls per item, which the 8 GB Mac and Groq's free caps can't carry). Faithfulness uses the same qwen judge as the gate. The ungrounded (SCRIBE) replies are judged against the same top-5 chunks the grounded system retrieved, so "faithfulness" there means "how much of the answer the KB supports".
   - WixQA questions carry no ticket metadata, so both systems get category General Inquiry, urgency medium, sentiment neutral.

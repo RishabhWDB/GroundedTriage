@@ -170,6 +170,40 @@ paths:
                       fast_tier_loaded: {type: boolean}
                       deep_tier: {type: boolean}
                       urgency: {type: boolean}
+  /metrics/daily:
+    get:
+      summary: Daily monitoring metrics (P7.3), newest day first
+      description: >
+        Rows written by the worker's monitoring job, one per UTC day and metric:
+        category_psi (drift of the day's category distribution vs config/monitoring.yaml;
+        detail.alert when above psi_alert; null below min_tickets), abstain_rate,
+        sla_breach_rate (routes created that day; open past the deadline counts as breached),
+        and latency_p95_ms.<stage> (detail has n, p50_ms, errors) for the ml-service calls
+        and ingest_to_classified / ingest_to_draft.
+      parameters:
+        - name: days
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 90, default: 14}
+      responses:
+        "200":
+          description: Metric rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  days: {type: integer}
+                  metrics:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day: {type: string, format: date-time}
+                        metric: {type: string}
+                        value: {type: number, nullable: true}
+                        detail: {type: object, additionalProperties: true}
+                        computed_at: {type: string, format: date-time}
+        "400": {$ref: "#/components/responses/Error"}
 components:
   securitySchemes:
     apiKey: {type: apiKey, in: header, name: X-API-Key}

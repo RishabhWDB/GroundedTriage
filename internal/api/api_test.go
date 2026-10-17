@@ -307,3 +307,35 @@ func TestSummaryIncludesModels(t *testing.T) {
 		t.Fatalf("ml down: %s", rec.Body)
 	}
 }
+
+type fakeDaily struct{ days int }
+
+func (f *fakeDaily) Daily(_ context.Context, days int, _ time.Time) ([]store.DailyMetric, error) {
+	f.days = days
+	v := 0.31
+	return []store.DailyMetric{{Metric: "category_psi", Value: &v, Detail: map[string]any{"alert": true}}}, nil
+}
+
+func TestDailyMetrics(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	fd := &fakeDaily{}
+	(&Server{Store: &fakeStore{}, Daily: fd, APIKey: key}).Register(r)
+	rec := do(r, "GET", "/metrics/daily", "", nil)
+	if rec.Code != 200 || fd.days != 14 || !strings.Contains(rec.Body.String(), `"value":0.31`) {
+		t.Fatalf("daily: %d %s (days %d)", rec.Code, rec.Body, fd.days)
+	}
+	if rec := do(r, "GET", "/metrics/daily?days=30", "", nil); rec.Code != 200 || fd.days != 30 {
+		t.Fatalf("days=30: %d, got %d", rec.Code, fd.days)
+	}
+	for _, bad := range []string{"0", "91", "x"} {
+		if rec := do(r, "GET", "/metrics/daily?days="+bad, "", nil); rec.Code != 400 || errCode(t, rec) != CodeBadRequest {
+			t.Fatalf("days=%s: %d", bad, rec.Code)
+		}
+	}
+	none := gin.New()
+	(&Server{Store: &fakeStore{}, APIKey: key}).Register(none)
+	if rec := do(none, "GET", "/metrics/daily", "", nil); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"metrics":[]`) {
+		t.Fatalf("no store: %s", rec.Body)
+	}
+}

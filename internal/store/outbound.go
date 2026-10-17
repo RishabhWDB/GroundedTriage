@@ -85,7 +85,7 @@ func (o Outbound) MarkSent(ctx context.Context, draftID string, now time.Time) e
 		return fmt.Errorf("mark draft %s sent: %w", draftID, err)
 	}
 	if _, err := tx.Exec(ctx, `
-		update routes set status = 'resolved', updated_at = $2
+		update routes set status = 'resolved', resolved_at = $2, updated_at = $2
 		where id = (select id from routes where ticket_id = $1 order by created_at desc, id desc limit 1)`,
 		ticketID, now); err != nil {
 		return err

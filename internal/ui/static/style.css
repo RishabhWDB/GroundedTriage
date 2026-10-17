@@ -61,3 +61,6 @@ pre.body { white-space: pre-wrap; font: inherit; margin: 8px 0 0; }
 .bar .fill { background: var(--accent); height: 12px; border-radius: 4px; }
 code { background: #eef0f3; padding: 0 4px; border-radius: 4px; }
 .badge.eligible { background: #e0ecff; color: var(--accent); }
+.scroll { overflow-x: auto; }
+tbody.static tr { cursor: default; }
+tbody.static tr:hover { background: none; }

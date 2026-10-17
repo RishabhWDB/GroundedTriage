@@ -28,6 +28,7 @@ import (
 	"github.com/RishabhWDB/GroundedTriage/internal/envfile"
 	"github.com/RishabhWDB/GroundedTriage/internal/ingest"
 	"github.com/RishabhWDB/GroundedTriage/internal/mlclient"
+	"github.com/RishabhWDB/GroundedTriage/internal/monitoring"
 	"github.com/RishabhWDB/GroundedTriage/internal/outbound"
 	"github.com/RishabhWDB/GroundedTriage/internal/pipeline"
 	"github.com/RishabhWDB/GroundedTriage/internal/preprocess"
@@ -41,6 +42,7 @@ func main() {
 	sourcesPath := flag.String("sources", "config/sources.yaml", "sources config file")
 	rulesPath := flag.String("rules", "config/routing_rules.yaml", "routing rules (hot-reloaded)")
 	slaPath := flag.String("sla", "config/sla.yaml", "SLA targets")
+	monitoringPath := flag.String("monitoring", "config/monitoring.yaml", "monitoring reference + alert settings (P7.3)")
 	flag.Parse()
 
 	if err := envfile.Load(); err != nil {
@@ -83,9 +85,23 @@ func main() {
 	if mlURL == "" {
 		mlURL = "http://localhost:8001"
 	}
+	recorder := &monitoring.Recorder{}
+	newML := func(timeout time.Duration) *mlclient.Client {
+		c := mlclient.New(mlURL)
+		c.Observe = recorder.Observe // P7.3 stage timings
+		if timeout > 0 {
+			c.Timeout = timeout
+		}
+		return c
+	}
+	monCfg, err := monitoring.LoadConfig(*monitoringPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	monitor := &monitoring.Job{Store: store.Monitoring{Pool: pool}, Config: monCfg, Recorder: recorder}
 	classifier := &pipeline.Classifier{
 		Store: store.Classifications{Pool: pool},
-		ML:    mlclient.New(mlURL),
+		ML:    newML(0),
 		Audit: store.Audit{Pool: pool},
 	}
 	engine, err := routing.NewEngine(*rulesPath)
@@ -103,12 +119,11 @@ func main() {
 		Clock: routing.SystemClock{},
 		Audit: store.Audit{Pool: pool},
 	}
-	meetings, err := meetingScheduler(ctx, pool, mlURL)
+	meetings, err := meetingScheduler(ctx, pool, newML)
 	if err != nil {
 		log.Fatal(err)
 	}
-	replyML := mlclient.New(mlURL)
-	replyML.Timeout = 120 * time.Second // drafting and judging are LLM calls
+	replyML := newML(120 * time.Second) // drafting and judging are LLM calls
 	replier := &pipeline.Replier{
 		Drafts: store.ReplyDrafts{Pool: pool},
 		Routes: store.Routes{Pool: pool},
@@ -140,6 +155,9 @@ func main() {
 		}
 		if _, err := sender.SendApproved(ctx); err != nil {
 			slog.Error("worker: outbound", "err", err)
+		}
+		if _, err := monitor.Run(ctx); err != nil {
+			slog.Error("worker: monitoring", "err", err)
 		}
 	}
 
@@ -178,7 +196,9 @@ func main() {
 			"failed", rp.Failed, "err", perr)
 		ss, serr := sender.SendApproved(ctx)
 		slog.Info("worker: outbound", "claimed", ss.Claimed, "sent", ss.Sent, "failed", ss.Failed, "stale", ss.Stale, "err", serr)
-		if failed || err != nil || rerr != nil || eerr != nil || merr != nil || perr != nil || serr != nil {
+		mm, moerr := monitor.Run(ctx)
+		slog.Info("worker: monitoring", "metrics", len(mm), "err", moerr)
+		if failed || err != nil || rerr != nil || eerr != nil || merr != nil || perr != nil || serr != nil || moerr != nil {
 			os.Exit(1)
 		}
 		return
@@ -192,7 +212,7 @@ func main() {
 // meetingScheduler builds the P4.4 step from MEETING_CALENDAR: "google"
 // (needs `make calendar-auth`), "fake" (an in-memory calendar for demos) or
 // "off". Unset means google when the token file exists, otherwise off.
-func meetingScheduler(ctx context.Context, pool *pgxpool.Pool, mlURL string) (*pipeline.MeetingScheduler, error) {
+func meetingScheduler(ctx context.Context, pool *pgxpool.Pool, newML func(time.Duration) *mlclient.Client) (*pipeline.MeetingScheduler, error) {
 	tz := os.Getenv("GOOGLE_TIMEZONE")
 	if tz == "" {
 		tz = "UTC"
@@ -237,8 +257,7 @@ func meetingScheduler(ctx context.Context, pool *pgxpool.Pool, mlURL string) (*p
 	default:
 		return nil, fmt.Errorf("MEETING_CALENDAR=%q: want google, fake or off", mode)
 	}
-	ml := mlclient.New(mlURL)
-	ml.Timeout = 60 * time.Second // an LLM call
+	ml := newML(60 * time.Second) // an LLM call
 	return &pipeline.MeetingScheduler{
 		Store:     store.Meetings{Pool: pool},
 		ML:        ml,
