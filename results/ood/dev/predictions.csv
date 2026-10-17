@@ -1,77 +1,77 @@
-id,source,reviewed,gold,fast_only,cascade[support],cascade[support_and_ham],fast_only[aug],cascade[support|aug],cascade[support_and_ham|aug],scribe
-tw-1085354,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-1116932,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-1130326,twitter,False,Billing,General Inquiry,Spam,General Inquiry,Billing,Spam,Billing,General Inquiry
-tw-1196544,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-126319,twitter,False,General Inquiry,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue
-tw-1264854,twitter,False,General Inquiry,General Inquiry,Spam,General Inquiry,General Inquiry,Spam,General Inquiry,General Inquiry
-tw-1425442,twitter,False,Feature Request,Billing,Spam,Billing,Feature Request,Spam,Feature Request,Feature Request
-tw-1452447,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-1518842,twitter,False,Billing,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,Billing
-tw-1535260,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling
-tw-1576489,twitter,False,Technical Issue,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,Billing
-tw-1605134,twitter,False,Feature Request,General Inquiry,General Inquiry,General Inquiry,General Inquiry,General Inquiry,General Inquiry,Feature Request
-tw-163255,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing
-tw-1677777,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-1716750,twitter,False,Feature Request,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,General Inquiry
-tw-1730935,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing
-tw-1804895,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-1816606,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-1829537,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-1927409,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-2008065,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-2013221,twitter,False,General Inquiry,Technical Issue,Spam,Spam,General Inquiry,Spam,Spam,General Inquiry
-tw-2097949,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-212043,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-2122609,twitter,False,Billing,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,Billing
-tw-2245686,twitter,False,General Inquiry,Billing,Spam,Billing,Billing,Spam,Billing,General Inquiry
-tw-2251432,twitter,False,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing
-tw-2307933,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Feature Request
-tw-2353855,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing
-tw-2390855,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-2392421,twitter,False,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing
-tw-2463394,twitter,False,Billing,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue
-tw-2484415,twitter,False,Feature Request,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-2492759,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Feature Request,Spam,Feature Request,General Inquiry
-tw-2519300,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-2556996,twitter,False,Feature Request,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-2641355,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-2668121,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing
-tw-2710360,twitter,False,Billing,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,General Inquiry
-tw-2727165,twitter,False,General Inquiry,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue
-tw-2749362,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-2782007,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-2814066,twitter,False,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Technical Issue
-tw-353918,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-41830,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-434386,twitter,False,General Inquiry,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,General Inquiry
-tw-448350,twitter,False,Technical Issue,General Inquiry,Spam,General Inquiry,General Inquiry,Spam,General Inquiry,Technical Issue
-tw-472730,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing
-tw-474976,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-591425,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-596625,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing
-tw-620810,twitter,False,Technical Issue,General Inquiry,Spam,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue
-tw-660758,twitter,False,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,General Inquiry
-tw-722285,twitter,False,Feature Request,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-74940,twitter,False,Spam,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,General Inquiry
-tw-769694,twitter,False,Feature Request,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Feature Request
-tw-808376,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing
-tw-834412,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-tw-901930,twitter,False,Spam,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-enron-3739,enron_spam,True,Spam,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
-enron-3987,enron_spam,True,Spam,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,Spam
-enron-4445,enron_spam,True,Spam,General Inquiry,Spam,Spam,General Inquiry,Spam,Spam,General Inquiry
-enron-4601,enron_spam,True,Spam,General Inquiry,Spam,Spam,General Inquiry,Spam,Spam,General Inquiry
-enron-4771,enron_spam,True,Spam,Technical Issue,Spam,Spam,Feature Request,Spam,Spam,General Inquiry
-enron-4875,enron_spam,True,Spam,Feature Request,Spam,Spam,Feature Request,Spam,Spam,Feature Request
-enron-5002,enron_spam,True,Spam,General Inquiry,Spam,Spam,General Inquiry,Spam,Spam,General Inquiry
-enron-5095,enron_spam,True,Spam,Technical Issue,Spam,Spam,General Inquiry,Spam,Spam,General Inquiry
-sample-01,sample_emails,True,Technical Issue,General Inquiry,Spam,General Inquiry,General Inquiry,Spam,General Inquiry,Technical Issue
-sample-03,sample_emails,True,Feature Request,Billing,Billing,Billing,Billing,Billing,Billing,Feature Request
-sample-04,sample_emails,True,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
-sample-08,sample_emails,True,General Inquiry,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,General Inquiry
-sample-11,sample_emails,True,General Inquiry,General Inquiry,Spam,General Inquiry,General Inquiry,Spam,General Inquiry,General Inquiry
-sample-13,sample_emails,True,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,General Inquiry
-sample-14,sample_emails,True,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing
-sample-16,sample_emails,True,Billing,Billing,Billing,Billing,Billing,Billing,Billing,Billing
-sample-21,sample_emails,True,General Inquiry,Feature Request,Spam,Feature Request,Feature Request,Spam,Feature Request,General Inquiry
+id,source,reviewed,gold,fast_only,cascade[support],cascade[support_and_ham],fast_only[aug],cascade[support|aug],cascade[support_and_ham|aug],fast_only[emb],cascade[support|emb],cascade[support_and_ham|emb],fast_only[emb_aug],cascade[support|emb_aug],cascade[support_and_ham|emb_aug],scribe
+tw-1085354,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
+tw-1116932,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Technical Issue
+tw-1130326,twitter,False,Billing,General Inquiry,Spam,General Inquiry,Billing,Spam,Billing,Feature Request,Spam,Feature Request,Billing,Spam,Billing,General Inquiry
+tw-1196544,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry,Spam,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue
+tw-126319,twitter,False,General Inquiry,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Billing,Billing,Billing,Billing,Billing,Billing,Technical Issue
+tw-1264854,twitter,False,General Inquiry,General Inquiry,Spam,General Inquiry,General Inquiry,Spam,General Inquiry,Billing,Spam,Billing,Billing,Spam,Billing,General Inquiry
+tw-1425442,twitter,False,Feature Request,Billing,Spam,Billing,Feature Request,Spam,Feature Request,Feature Request,Spam,Feature Request,Feature Request,Spam,Feature Request,Feature Request
+tw-1452447,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry
+tw-1518842,twitter,False,Billing,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,Billing,Spam,Spam,Billing,Spam,Spam,Billing
+tw-1535260,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling
+tw-1576489,twitter,False,Technical Issue,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,General Inquiry,Spam,Spam,Billing,Spam,Spam,Billing
+tw-1605134,twitter,False,Feature Request,General Inquiry,General Inquiry,General Inquiry,General Inquiry,General Inquiry,General Inquiry,Billing,Billing,Billing,Billing,Billing,Billing,Feature Request
+tw-163255,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Billing
+tw-1677777,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Technical Issue
+tw-1716750,twitter,False,Feature Request,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,Feature Request,Spam,Spam,Feature Request,Spam,Spam,General Inquiry
+tw-1730935,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Billing
+tw-1804895,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry
+tw-1816606,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,Technical Issue
+tw-1829537,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
+tw-1927409,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,Technical Issue
+tw-2008065,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
+tw-2013221,twitter,False,General Inquiry,Technical Issue,Spam,Spam,General Inquiry,Spam,Spam,Billing,Spam,Spam,Billing,Spam,Spam,General Inquiry
+tw-2097949,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
+tw-212043,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,General Inquiry
+tw-2122609,twitter,False,Billing,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,General Inquiry,Spam,Spam,General Inquiry,Spam,Spam,Billing
+tw-2245686,twitter,False,General Inquiry,Billing,Spam,Billing,Billing,Spam,Billing,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry
+tw-2251432,twitter,False,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing
+tw-2307933,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Feature Request,Spam,Feature Request,Feature Request,Spam,Feature Request,Feature Request
+tw-2353855,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Billing
+tw-2390855,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Technical Issue
+tw-2392421,twitter,False,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing
+tw-2463394,twitter,False,Billing,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Billing,Billing,Billing,Billing,Billing,Billing,Technical Issue
+tw-2484415,twitter,False,Feature Request,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
+tw-2492759,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Feature Request,Spam,Feature Request,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry
+tw-2519300,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
+tw-2556996,twitter,False,Feature Request,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry
+tw-2641355,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,General Inquiry
+tw-2668121,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing
+tw-2710360,twitter,False,Billing,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,Meeting Scheduling,Spam,Spam,Meeting Scheduling,Spam,Spam,General Inquiry
+tw-2727165,twitter,False,General Inquiry,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue
+tw-2749362,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry
+tw-2782007,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
+tw-2814066,twitter,False,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Technical Issue
+tw-353918,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
+tw-41830,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Feature Request,Spam,Feature Request,Feature Request,Spam,Feature Request,General Inquiry
+tw-434386,twitter,False,General Inquiry,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,Meeting Scheduling,Spam,Spam,Meeting Scheduling,Spam,Spam,General Inquiry
+tw-448350,twitter,False,Technical Issue,General Inquiry,Spam,General Inquiry,General Inquiry,Spam,General Inquiry,Feature Request,Spam,Feature Request,Feature Request,Spam,Feature Request,Technical Issue
+tw-472730,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Billing
+tw-474976,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry
+tw-591425,twitter,False,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,General Inquiry
+tw-596625,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,Billing
+tw-620810,twitter,False,Technical Issue,General Inquiry,Spam,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
+tw-660758,twitter,False,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Meeting Scheduling,Meeting Scheduling,Meeting Scheduling,Meeting Scheduling,Meeting Scheduling,Meeting Scheduling,General Inquiry
+tw-722285,twitter,False,Feature Request,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry
+tw-74940,twitter,False,Spam,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,General Inquiry
+tw-769694,twitter,False,Feature Request,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Feature Request,Spam,Feature Request,Feature Request,Spam,Feature Request,Feature Request
+tw-808376,twitter,False,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Billing
+tw-834412,twitter,False,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,General Inquiry
+tw-901930,twitter,False,Spam,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry
+enron-3739,enron_spam,True,Spam,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry
+enron-3987,enron_spam,True,Spam,Technical Issue,Spam,Spam,Technical Issue,Spam,Spam,Billing,Spam,Spam,Billing,Spam,Spam,Spam
+enron-4445,enron_spam,True,Spam,General Inquiry,Spam,Spam,General Inquiry,Spam,Spam,General Inquiry,Spam,Spam,General Inquiry,Spam,Spam,General Inquiry
+enron-4601,enron_spam,True,Spam,General Inquiry,Spam,Spam,General Inquiry,Spam,Spam,Meeting Scheduling,Spam,Spam,Billing,Spam,Spam,General Inquiry
+enron-4771,enron_spam,True,Spam,Technical Issue,Spam,Spam,Feature Request,Spam,Spam,General Inquiry,Spam,Spam,Billing,Spam,Spam,General Inquiry
+enron-4875,enron_spam,True,Spam,Feature Request,Spam,Spam,Feature Request,Spam,Spam,Feature Request,Spam,Spam,Feature Request,Spam,Spam,Feature Request
+enron-5002,enron_spam,True,Spam,General Inquiry,Spam,Spam,General Inquiry,Spam,Spam,Technical Issue,Spam,Spam,Feature Request,Spam,Spam,General Inquiry
+enron-5095,enron_spam,True,Spam,Technical Issue,Spam,Spam,General Inquiry,Spam,Spam,Technical Issue,Spam,Spam,Billing,Spam,Spam,General Inquiry
+sample-01,sample_emails,True,Technical Issue,General Inquiry,Spam,General Inquiry,General Inquiry,Spam,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Technical Issue
+sample-03,sample_emails,True,Feature Request,Billing,Billing,Billing,Billing,Billing,Billing,General Inquiry,General Inquiry,General Inquiry,General Inquiry,General Inquiry,General Inquiry,Feature Request
+sample-04,sample_emails,True,General Inquiry,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Technical Issue
+sample-08,sample_emails,True,General Inquiry,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Technical Issue,Meeting Scheduling,Meeting Scheduling,Meeting Scheduling,Meeting Scheduling,Meeting Scheduling,Meeting Scheduling,General Inquiry
+sample-11,sample_emails,True,General Inquiry,General Inquiry,Spam,General Inquiry,General Inquiry,Spam,General Inquiry,Billing,Spam,Billing,Billing,Spam,Billing,General Inquiry
+sample-13,sample_emails,True,Technical Issue,Billing,Spam,Billing,Billing,Spam,Billing,Billing,Spam,Billing,Billing,Spam,Billing,General Inquiry
+sample-14,sample_emails,True,Billing,Technical Issue,Spam,Technical Issue,Technical Issue,Spam,Technical Issue,General Inquiry,Spam,General Inquiry,General Inquiry,Spam,General Inquiry,Billing
+sample-16,sample_emails,True,Billing,Billing,Billing,Billing,Billing,Billing,Billing,Billing,Billing,Billing,Billing,Billing,Billing,Billing
+sample-21,sample_emails,True,General Inquiry,Feature Request,Spam,Feature Request,Feature Request,Spam,Feature Request,Meeting Scheduling,Spam,Meeting Scheduling,Meeting Scheduling,Spam,Meeting Scheduling,General Inquiry

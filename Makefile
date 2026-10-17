@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
+.PHONY: setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -97,6 +97,12 @@ export-splits: ## Bundle splits + taxonomy + card for the GPU PC (datasets/expor
 
 fast-tier: ## P3.1: train the TF-IDF+LR fast tier on train, report on val -> models/fast_tier/, results/fast_tier/
 	cd $(ML_DIR) && $(VPY) -m triage.train_fast_tier
+
+fast-tier-emb: ## P3.13: bge-small embeddings + LR fast tier (cached embeddings) -> models/fast_tier_emb/, results/fast_tier_emb/
+	cd $(ML_DIR) && $(VPY) -m triage.train_emb_fast_tier
+
+fast-tier-emb-aug: ## P3.13 ablation: embedding fast tier on train + train_style_aug
+	cd $(ML_DIR) && $(VPY) -m triage.train_emb_fast_tier --style-aug
 
 fast-tier-aug: ## Ablation: fast tier on train + train_style_aug -> models/fast_tier_aug/, results/fast_tier_aug/
 	cd $(ML_DIR) && $(VPY) -m triage.train_fast_tier --style-aug

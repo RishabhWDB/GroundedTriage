@@ -61,6 +61,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Classify one ticket (ml-service running) | `curl -s localhost:8001/classify -H 'content-type: application/json' -d '{"ticket_id":"t1","subject":"Refund","body":"Charged twice"}'` |
 | Build the OOD set (Twitter pre-labelled for review, Enron spam, team template) | `make ood-set` → `datasets/ood/` (refuses to overwrite a reviewed file) |
 | **Required gate before accepting any model:** OOD eval of SCRIBE, fast tier and cascades on ood-dev (choices are made here) | `make ood-eval` → `results/ood/dev/` |
+| Embedding fast tier (bge-small + LR; embeddings cached in `datasets/raw/emb_cache/`) | `make fast-tier-emb` / `make fast-tier-emb-aug` → `models/fast_tier_emb[_aug]/`, `results/fast_tier_emb[_aug]/` |
 | Fast tier style-aug ablation (train + train_style_aug) | `make fast-tier-aug` → `models/fast_tier_aug/`, `results/fast_tier_aug/` |
 | **Final systems only:** score ood-test once (every run is logged) | `make ood-eval-test` → `results/ood/test/`, `results/ood/test_log.jsonl` |
 | Evaluate the proposed system | not implemented yet (P7) |
@@ -273,6 +274,12 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - the **OOD set is split ood-dev 40% / ood-test 60%** (`ood_split` stored in the CSVs). `make ood-eval` scores ood-dev; `make ood-eval-test` is for final systems only and logs every run. Reports separate reviewed and PRELIMINARY (incl. `needs_review=true`) tables;
   - spam rule default → `support_and_ham` (chosen on val + ood-dev);
   - urgency eval re-run.
+  - Commit `3ae6085`.
+- P3.13 Embedding fast tier (comparison only, no decision):
+  - `triage/embedder.py` (bge-small-en-v1.5, CLS + L2, fp16 on MPS, lazy; `EmbeddingCache` .npz; reused in P5);
+  - `triage/emb_fast_tier.py`, `triage/train_emb_fast_tier.py` (`make fast-tier-emb[-aug]`);
+  - `ood-eval` scores the variants and writes `results/ood/muted_review.md`;
+  - P2.3 baseline results marked **SUPERSEDED**; the manual-work and deferred-decision sections were added.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -304,6 +311,30 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 ### Blocked / needs input
 - none.
 
+## 3a. Manual work pending (Arya)
+
+Keep this list current: add items as they arise, remove them when done. Nothing in P4–P6 waits on them.
+
+| # | Item | Where | After it, run |
+|---|---|---|---|
+| 1 | Review the 149 Twitter OOD rows: fix `category` (`None` drops a row), set `needs_review=false`, notes optional. Don't touch `ood_split`. | `datasets/ood/twitter.csv` (guide: `datasets/ood/README.md`) | `make ood-eval` (ood-dev; choices only). `make ood-eval-test` is only for final systems |
+| 2 | Write ~40 support-style emails (informal ones and meeting requests included); any unique `id`, `category` one of the 6 | `datasets/ood/team_written.csv` | `make ood-eval` |
+| 3 | Review the 100-row Meeting stress set: fix `category`, set `needs_review=false` | `datasets/stress/meeting_stress.csv` | `make baseline-stress` (SCRIBE on the stress set; the proposed system is scored in P7) |
+| 4 | Check the ood-dev rows the default cascade muted but whose label isn't Spam (7 Twitter rows today). If a row really is spam, fix its label in item 1; thresholds stay as they are (decided in Phase 7) | `results/ood/muted_review.md` | `make ood-eval` |
+| 5 | Spot-check the spam rows: the 5 Twitter rows pre-labelled Spam (part of item 1) and the 20 Enron rows (corpus labels) | `datasets/ood/twitter.csv`, `datasets/ood/enron_spam.csv` | `make ood-eval` |
+| 6 | PC training: deep tier (5 topic classes; once with `train` and once with `train ∪ train_style_aug`, recording `style_aug` in `model_card.json`) and the urgency model (`train_urgency`). Contract in `docs/model_artifacts.md` | export `datasets/export/groundedtriage-splits-e2552b04338b.tar.gz`. It's regenerated with the same tag once style-aug finishes; take the newest file | — |
+| 7 | Drop in artifacts: copy to `models/deep_tier/` and `models/urgency/` (a second deep tier, e.g. the aug variant, can live in another folder for comparison) | `models/` | `make setup-models` → `make ml` and `curl localhost:8001/health` (models_loaded true; reasons in the log) → `make urgency-eval` → `make tune-tau` → `make ood-eval`. Restart the ml-service after copying weights |
+
+Claude's own background item: `make style-aug` once per day (Groq free cap) until 3,978 rows, then `make data && make export-splits` (P3.8b).
+
+## 3b. Deferred decisions (decide in Phase 7; nothing in P4–P6 may depend on them)
+
+- **Deep-tier acceptance:** it must beat SCRIBE on **reviewed ood-dev with ≥ 60 rows**, reported with **bootstrap CIs**. The test split and ood-test are reported once afterwards.
+- **Whether the fast tier stays in the cascade** at all (OOD may show it adds nothing over the deep tier).
+- **Which fast tier:** TF-IDF + LR vs bge-small embeddings + LR (P3.13), each with and without style-aug.
+- **Prefit calibration** (calibrate on half of val, tune τ on the other half): skipped unless the deep tier needs it.
+- Already chosen on val + ood-dev, revisitable then: spam rule `support_and_ham`; fast tier uncalibrated; τ = 0.7 untuned until the deep tier exists.
+
 ## 4. Model artifacts
 
 Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never write training code for them.** The artifact contract will go in `docs/model_artifacts.md` (P3.2).
@@ -314,6 +345,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 | `models/urgency/` | absent | — | — | — |
 | `models/fast_tier/` | present (`fast-20261017043430-9848709e`, `make fast-tier`) | 5 topic classes; TF-IDF word 1–2 + char_wb 3–5, LR C=64 balanced, uncalibrated | in repo, 2026-10-17 | macro-F1 0.823, acc 0.795, ECE 0.070 |
 | `models/fast_tier_aug/` | present (`fast-20261017044330-9848709e`, ablation) | as above + 589 style-aug rows | in repo, 2026-10-17 | macro-F1 0.823, acc 0.795, ECE 0.077 |
+| `models/fast_tier_emb/`, `models/fast_tier_emb_aug/` | present (comparison only) | bge-small-en-v1.5 CLS embeddings + LR C=16, uncalibrated (+589 aug rows) | in repo, 2026-10-17 | macro-F1 0.714 / 0.712, ECE 0.018 |
 | `models/spam_filter/` | present (`spam-20261017045337-319c633f`, `make spam-filter`) | binary TF-IDF + LR C=16 balanced; rules `support_and_ham` (default) / `support` | in repo, 2026-10-17 | AP 0.996; see §8 |
 
 ## 5. Decisions log
@@ -413,6 +445,11 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P3.13): Embedding fast tier (review item; **no accept/reject decision**, see §3b):
+  - `BAAI/bge-small-en-v1.5` (384-d, the model P5 will use for the KB): CLS pooling, L2-normalised, inputs truncated to 256 tokens, fp16 on MPS. Embeddings are cached by sha256(model | max_length | text) in `datasets/raw/emb_cache/*.npz` (gitignored, 28 MB for 19.5k texts).
+  - Balanced LR, C from {0.25, 1, 4, 16, 64} by val macro-F1 (C=16), uncalibrated (as in P3.12). The LR artifact is 8 KB; the embedder comes from the HF cache (~130 MB).
+  - `ood-eval` adds the variants `[emb]` and `[emb_aug]` (one shared embedder in memory). It also writes `results/ood/muted_review.md`: the ood-dev rows the default cascade muted whose label isn't Spam, with text, spam score and pre-label. Today that's 7 Twitter rows, all of which read as real customer complaints (unreviewed). Thresholds are unchanged, as instructed.
+  - The P2.3 SCRIBE results are marked SUPERSEDED (`results/baseline/SUPERSEDED.md`, a `status` key in `metrics.json`, a banner in `latency.md`).
 - 2026-10-17 (P3.12, review addendum): **OOD dev/test protocol.**
   - The OOD set is split **ood-dev 40% / ood-test 60%**, stratified by source × category. The order within each stratum is a seeded sha256 of `ood-split-v1|id`.
   - The split is **stored** as `ood_split` in `twitter.csv` and `enron_spam.csv` (`python -m data.ood --splits` fills only a missing column), so relabelling during review never moves a row. The 22 samples are split the same way at load time (fixed labels). Team rows use a per-id hash, so adding rows never moves existing ones.
@@ -683,6 +720,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Style-aug ablation (+589 rows): macro-F1 0.823, accuracy 0.795, ECE 0.077.
   - Coverage at τ = 0.7: 82% of val at 0.860 accuracy.
   - Not comparable with the P3.1 6-class 0.825 (different classes and split).
+- **Embedding vs TF-IDF fast tier (P3.13; val, 5 topic classes):**
+  - Embedding + LR: macro-F1 **0.7141**, accuracy 0.6463, real-only 0.6447, **ECE 0.0182**. TF-IDF: 0.823 / 0.795 / 0.778 / ECE 0.070.
+  - With 589 style-aug rows: 0.7121 / 0.6477.
+  - Per-class F1 (embedding vs TF-IDF): Technical 0.7113 vs 0.842; Billing 0.5422 vs 0.738; Feature 0.9046 vs 0.961; General 0.4206 vs 0.573; Meeting 0.9917 vs 1.0.
+  - Cost (M1, 8 GB, ~8 GB swap in use): embedder load 14.69 s; single ticket embed + LR p50 12.202 ms (p95 67.2277); batched 11.4 ms/ticket; peak RSS 470.7 MB. TF-IDF: p50 1.0 ms, artifact 2.3 MB. First embedding of 19.5k texts: 217.8 s.
+  - ood-dev, reviewed (17 rows): all four fast variants 2/9 on sample emails; every cascade[support_and_ham] variant 9/17.
+  - ood-dev, PRELIMINARY (76 rows, 59 unreviewed Twitter): fast tier alone, TF-IDF 20 / +aug 25 / emb 24 / emb+aug 26 correct; cascade[support_and_ham] 26 / 30 / 29 / 31; SCRIBE 40.
 - **OOD ood-dev (P3.12, `results/ood/dev/`; reviewed = 9 sample emails + 8 Enron spam):**
 
   | system | reviewed correct | sample emails | Enron spam caught | reviewed non-spam muted | PRELIMINARY Twitter correct (59, LLM labels) |
@@ -712,7 +756,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - 74 rows are predicted critical; gold has no critical, so all 74 count as errors.
   - Fired groups: urgency 551, impact 215, deadline 88, low 17, escalation 10, negative 2. The Tobi-Bueck texts rarely use escalation or negative phrasing.
   - For reference only (different split): SCRIBE's sentiment-as-urgency on test has macro-F1 0.357 / MAE 0.750. The heuristic is closer on the ordinal scale but worse on macro-F1. The fine-tuned urgency model is expected to replace both.
-- **SCRIBE baseline on the superseded test split (P2.3, `results/baseline/`, test content `c6539fff…`, n=3,775, MPS, 2026-10-16; re-run on the new test in P7.1):**
+- **SUPERSEDED: SCRIBE baseline on the old test split (P2.3, `results/baseline/`, test content `c6539fff…`, n=3,775, MPS, 2026-10-16; re-run on the new test in P7.1):**
   - Overall macro-F1 **0.522**, accuracy 0.527 (weighted F1 0.557).
   - Real only = without Meeting Scheduling (n=3,715, 5 classes): macro-F1 **0.479**, accuracy 0.521. Synthetic Meeting rows (n=60): recall 0.917.
   - Per class F1: Technical 0.657 (P 0.83 / R 0.55), Billing 0.444 (R 0.32), Feature 0.573, General Inquiry 0.368 (P 0.25 / R 0.73), Spam 0.349 (P 0.96 / R 0.21), Meeting 0.738 (P 0.62 / R 0.92).
