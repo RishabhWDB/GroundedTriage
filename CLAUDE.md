@@ -430,6 +430,9 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - optional `docker-compose.yml` + `deploy/{go,ml}.Dockerfile` + `.dockerignore`: **not verified** (Docker daemon not running).
   - Commit `6ded062`.
 - P8.3a Docs (skeleton; finalised after P7.4): `README.md` (overview, SCRIBE-vs-system table, architecture diagram, setup, run, evaluation commands, adding fine-tuned models, repo map, licences), `docs/architecture.md` (per-layer design decisions), `docs/demo_script.md` (five-minute walkthrough on the demo tickets, with recovery table). Results point to `results/REPORT.md` (P7.4); no numbers in the docs yet.
+  - Commit `b4b772a`.
+- P7.2c Fix: the first full P7.2 run hung for ~47 min, blocked in psycopg `poll` (confirmed with `sample`) on a Postgres connection the pooler had silently dropped while minutes of judge calls passed. `rag.kb.connect` now sets TCP keepalives (idle 30 s, 3 × 10 s), `connect_timeout` 15 s and `statement_timeout` 120 s; `Retriever` takes a `reconnect` callable and retries a query once on `OperationalError`/`InterfaceError` (used by the ml-service registry and the eval); the eval logs each finished item. Same bug would have hit the long-lived ml-service. No rows were lost (row-level resume; LLM calls cached).
+  - Commit: backfilled in the next commit.
   - Commit: backfilled in the next commit.
 ### In progress
 - Phase 7 in Arya's order: P7.2 (RAG eval, multi-day at the free cap) → P7.3 monitoring → P8 parts not tied to final numbers → stop with the consolidated manual checklist. P7.1 / P7.4 wait for Arya's artifacts and labels.

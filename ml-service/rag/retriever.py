@@ -67,13 +67,24 @@ def rrf(rankings: list[list[str]], k: int = RRF_K) -> list[str]:
 RERANK_CANDIDATES = 20  # dense top-N handed to the cross-encoder (P5.6)
 
 
+def _connection_error(exc: Exception) -> bool:
+    try:
+        import psycopg
+    except ImportError:  # pragma: no cover
+        return False
+    return isinstance(exc, (psycopg.OperationalError, psycopg.InterfaceError))
+
+
 class Retriever:
     def __init__(self, conn, encode_query, ef_search: int = 100, reranker=None,
-                 rerank_candidates: int = RERANK_CANDIDATES):  # fmt: skip
+                 rerank_candidates: int = RERANK_CANDIDATES, reconnect=None):  # fmt: skip
         """conn: a psycopg connection (search_path incl. extensions);
         encode_query: list[str] -> (n, 384) normalised vectors;
-        reranker: optional, with .rerank(query, passages) -> indices best first."""
+        reranker: optional, with .rerank(query, passages) -> indices best first;
+        reconnect: optional () -> new connection, used once when the
+        connection turns out to be dead (then the query is retried)."""
         self.conn = conn
+        self.reconnect = reconnect
         self.encode_query = encode_query
         self.ef_search = ef_search
         self.reranker = reranker
@@ -83,6 +94,20 @@ class Retriever:
         return vector_literal(self.encode_query([QUERY_INSTRUCTION + query])[0])
 
     def search(self, query: str, k: int = 5, hybrid: bool = False) -> RetrievalResult:
+        try:
+            return self._search(query, k, hybrid)
+        except Exception as exc:
+            if self.reconnect is None or not _connection_error(exc):
+                raise
+            logger.warning("retriever: database connection lost (%s); reconnecting once", exc)
+            try:
+                self.conn.close()
+            except Exception:  # noqa: BLE001 - already broken
+                pass
+            self.conn = self.reconnect()
+            return self._search(query, k, hybrid)
+
+    def _search(self, query: str, k: int, hybrid: bool) -> RetrievalResult:
         if not query.strip():
             return RetrievalResult([], "hybrid" if hybrid else "dense")
         q = self._embed(query)

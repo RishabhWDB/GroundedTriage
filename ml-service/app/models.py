@@ -100,7 +100,17 @@ class Registry:
                 self._db = connect(self.settings.database_url)
         from rag.retriever import Retriever
 
-        return Retriever(self._db, self.embedder().encode, reranker=self.reranker())
+        return Retriever(
+            self._db, self.embedder().encode, reranker=self.reranker(), reconnect=self._reconnect
+        )
+
+    def _reconnect(self):
+        """A fresh DB connection after the old one died (Retriever retries once)."""
+        from rag.kb import connect
+
+        with self._lock:
+            self._db = connect(self.settings.database_url)
+            return self._db
 
     def reranker(self):
         """The cross-encoder when RETRIEVAL_RERANK is on (lazy, one instance), else None."""

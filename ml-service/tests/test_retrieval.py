@@ -113,3 +113,45 @@ def test_reranker_orders_but_scores_stay_cosine(kb_schema):
         .mode
         == "hybrid"
     )  # hybrid ignores the reranker
+
+
+class DeadConn:
+    """A connection whose server went away: every query fails like psycopg does."""
+
+    closed = False
+
+    def cursor(self):
+        import psycopg
+
+        raise psycopg.OperationalError("consuming input failed: server closed the connection")
+
+    def close(self):
+        self.closed = True
+
+
+def test_retriever_reconnects_once_on_a_dead_connection():
+    import psycopg
+
+    dead = DeadConn()
+    r = Retriever(dead, topic_encode, reconnect=lambda: "fresh-conn")
+    queries = []
+
+    def fake_search(query, k, hybrid):
+        if isinstance(r.conn, DeadConn):
+            r.conn.cursor()  # raises like a dropped psycopg connection
+        queries.append(query)
+        return "ok"
+
+    r._search = fake_search
+    assert r.search("refund") == "ok"
+    assert r.conn == "fresh-conn" and dead.closed and queries == ["refund"]
+
+    # without a reconnect callable the error propagates unchanged
+    plain = Retriever(DeadConn(), topic_encode)
+    plain._search = lambda q, k, h: plain.conn.cursor()
+    with pytest.raises(psycopg.OperationalError):
+        plain.search("refund")
+
+
+def test_connect_sets_keepalives():
+    assert kb.KEEPALIVES["keepalives"] == 1 and kb.KEEPALIVES["keepalives_idle"] <= 60

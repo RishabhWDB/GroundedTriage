@@ -330,6 +330,7 @@ def run(
                 status["errors"].append({"item_id": it.id, "error": str(exc)[:200]})
                 continue
             status["processed"] += 1
+            logger.info("rag-eval: item %s done (%d rows total)", it.id, len(done))
     status["done_rows"] = len(done)
     return status
 
@@ -441,7 +442,8 @@ def main(argv: list[str] | None = None) -> int:
     s = get_settings()
     floor = load_config().retrieval_floor
     emb = Embedder(max_length=KB_MAX_LENGTH)
-    retriever = Retriever(connect(s.database_url or None), emb.encode)
+    retriever = Retriever(connect(s.database_url or None), emb.encode,
+                          reconnect=lambda: connect(s.database_url or None))  # fmt: skip
     RESULTS.mkdir(parents=True, exist_ok=True)
     if args.sweep:
         sweep = floor_sweep(retriever, build_items("p72_dev"))

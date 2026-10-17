@@ -152,15 +152,27 @@ def load_wixqa_qa(kind: str = "expertwritten", root: Path = WIXQA_DIR) -> list[Q
     return out
 
 
-def connect(url: str | None = None):
+# TCP keepalives make a silently dropped connection (pooler/NAT idle timeout)
+# fail within ~1 min instead of blocking forever in recv; seen in P7.2, where
+# minutes of judge calls passed between queries.
+KEEPALIVES = {
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 3,
+}
+
+
+def connect(url: str | None = None, statement_timeout_ms: int = 120_000):
     import psycopg
 
     url = url or os.environ.get("DATABASE_URL", "")
     if not url:
         raise SystemExit("DATABASE_URL is unset")
-    conn = psycopg.connect(url, autocommit=False)
+    conn = psycopg.connect(url, autocommit=False, connect_timeout=15, **KEEPALIVES)
     with conn.cursor() as cur:
         cur.execute("SET search_path TO public, extensions")
+        cur.execute(f"SET statement_timeout = {int(statement_timeout_ms)}")
     conn.commit()
     return conn
 
