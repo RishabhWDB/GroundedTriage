@@ -41,6 +41,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | One Go integration test | `go test -tags integration -count=1 ./internal/store -run TestTicketInsertAndGet` |
 | One-time Google Calendar OAuth for the meeting scheduler (needs `credentials.json` for a Desktop-app OAuth client) | `make calendar-auth` → `token.json` |
 | Ingest the WixQA help-centre KB into pgvector on DATABASE_URL (idempotent; ~17 min first time) | `make kb` (or `cd ml-service && .venv/bin/python -m rag.kb --folder <dir>` for .md/.html docs) → `results/kb/ingest.json` |
+| Retrieval eval on WixQA QA pairs (recall@1/3/5, MRR; dense vs hybrid; floor analysis) | `make retrieval-eval` → `results/retrieval/` |
 | Seed | `make seed` (not implemented until P8.1) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
@@ -317,6 +318,12 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `rag/chunking.py` (HTML/Markdown → heading sections → packed ~400-token chunks, 60-token overlap inside long sections);
   - `rag/kb.py` (`make kb`: WixQA loader + folder loader for .md/.html; bge-small embeddings, max_length 512, cached; idempotent upserts into `kb_documents` / `kb_chunks` with a per-document sha256 that includes the chunker version; QA-pair loader for P5.2);
   - psycopg in core deps; `make test` now excludes `integration`-marked Python tests (`.env` sets TEST_DATABASE_URL).
+  - Commit `7e35d7b`.
+- P5.2 Retriever:
+  - `rag/retriever.py` (dense pgvector cosine top-k with the bge query instruction; optional hybrid = RRF of dense and Postgres full-text);
+  - migration **00008** (`kb_chunks.tsv` generated column + GIN index; applied to Mumbai);
+  - `POST /retrieve` (registry: lazy DB connection under a lock, one shared embedder);
+  - `eval/retrieval.py` (`make retrieval-eval` → `results/retrieval/`, including the retrieval-floor analysis used by P5.4).
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -489,6 +496,12 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P5.2): Retriever:
+  - Query = `model_input(subject, body)`, prefixed with bge's query instruction ("Represent this sentence for searching relevant passages: "); cosine top-k over HNSW (`ef_search` 100), default k=5.
+  - **Hybrid** (flag, `RETRIEVAL_HYBRID=true`): RRF (k=60) of the dense top-50 and a Postgres full-text top-50 (`websearch_to_tsquery`, `ts_rank_cd`; a BM25-like ranking, not exact BM25; generated `tsv` column, migration 00008). Hybrid results keep each chunk's cosine score, so the gate's floor means the same thing in both modes.
+  - **Dense is the default: it beat hybrid on both question sets** (below).
+  - Retrieval eval is **document-level**: a hit at k when a gold article is among the documents of the top-10 chunks deduplicated in rank order. Scored on the WixQA expert-written and simulated sets (200 each).
+  - The ml-service holds one psycopg connection (search_path `public, extensions`) behind a lock, plus one shared bge-small embedder (max_length 512).
 - 2026-10-17 (P5.1): KB = **WixQA** (Hugging Face `Wix/WixQA`, **MIT**): 6,221 Wix help-centre articles plus expert-written (200) and simulated (200) QA pairs for P5.2. Chosen over TechQA because it's a customer-support help centre with QA pairs that point at their source articles.
   - **Chunking:** HTML headings (h1–h4) split articles into sections. One chunk per section gave a **median of 79 tokens** (63% under 100), so consecutive short sections of an article are packed into chunks of ≤ 300 words (~400 tokens), each keeping its heading line. A longer section is windowed alone with 45 words (~60 tokens) of overlap. Overlap never crosses a heading, and no short section is split. Result: **13,220 chunks**, median 286 tokens, p95 and max 400 (within bge's 512). Token counts are approximate (words × 4/3).
   - The text embedded is the article title + the chunk; the chunk text starts with its heading. Images, scripts and styles are dropped; list items keep a "- ".
@@ -813,6 +826,17 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Style-aug ablation (+589 rows): macro-F1 0.823, accuracy 0.795, ECE 0.077.
   - Coverage at τ = 0.7: 82% of val at 0.860 accuracy.
   - Not comparable with the P3.1 6-class 0.825 (different classes and split).
+- **Retrieval on WixQA (P5.2, `results/retrieval/`, document-level, 6,221 documents / 13,220 chunks):**
+
+  | retriever | questions | recall@1 | recall@3 | recall@5 | MRR |
+  |---|---|---|---|---|---|
+  | dense | expert-written (200) | 0.43 | 0.645 | 0.77 | 0.561 |
+  | dense | simulated (200) | 0.34 | 0.535 | 0.675 | 0.471 |
+  | hybrid | expert-written | 0.4 | 0.61 | 0.75 | 0.5317 |
+  | hybrid | simulated | 0.28 | 0.5 | 0.64 | 0.4276 |
+
+  - Latency (embed + SQL, Mac → Mumbai): dense p50 144 ms / p95 152 ms (the first query, with embedder load, 5.9 s); hybrid p50 184 / p95 216 ms.
+  - Best top-5 cosine: answerable WixQA questions median 0.8004 (5% quantile 0.7177); 400 Tobi-Bueck val tickets (out of domain for a Wix KB) median 0.6703 (95% quantile 0.7397).
 - **Spam filter before → after P3.14 (spam_test, n=4,388; thresholds re-derived on spam_val by the same rules):**
 
   | rule | mute threshold | spam recall (mute / +review) | support FPR | ham FPR | ham in review | AP |

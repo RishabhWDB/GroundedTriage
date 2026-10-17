@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # FPR <= 1% limit and also caps human-written ham at 1%.
     spam_rule: str = "support_and_ham"
     ml_port: int = 8001
+    # Postgres (Supabase Session pooler) for KB retrieval (P5).
+    database_url: str = ""
     models_dir: Path = REPO_ROOT / "models"
 
 

@@ -73,6 +73,23 @@ class ClassifyRequest(BaseModel):
     body: str = ""
 
 
+class RetrieveRequest(BaseModel):
+    """POST /retrieve body: the query is model_input(subject, body)."""
+
+    ticket_id: str = ""
+    subject: str = ""
+    body: str = ""
+    k: int = Field(default=5, ge=1, le=20)
+    hybrid: bool = False
+
+
+class RetrieveResponse(BaseModel):
+    ticket_id: str = ""
+    mode: str
+    max_score: float
+    chunks: list["RetrievedChunk"]
+
+
 class Route(BaseModel):
     ticket_id: str
     action: Action
@@ -107,3 +124,7 @@ class Health(BaseModel):
     models_loaded: ModelsLoaded
     fast_tier_loaded: bool
     torch_installed: bool
+
+
+# Forward reference (RetrieveResponse is defined before RetrievedChunk).
+RetrieveResponse.model_rebuild()

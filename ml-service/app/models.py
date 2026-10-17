@@ -36,6 +36,10 @@ class Registry:
         self._spam: SpamFilter | None = None
         self._spam_tried = False
         self._llm = None
+        self._embedder = None
+        self._db = None
+        # One psycopg connection, used under this lock: FastAPI runs sync handlers in threads.
+        self.db_lock = threading.Lock()
 
     @property
     def deep(self) -> DeepTier:
@@ -72,6 +76,29 @@ class Registry:
                     self.settings.models_dir / "spam_filter", self.settings.spam_rule
                 )
             return self._spam
+
+    def embedder(self):
+        """bge-small (max_length 512), shared by retrieval; loads weights on first encode."""
+        with self._lock:
+            if self._embedder is None:
+                from rag.kb import KB_MAX_LENGTH
+                from triage.embedder import Embedder
+
+                self._embedder = Embedder(max_length=KB_MAX_LENGTH)
+            return self._embedder
+
+    def retriever(self):
+        """A Retriever over DATABASE_URL, or None when it is unset. Use under db_lock."""
+        with self._lock:
+            if self._db is None or self._db.closed:
+                if not self.settings.database_url:
+                    return None
+                from rag.kb import connect
+
+                self._db = connect(self.settings.database_url)
+        from rag.retriever import Retriever
+
+        return Retriever(self._db, self.embedder().encode)
 
     def llm(self):
         """The drafter LLM (Groq), built on first use; None without GROQ_API_KEY."""

@@ -1,0 +1,80 @@
+{
+  "depth": 10,
+  "results": {
+    "dense/expertwritten": {
+      "n": 200,
+      "recall@1": 0.43,
+      "recall@3": 0.645,
+      "recall@5": 0.77,
+      "mrr": 0.561
+    },
+    "dense/simulated": {
+      "n": 200,
+      "recall@1": 0.34,
+      "recall@3": 0.535,
+      "recall@5": 0.675,
+      "mrr": 0.471
+    },
+    "hybrid/expertwritten": {
+      "n": 200,
+      "recall@1": 0.4,
+      "recall@3": 0.61,
+      "recall@5": 0.75,
+      "mrr": 0.5317
+    },
+    "hybrid/simulated": {
+      "n": 200,
+      "recall@1": 0.28,
+      "recall@3": 0.5,
+      "recall@5": 0.64,
+      "mrr": 0.4276
+    }
+  },
+  "latency_ms": {
+    "dense": {
+      "n": 400,
+      "mean_ms": 158.7007,
+      "p50_ms": 144.2619,
+      "p95_ms": 151.6442,
+      "max_ms": 5927.2966
+    },
+    "hybrid": {
+      "n": 400,
+      "mean_ms": 188.8755,
+      "p50_ms": 183.8565,
+      "p95_ms": 215.9766,
+      "max_ms": 244.0663
+    }
+  },
+  "floor": {
+    "rule": "floor = 5% quantile of answerable WixQA questions' best score",
+    "floor": 0.7177,
+    "answerable_n": 400,
+    "answerable_kept": 0.95,
+    "val_tickets_n": 400,
+    "val_tickets_below_floor": 0.8875,
+    "answerable_quantiles": {
+      "0.05": 0.7177,
+      "0.25": 0.7613,
+      "0.5": 0.8004,
+      "0.75": 0.8417,
+      "0.95": 0.892
+    },
+    "val_ticket_quantiles": {
+      "0.05": 0.6141,
+      "0.25": 0.6495,
+      "0.5": 0.6703,
+      "0.75": 0.6894,
+      "0.95": 0.7397
+    }
+  },
+  "kb": "6221 documents, 13220 chunks",
+  "run": {
+    "git_commit": "b444ade",
+    "machine": "arm64 Darwin 25.5.0",
+    "python": "3.11.14",
+    "peak_rss_mb": 633.2,
+    "swap_usage_at_end": "total = 8192.00M  used = 7537.44M  free = 654.56M  (encrypted)",
+    "date": "2026-10-17"
+  }
+}

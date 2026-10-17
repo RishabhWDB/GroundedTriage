@@ -11,7 +11,15 @@ from app.interfaces import TicketText
 from app.llm import LLMError
 from app.meeting import MeetingExtraction, MeetingRequest, extract
 from app.models import Registry, get_registry
-from app.schemas import Classification, ClassifyRequest, Health, ModelsLoaded
+from app.schemas import (
+    Classification,
+    ClassifyRequest,
+    Health,
+    ModelsLoaded,
+    RetrieveRequest,
+    RetrieveResponse,
+)
+from app.textinput import model_input
 
 VERSION = "0.1.0"
 RegistryDep = Annotated[Registry, Depends(get_registry)]
@@ -53,3 +61,16 @@ def extract_meeting(req: MeetingRequest, reg: RegistryDep) -> MeetingExtraction:
         return extract(req, llm)
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"meeting extraction failed: {exc}") from exc
+
+
+@app.post("/retrieve", response_model=RetrieveResponse)
+def retrieve(req: RetrieveRequest, reg: RegistryDep) -> RetrieveResponse:
+    retriever = reg.retriever()
+    if retriever is None:
+        raise HTTPException(status_code=503, detail="DATABASE_URL is not set")
+    with reg.db_lock:
+        res = retriever.search(model_input(req.subject, req.body), k=req.k, hybrid=req.hybrid)
+    return RetrieveResponse(
+        ticket_id=req.ticket_id, mode=res.mode, max_score=res.max_score, chunks=res.chunks
+    )
+
