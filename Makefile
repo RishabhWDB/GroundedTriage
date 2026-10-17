@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
+.PHONY: kb calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -56,7 +56,7 @@ test-go:
 	go test ./...
 
 test-py:
-	cd $(ML_DIR) && $(VBIN)/pytest -q
+	cd $(ML_DIR) && $(VBIN)/pytest -q -m "not integration"
 
 test-integration: ## Integration tests against TEST_DATABASE_URL (never DATABASE_URL); tests load .env and skip if unset
 	go test -tags integration -count=1 ./...
@@ -130,6 +130,9 @@ spam-filter: ## P3.9: train the binary spam filter, thresholds on spam_val -> mo
 
 calendar-auth: ## P4.4: one-time Google OAuth (installed app) for the meeting scheduler -> GOOGLE_TOKEN_FILE
 	go run ./cmd/calendar-auth
+
+kb: ## P5.1: ingest the WixQA help-centre KB into kb_documents/kb_chunks on DATABASE_URL (idempotent) -> results/kb/
+	cd $(ML_DIR) && $(VPY) -m rag.kb --wixqa
 
 seed: ## Seed demo data (implemented in P8.1)
 	@echo "seed: not implemented yet (P8.1)"; exit 1

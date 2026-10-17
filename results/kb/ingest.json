@@ -1,0 +1,27 @@
+{
+  "wixqa": {
+    "documents_seen": 6221,
+    "documents_written": 6221,
+    "documents_unchanged": 0,
+    "chunks_written": 13220,
+    "empty_documents": 0
+  },
+  "seconds": 1007.3,
+  "storage": {
+    "documents": 6221,
+    "chunks": 13220,
+    "approx_tokens": 3321511,
+    "kb_documents_mb": 3.1,
+    "kb_chunks_mb_incl_indexes": 62.6,
+    "hnsw_index_mb": 25.8,
+    "database_mb": 78.0
+  },
+  "run": {
+    "git_commit": "b444ade",
+    "machine": "arm64 Darwin 25.5.0",
+    "python": "3.11.14",
+    "peak_rss_mb": 439.6,
+    "swap_usage_at_end": "total = 8192.00M  used = 7571.31M  free = 620.69M  (encrypted)",
+    "date": "2026-10-17"
+  }
+}

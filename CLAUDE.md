@@ -40,6 +40,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Migrate (goose, up only, idempotent; SQL in `migrations/`, embedded) | `make migrate` / `make migrate-status` / `make migrate-verify` (read-only: vector ext, tables, HNSW index, ticket counts) |
 | One Go integration test | `go test -tags integration -count=1 ./internal/store -run TestTicketInsertAndGet` |
 | One-time Google Calendar OAuth for the meeting scheduler (needs `credentials.json` for a Desktop-app OAuth client) | `make calendar-auth` → `token.json` |
+| Ingest the WixQA help-centre KB into pgvector on DATABASE_URL (idempotent; ~17 min first time) | `make kb` (or `cd ml-service && .venv/bin/python -m rag.kb --folder <dir>` for .md/.html docs) → `results/kb/ingest.json` |
 | Seed | `make seed` (not implemented until P8.1) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
@@ -296,7 +297,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - the worker classifies → routes → escalates after each poll and hot-reloads the rules.
   - Fake-clock unit tests and a DB integration test.
   - Commit `c110e3a`.
-- P4.4a Meeting extraction: `app/meeting.py` + `POST /extract_meeting` (gpt-oss-120b, JSON mode, temperature 0; relative dates resolved against `received_at`; validated: unparseable, past or >1-year starts, durations outside 5–480 min and unknown timezones become null with a note). The registry builds the LLM lazily (503 without `GROQ_API_KEY`). Tested with `FakeLLM`; **not run live** (that day's gpt-oss TPD was spent on style-aug).
+- P4.4a Meeting extraction: `app/meeting.py` + `POST /extract_meeting` (gpt-oss-120b, JSON mode, temperature 0; relative dates resolved against `received_at`; validated: unparseable, past or >1-year starts, durations outside 5–480 min and unknown timezones become null with a note). The registry builds the LLM lazily (503 without `GROQ_API_KEY`). Tested with `FakeLLM`. Live check (2026-10-17, after P3.14): "Thursday at 3pm" in an email received Tuesday resolved to 2026-10-15T15:00+01:00, 45 min, Zoom; "whenever works" gave start=null. About 520 tokens per extraction.
   - Commit `53a4187`.
 - P4.4b Scheduling logic: `internal/scheduler` (`Calendar` interface, `FakeCalendar`, `Scheduler.Schedule` → `booked | counter_offer | no_slot`). Tests: free, busy → counter-offer, outside hours/weekend/overrun, no time, past, fully booked, calendar error, booked slot becomes busy, DST week.
   - Commit `c769ec7`.
@@ -311,6 +312,11 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P3.14 Spam-filter blind spot:
   - `train_style_aug` rows are added as **negatives in `spam_train` only** (`data.build.add_aug_negatives`); spam_val/test and every topic split are unchanged (same hashes);
   - spam filter retrained with the same threshold rules; export `e2552b04338b` regenerated (spam_train 21,109; train_style_aug 633).
+  - Commit `91a2c65` (correction `b444ade`).
+- P5.1 KB ingestion:
+  - `rag/chunking.py` (HTML/Markdown → heading sections → packed ~400-token chunks, 60-token overlap inside long sections);
+  - `rag/kb.py` (`make kb`: WixQA loader + folder loader for .md/.html; bge-small embeddings, max_length 512, cached; idempotent upserts into `kb_documents` / `kb_chunks` with a per-document sha256 that includes the chunker version; QA-pair loader for P5.2);
+  - psycopg in core deps; `make test` now excludes `integration`-marked Python tests (`.env` sets TEST_DATABASE_URL).
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -483,6 +489,12 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P5.1): KB = **WixQA** (Hugging Face `Wix/WixQA`, **MIT**): 6,221 Wix help-centre articles plus expert-written (200) and simulated (200) QA pairs for P5.2. Chosen over TechQA because it's a customer-support help centre with QA pairs that point at their source articles.
+  - **Chunking:** HTML headings (h1–h4) split articles into sections. One chunk per section gave a **median of 79 tokens** (63% under 100), so consecutive short sections of an article are packed into chunks of ≤ 300 words (~400 tokens), each keeping its heading line. A longer section is windowed alone with 45 words (~60 tokens) of overlap. Overlap never crosses a heading, and no short section is split. Result: **13,220 chunks**, median 286 tokens, p95 and max 400 (within bge's 512). Token counts are approximate (words × 4/3).
+  - The text embedded is the article title + the chunk; the chunk text starts with its heading. Images, scripts and styles are dropped; list items keep a "- ".
+  - **Idempotent:** `kb_documents.metadata.sha256` covers the chunker version (`packed-v2:300:45`), title, url and text. Unchanged articles are skipped; a changed one is re-chunked and its stale chunks deleted. The first (aborted) run had written 100 articles with the old per-section chunking; the versioned hash re-chunked them.
+  - **Storage (Mumbai, after ingestion):** 6221 documents, 13220 chunks (~3.3M tokens). `kb_documents` 3.1 MB, `kb_chunks` incl. indexes 62.6 MB (HNSW 25.8 MB); whole database 78.0 MB of the free tier's 500 MB. Ingestion took 17 min (M1, embedding on MPS).
+  - Writes go to DATABASE_URL (the KB is product data, not demo tickets) and are additive; nothing existing was touched.
 - 2026-10-17 (Phase 4 review): Q1, auto-booking accepted counter-offers → future work (§3c). Q2, wall-clock SLAs are fine → limitation (§3c). Q3, fix the spam filter's informal-text blind spot now → P3.14.
   - **Token budget:** P5 development has priority for the daily gpt-oss-120b cap. Style-aug runs only on leftover budget, as does the deferred live `/extract_meeting` check. P7.2 judge runs must be resumable and cached across days.
   - Phase 7 option recorded in §3b: a hybrid zero-shot / LLM fallback for low-confidence tickets.

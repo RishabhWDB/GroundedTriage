@@ -21,6 +21,8 @@ dependencies = [
     # Fast tier (P3.1): TF-IDF + LR served in the ml-service.
     "scikit-learn>=1.5",
     "numpy>=1.26",
+    # KB ingestion + retrieval (P5): Postgres/pgvector from the ml-service.
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]
