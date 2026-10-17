@@ -48,7 +48,21 @@ FAST = {
     "unsure": ("General Inquiry", 0.40),
     "outage": ("Technical Issue", 0.90),
 }
-DEEP = {"unsure": ("Technical Issue", 0.88), "sure": ("Spam", 0.99)}
+DEEP = {"unsure": ("Technical Issue", 0.88), "sure": ("Feature Request", 0.99)}
+
+
+class StubSpam:
+    """Spam decisions from a {text: (score, decision)} table; default ham."""
+
+    version = "spam-stub:support"
+
+    def __init__(self, table):
+        self.table = table
+
+    def predict(self, texts):
+        from triage.spam_filter import SpamDecision
+
+        return [SpamDecision(*self.table.get(t, (0.001, "ham"))) for t in texts]
 
 
 def test_cascade_with_deep_tier():
@@ -61,6 +75,7 @@ def test_cascade_with_deep_tier():
     assert deep.calls == [["unsure"]]  # only below-tau tickets reach the deep tier
     assert r[0].urgency.source == "model" and r[0].urgency.urgency == "high"
     assert c.model_versions() == {
+        "spam_filter": "absent",
         "fast_tier": "fast-v1",
         "tau": "0.7",
         "deep_tier": "deep-v1",
@@ -102,6 +117,39 @@ def test_classify_tickets_contract_and_critical():
     assert out[0].models_loaded.urgency is True and out[0].models_loaded.deep_tier is False
     preds = c.classify([t])
     assert preds[0].stage == "fast" and preds[0].category == "Technical Issue"
+
+
+def test_spam_filter_mutes_and_flags_before_topic():
+    fast = StubTier({**FAST, "win money": ("Billing", 0.5), "maybe": ("Billing", 0.9)})
+    deep = StubTier(DEEP)
+    spam = StubSpam({"win money": (0.97, "spam"), "maybe": (0.2, "review")})
+    c = Cascade(fast, deep, UrgencyPredictor(None), 0.7, spam=spam)
+    r = c.run(["win money", "maybe", "sure"])
+    assert (r[0].category, r[0].tier, r[0].fast, r[0].spam_score) == (
+        "Spam",
+        "spam_filter",
+        None,
+        0.97,
+    )
+    assert r[0].confidence == 0.97 and not r[0].possible_spam
+    assert (r[1].category, r[1].tier, r[1].possible_spam) == ("Billing", "fast", True)
+    assert (r[2].possible_spam, r[2].spam_score) == (False, 0.001)
+    assert fast.calls == [["maybe", "sure"]]  # muted tickets skip the topic models
+    assert c.model_versions()["spam_filter"] == "spam-stub:support"
+    out = c.classify_tickets(
+        [TicketText(id=f"t{i}", body=t) for i, t in enumerate(["win money", "maybe"])]
+    )
+    assert (out[0].category, out[0].tier, out[0].spam_score) == ("Spam", "spam_filter", 0.97)
+    assert out[1].possible_spam is True and out[1].tier == "fast"
+    preds = c.classify([TicketText(id="x", body="win money")])
+    assert preds[0].stage == "spam_filter" and preds[0].signals["spam_score"] == 0.97
+    assert Cascade(fast, None, UrgencyPredictor(None), 0.7, spam=StubSpam({})).run([]) == []
+
+
+def test_all_tickets_muted_skips_topic_models():
+    fast = StubTier(FAST)
+    c = Cascade(fast, None, UrgencyPredictor(None), 0.7, spam=StubSpam({"sure": (0.99, "spam")}))
+    assert c.run(["sure"])[0].tier == "spam_filter" and fast.calls == []
 
 
 def test_load_tau(tmp_path):
@@ -220,3 +268,35 @@ def test_classify_endpoint_without_fast_tier(tmp_path):
     finally:
         app.dependency_overrides.clear()
     assert r.status_code == 503 and "make fast-tier" in r.json()["detail"]
+
+
+def test_classify_endpoint_with_spam_filter(tmp_path):
+    import joblib
+
+    from tests.test_fast_tier import save_toy_model
+    from tests.test_spam_filter import toy_split
+    from triage.fast_tier import CARD_FILE, MODEL_FILE
+    from triage.spam_filter import build_filter
+
+    save_toy_model(tmp_path / "models" / "fast_tier")
+    sf = tmp_path / "models" / "spam_filter"
+    sf.mkdir(parents=True)
+    df = toy_split(30, 0)
+    joblib.dump(build_filter(4.0).fit(df["text"], df["is_spam"]), sf / MODEL_FILE)
+    card = {"version": "spam-toy", "default_rule": "support",
+            "rules": {"support": {"spam_threshold": 0.5, "review_threshold": 0.3}}}  # fmt: skip
+    (sf / CARD_FILE).write_text(json.dumps(card))
+    reg = Registry(Settings(models_dir=tmp_path / "models"))
+    app.dependency_overrides[get_registry] = lambda: reg
+    try:
+        client = TestClient(app)
+        spam = client.post(
+            "/classify", json={"ticket_id": "s", "body": "winner prize click free cash now"}
+        )
+        ok = client.post("/classify", json={"ticket_id": "b", "body": "refund my invoice payment"})
+    finally:
+        app.dependency_overrides.clear()
+    s, b = spam.json(), ok.json()
+    assert (s["category"], s["tier"]) == ("Spam", "spam_filter") and s["spam_score"] >= 0.5
+    assert b["category"] == "Billing" and b["spam_score"] < 0.5
+    assert s["model_versions"]["spam_filter"] == "spam-toy:support"

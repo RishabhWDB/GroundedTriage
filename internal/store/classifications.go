@@ -31,10 +31,11 @@ func (r Classifications) Insert(ctx context.Context, c model.Classification) err
 	}
 	_, err = r.Pool.Exec(ctx, `
 		insert into classifications (ticket_id, category, category_confidence, tier, low_confidence,
-		                             urgency, urgency_confidence, urgency_source, models_loaded, model_versions)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		                             urgency, urgency_confidence, urgency_source, models_loaded, model_versions,
+		                             spam_score, possible_spam)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		c.TicketID, c.Category, c.CategoryConfidence, c.Tier, c.LowConfidence,
-		c.Urgency, c.UrgencyConfidence, c.UrgencySource, loaded, vjson)
+		c.Urgency, c.UrgencyConfidence, c.UrgencySource, loaded, vjson, c.SpamScore, c.PossibleSpam)
 	if err != nil {
 		return fmt.Errorf("insert classification for %s: %w", c.TicketID, err)
 	}
@@ -47,7 +48,8 @@ func (r Classifications) Latest(ctx context.Context, ticketID string) (c model.C
 	var loaded, versions []byte
 	rows, err := r.Pool.Query(ctx, `
 		select ticket_id::text, category, category_confidence, tier, low_confidence, urgency,
-		       urgency_confidence, urgency_source, models_loaded, model_versions
+		       urgency_confidence, urgency_source, models_loaded, model_versions,
+		       spam_score, possible_spam
 		from classifications where ticket_id = $1
 		order by created_at desc, id desc limit 1`, ticketID)
 	if err != nil {
@@ -58,7 +60,8 @@ func (r Classifications) Latest(ctx context.Context, ticketID string) (c model.C
 		return c, false, rows.Err()
 	}
 	if err := rows.Scan(&c.TicketID, &c.Category, &c.CategoryConfidence, &c.Tier, &c.LowConfidence,
-		&c.Urgency, &c.UrgencyConfidence, &c.UrgencySource, &loaded, &versions); err != nil {
+		&c.Urgency, &c.UrgencyConfidence, &c.UrgencySource, &loaded, &versions,
+		&c.SpamScore, &c.PossibleSpam); err != nil {
 		return c, false, fmt.Errorf("scan classification: %w", err)
 	}
 	if err := json.Unmarshal(loaded, &c.ModelsLoaded); err != nil {

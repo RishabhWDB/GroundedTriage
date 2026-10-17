@@ -249,6 +249,12 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `triage/spam_filter.py` (`SpamFilter.load`, spam/review/ham decision) and `triage/train_spam_filter.py` (`make spam-filter`, ~1 min) → `models/spam_filter/` + `results/spam_filter/`;
   - two stored threshold rules (`support`, the default, and `support_and_ham`), selectable with `SPAM_RULE`;
   - the meeting/style parser now rejects non-object email entries (a crash in the style-aug run).
+  - Commit `c2891ee`.
+- P3.10 Spam filter in the cascade:
+  - `Cascade(..., spam=SpamFilter)`: a muted ticket → `category=Spam, tier=spam_filter` (topic models skipped); the review band → topic as usual plus `possible_spam=true`;
+  - the fast and deep tiers require the 5 topic classes (6-class artifacts are rejected);
+  - contract: `tier` adds `spam_filter`; `spam_score`, `possible_spam` (Python + Go);
+  - migration **00005** (applied to Mumbai); `store.Classifications` persists them.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -256,7 +262,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### To do
 - P3.8a Commit the generated `datasets/synthetic/style_aug.jsonl` and rebuild/re-export (when the Groq run finishes; several days on the free tier)
-- P3.10 Cascade + contract: spam filter first (`tier=spam_filter`, possible-spam flag), migration
 - P3.11 OOD evaluation set (Twitter customer support, team-written template, non-SpamAssassin spam) + `make ood-eval` gate
 - P3.12 Re-run the fast tier, urgency eval and OOD eval; before/after; updated Phase 3 review
 - P4.1 Rule engine
@@ -390,6 +395,12 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P3.10): Spam filter in the cascade:
+  - The spam filter runs first on every ticket. **≥ mute threshold → `Spam`, `tier=spam_filter`**, confidence = filter score, and the topic models don't run. Review band → the topic cascade runs normally and the result carries **`possible_spam=true`** (P4 routes it to a "possible spam — review" queue instead of muting). Below the review threshold → topic only.
+  - Without `models/spam_filter/`, nothing is ever Spam, `spam_score` is null and `model_versions.spam_filter="absent"`. The filter version string includes the rule (`spam-…:support`).
+  - The fast tier and deep tier now **require the 5 topic classes**. The P3.1 6-class `models/fast_tier/` is rejected, so `/classify` returns 503 until `make fast-tier` is re-run (P3.12). A 6-class deep-tier label_map is rejected.
+  - Contract (Python `app/schemas.py`, Go `internal/model`): `Tier` adds `spam_filter`; new `spam_score` (0–1, nullable) and `possible_spam` (bool). `Classification.category` can still be Spam.
+  - **Migration 00005** widens the `classifications.tier` check and adds `spam_score real` (0–1 check, nullable) and `possible_spam boolean not null default false`. It's additive, so I applied it to the Mumbai DB (`make migrate`: 1 applied; `migrate verify` OK). No existing rows changed.
 - 2026-10-17 (P3.9): Spam filter:
   - Same features as the fast tier (word 1–2 + char_wb 3–5 TF-IDF), binary LR `class_weight="balanced"`, no calibration (only the ranking and thresholds matter). C from {1, 4, 16} by **val average precision**: C=16.
   - Fitted on `spam_train`: 1,076 spam vs 2,862 ham + 16,538 support tickets.

@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from app.settings import get_settings
-from app.taxonomy import categories
+from app.taxonomy import topic_categories
 from triage.fast_tier import TierPrediction
 from triage.hf_model import HFClassifier
 
@@ -17,13 +17,11 @@ TASK = "category"
 
 
 def check_category_labels(labels: list[str]) -> str | None:
-    want = categories()
+    want = topic_categories()  # Spam is the spam filter's, not a topic class
     if sorted(labels) != sorted(want):
         extra = sorted(set(labels) - set(want))
         missing = sorted(set(want) - set(labels))
-        return (
-            f"labels must be exactly the 6 taxonomy categories (extra {extra}, missing {missing})"
-        )
+        return f"labels must be exactly the 5 topic categories (extra {extra}, missing {missing})"
     return None
 
 

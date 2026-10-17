@@ -52,6 +52,8 @@ def top_features(fast: FastTier, category: str, n: int = 20) -> list[str]:
     est = fast.model.calibrated_classifiers_[0].estimator
     names = est.named_steps["features"].get_feature_names_out()
     lr = est.named_steps["lr"]
+    if category not in list(lr.classes_):
+        return []  # e.g. Spam, which the 5-class topic model no longer predicts
     coef = lr.coef_[list(lr.classes_).index(category)]
     return [str(names[j]) for j in np.argsort(coef)[-n:][::-1]]
 

@@ -13,16 +13,20 @@ type ModelsLoaded struct {
 
 // Classification is the output of the classification cascade (Layer 2).
 type Classification struct {
-	TicketID           string            `json:"ticket_id"`
-	Category           string            `json:"category"`
-	CategoryConfidence float64           `json:"category_confidence"`
-	Tier               string            `json:"tier"` // fast | deep
-	LowConfidence      bool              `json:"low_confidence"`
-	Urgency            string            `json:"urgency"` // low | medium | high | critical
-	UrgencyConfidence  float64           `json:"urgency_confidence"`
-	UrgencySource      string            `json:"urgency_source"` // model | heuristic
-	ModelsLoaded       ModelsLoaded      `json:"models_loaded"`
-	ModelVersions      map[string]string `json:"model_versions"`
+	TicketID           string  `json:"ticket_id"`
+	Category           string  `json:"category"`
+	CategoryConfidence float64 `json:"category_confidence"`
+	Tier               string  `json:"tier"` // fast | deep | spam_filter
+	LowConfidence      bool    `json:"low_confidence"`
+	Urgency            string  `json:"urgency"` // low | medium | high | critical
+	UrgencyConfidence  float64 `json:"urgency_confidence"`
+	UrgencySource      string  `json:"urgency_source"` // model | heuristic
+	// SpamScore is the spam filter's P(spam); nil when no filter is loaded.
+	SpamScore *float64 `json:"spam_score,omitempty"`
+	// PossibleSpam marks the filter's review band: route to human review, not mute.
+	PossibleSpam  bool              `json:"possible_spam"`
+	ModelsLoaded  ModelsLoaded      `json:"models_loaded"`
+	ModelVersions map[string]string `json:"model_versions"`
 }
 
 // Route is the routing decision for a ticket (Layer 3).

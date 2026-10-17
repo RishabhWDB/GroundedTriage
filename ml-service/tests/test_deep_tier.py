@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.taxonomy import categories
+from app.taxonomy import categories, topic_categories
 from triage.deep_tier import DeepTier
 from triage.hf_model import ArtifactError, read_label_map
 
@@ -32,14 +32,18 @@ def test_missing_files(tmp_path):
 @pytest.mark.parametrize(
     "label_map,problem",
     [
-        ({"0": "Technical Issue", "1": "Billing"}, "exactly the 6 taxonomy categories"),
-        ({str(i + 1): c for i, c in enumerate(categories())}, "ids must be 0..5"),
-        ({"0": "Billing", **{str(i + 1): c for i, c in enumerate(categories()[:5])}}, "duplicate"),
+        ({"0": "Technical Issue", "1": "Billing"}, "exactly the 5 topic categories"),
+        ({str(i): c for i, c in enumerate(categories())}, "exactly the 5 topic categories"),
+        ({str(i + 1): c for i, c in enumerate(topic_categories())}, "ids must be 0..4"),
+        (
+            {"0": "Billing", **{str(i + 1): c for i, c in enumerate(topic_categories()[:4])}},
+            "duplicate",
+        ),
         ({"a": "Billing"}, "must be integers"),
     ],
 )
 def test_invalid_label_map(tmp_path, label_map, problem):
-    d = save_tiny_classifier(tmp_path / "deep_tier", categories(), "category")
+    d = save_tiny_classifier(tmp_path / "deep_tier", topic_categories(), "category")
     (d / "label_map.json").write_text(json.dumps(label_map))
     dt = DeepTier(d, device="cpu")
     assert not dt.available and problem in dt.reason
@@ -55,15 +59,15 @@ def test_invalid_label_map(tmp_path, label_map, problem):
 )
 def test_invalid_model_card(tmp_path, override, problem):
     d = save_tiny_classifier(
-        tmp_path / "deep_tier", categories(), "category", card_overrides=override
+        tmp_path / "deep_tier", topic_categories(), "category", card_overrides=override
     )
     dt = DeepTier(d, device="cpu")
     assert not dt.available and problem in dt.reason
 
 
 def test_label_count_mismatch_with_config(tmp_path):
-    d = save_tiny_classifier(tmp_path / "deep_tier", categories()[:5] + ["Other"], "category")
-    (d / "label_map.json").write_text(json.dumps(dict(enumerate(categories()))))
+    d = save_tiny_classifier(tmp_path / "deep_tier", topic_categories()[:4] + ["Other"], "category")
+    (d / "label_map.json").write_text(json.dumps(dict(enumerate(topic_categories()))))
     cfg = json.loads((d / "config.json").read_text())
     cfg["num_labels"] = 4
     cfg["id2label"] = {str(i): str(i) for i in range(4)}
@@ -74,7 +78,7 @@ def test_label_count_mismatch_with_config(tmp_path):
 
 def test_happy_path_lazy_load_batching_truncation(tmp_path):
     # Label ids in a non-taxonomy order: predictions must follow label_map.
-    labels = list(reversed(categories()))
+    labels = list(reversed(topic_categories()))
     d = save_tiny_classifier(tmp_path / "deep_tier", labels, "category", max_length=8)
     dt = DeepTier(d, device="cpu", batch_size=2)
     assert dt.available and not dt.loaded  # lazy
@@ -85,8 +89,8 @@ def test_happy_path_lazy_load_batching_truncation(tmp_path):
     assert dt.loaded and dt.device == "cpu"
     assert len(preds) == 5
     for p in preds:
-        assert p.category in categories()
-        assert set(p.probs) == set(categories())
+        assert p.category in topic_categories()
+        assert set(p.probs) == set(topic_categories())
         assert sum(p.probs.values()) == pytest.approx(1, abs=1e-5)
         assert p.probs[p.category] == pytest.approx(p.confidence)
     # Batching does not change results.

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-from app.taxonomy import categories
+from app.taxonomy import topic_categories
 
 logger = logging.getLogger(__name__)
 
@@ -121,11 +121,12 @@ class FastTier:
             )
             return None
         classes = {str(c) for c in model.classes_}
-        if classes != set(categories()):
+        if classes != set(topic_categories()):
             logger.warning(
-                "fast tier unavailable: classes %s do not match the taxonomy %s",
+                "fast tier unavailable: classes %s do not match the topic categories %s "
+                "(retrain with `make fast-tier` after a taxonomy change)",
                 sorted(classes),
-                categories(),
+                topic_categories(),
             )
             return None
         trained_with = card.get("sklearn_version")

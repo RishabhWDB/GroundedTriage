@@ -12,16 +12,16 @@ def test_sample_check_on_toy_model(tmp_path):
         {
             "id": ["a", "b"],
             "subject": ["", ""],
-            "body": ["refund my invoice payment", "winner lottery prize click"],
-            "label": ["Billing", "Spam"],
+            "body": ["refund my invoice payment", "server crash error login"],
+            "label": ["Billing", "Technical Issue"],
         }
     )
     df["text"] = df["body"]
     m = run(fast, None, df)
     assert m["correct"] == {"fast": 2, "cascade": 2}
-    assert m["predicted_spam"]["fast"] == 1 and m["gold_spam"] == 1
-    assert "| fast | 2/2 | 1 |" in report_markdown(m)
-    assert len(top_features(fast, "Spam", 5)) == 5
+    assert m["predicted_spam"]["fast"] == 0 and m["gold_spam"] == 0
+    assert "| fast | 2/2 | 0 |" in report_markdown(m)
+    assert len(top_features(fast, "Billing", 5)) == 5 and top_features(fast, "Spam") == []
 
 
 def test_load_sample_has_labels():

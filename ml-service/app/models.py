@@ -3,7 +3,8 @@
 - Deep tier and urgency artifacts are validated (file checks only) the first
   time anything asks; their weights load on the first prediction that needs
   them, then stay resident (one transformer per role; 8 GB RAM).
-- The fast tier loads on the first /classify.
+- The fast tier and the spam filter load on the first /classify (the
+  filter with the SPAM_RULE operating point; absent filter = no Spam output).
 - The SCRIBE baseline models are never loaded in this process.
 """
 
@@ -17,6 +18,7 @@ from app.settings import Settings, get_settings
 from triage.cascade import Cascade, load_tau
 from triage.deep_tier import DeepTier
 from triage.fast_tier import FastTier
+from triage.spam_filter import SpamFilter
 from triage.urgency import UrgencyModel, UrgencyPredictor
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,8 @@ class Registry:
         self._fast: FastTier | None = None
         self._fast_tried = False
         self.fast_reason = ""
+        self._spam: SpamFilter | None = None
+        self._spam_tried = False
 
     @property
     def deep(self) -> DeepTier:
@@ -59,11 +63,22 @@ class Registry:
                     self.fast_reason = "models/fast_tier/ missing or invalid: run `make fast-tier`"
             return self._fast
 
+    def spam(self) -> SpamFilter | None:
+        with self._lock:
+            if not self._spam_tried:
+                self._spam_tried = True
+                self._spam = SpamFilter.load(
+                    self.settings.models_dir / "spam_filter", self.settings.spam_rule
+                )
+            return self._spam
+
     def cascade(self) -> Cascade | None:
         fast = self.fast()
         if fast is None:
             return None
-        return Cascade(fast, self.deep, UrgencyPredictor(self.urgency), load_tau())
+        return Cascade(
+            fast, self.deep, UrgencyPredictor(self.urgency), load_tau(), spam=self.spam()
+        )
 
 
 @lru_cache

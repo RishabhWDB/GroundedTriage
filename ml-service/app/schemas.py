@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.taxonomy import categories as taxonomy_categories
 
 SourceName = Literal["email", "zendesk", "csv"]
-Tier = Literal["fast", "deep"]
+Tier = Literal["fast", "deep", "spam_filter"]
 Urgency = Literal["low", "medium", "high", "critical"]
 UrgencySource = Literal["model", "heuristic"]
 IngestStatus = Literal["accepted", "skipped"]
@@ -50,6 +50,10 @@ class Classification(BaseModel):
     urgency: Urgency
     urgency_confidence: float = Field(ge=0, le=1)
     urgency_source: UrgencySource
+    # Spam filter (P3.10): its P(spam) score (None when no filter is loaded) and
+    # the review band flag ("possible spam": routed to human review, not muted).
+    spam_score: float | None = Field(default=None, ge=0, le=1)
+    possible_spam: bool = False
     models_loaded: ModelsLoaded
     model_versions: dict[str, str] = Field(default_factory=dict)
 
