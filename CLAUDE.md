@@ -488,7 +488,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - Phase 7 option recorded in §3b: a hybrid zero-shot / LLM fallback for low-confidence tickets.
 - 2026-10-17 (P3.14): Style-aug rows as spam-filter negatives:
   - `add_aug_negatives` appends `train_style_aug` (633 rows now, `is_spam=false`, `source_dataset=style_aug`) to `spam_train` only. Every aug row paraphrases a topic **train** row, so there's no cross-split leakage. spam_val/test are unchanged, so before/after is a like-for-like comparison. As more style-aug rows arrive, `make data` feeds them into both the topic `train_style_aug` and the spam negatives.
-  - Same threshold rules re-derived on spam_val: `support_and_ham` mute ≥ **0.5655** (was 0.4365), review ≥ 0.1033; `support` mute ≥ 0.0326 (was 0.0195).
+  - Same threshold rules re-derived on spam_val: `support_and_ham` mute ≥ **0.5655** (was 0.4365), review ≥ 0.1985 (was 0.0941); `support` mute ≥ 0.0326 (was 0.0195).
   - **Trade-off:** ood-dev Enron spam caught by the default cascade fell **7/8 → 4/8** (reviewed corpus labels). Enron's lower-cased tokenised text looks like the informal negatives, so the filter got more lenient on informal-looking spam too. In exchange, the muted ood-dev Twitter rows went **7 → 2** (preliminary labels). Thresholds weren't touched beyond the same rules; the decision is in Phase 7 with reviewed data.
 - 2026-10-17 (P4.4d): Meeting step:
   - It runs for tickets whose **current route action is `schedule`** and that have no `meetings` row (one outcome per ticket; `ticket_id` unique).
