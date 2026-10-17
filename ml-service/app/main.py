@@ -20,6 +20,7 @@ from app.schemas import (
     RetrieveResponse,
 )
 from app.textinput import model_input
+from rag.faithfulness import JudgeCache, Verification, VerifyRequest, load_config, verify
 from rag.generator import DraftRequest, GeneratedDraft, generate
 
 VERSION = "0.1.0"
@@ -71,8 +72,14 @@ def retrieve(req: RetrieveRequest, reg: RegistryDep) -> RetrieveResponse:
         raise HTTPException(status_code=503, detail="DATABASE_URL is not set")
     with reg.db_lock:
         res = retriever.search(model_input(req.subject, req.body), k=req.k, hybrid=req.hybrid)
+    floor = load_config().retrieval_floor
     return RetrieveResponse(
-        ticket_id=req.ticket_id, mode=res.mode, max_score=res.max_score, chunks=res.chunks
+        ticket_id=req.ticket_id,
+        mode=res.mode,
+        max_score=res.max_score,
+        chunks=res.chunks,
+        retrieval_floor=floor,
+        below_floor=not res.chunks or res.max_score < floor,
     )
 
 
@@ -87,3 +94,11 @@ def draft(req: DraftRequest, reg: RegistryDep) -> GeneratedDraft:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=f"draft failed: {exc}") from exc
+
+
+@app.post("/verify", response_model=Verification)
+def verify_draft(req: VerifyRequest, reg: RegistryDep) -> Verification:
+    try:
+        return verify(req, reg.judge(), load_config(), reg.settings.judge_model, JudgeCache())
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=f"verify failed: {exc}") from exc

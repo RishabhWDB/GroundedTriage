@@ -88,6 +88,10 @@ class RetrieveResponse(BaseModel):
     mode: str
     max_score: float
     chunks: list["RetrievedChunk"]
+    # The faithfulness gate's floor and whether max_score is below it: a
+    # below-floor ticket abstains, so callers can skip drafting.
+    retrieval_floor: float = 0.0
+    below_floor: bool = False
 
 
 class Route(BaseModel):

@@ -93,14 +93,14 @@ def test_generate_rejects_near_copies(tmp_path):
 
 
 def test_generate_retries_json_mode_failures(tmp_path):
-    from app.llm import LLMError
+    from app.llm import JSONModeError, LLMError
 
     calls = {"n": 0}
 
     def flaky(messages):
         calls["n"] += 1
         if calls["n"] == 1:
-            raise LLMError('HTTP 400: {"error":{"code":"json_validate_failed"}}')
+            raise JSONModeError('HTTP 400: {"error":{"code":"json_validate_failed"}}')
         return responder(messages)
 
     st = generate(

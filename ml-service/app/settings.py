@@ -25,8 +25,11 @@ class Settings(BaseSettings):
     judge_model: str = "qwen/qwen3.8-27b"
     judge_base_url: str = ""
     judge_api_key: str = ""
-    judge_reasoning_effort: str = "medium"
-    judge_max_tokens: int = 4096
+    # Groq caps qwen3.8-27b at 1,000 output tokens per minute (OTPM), so one
+    # judge request may ask for at most that. Even "low" reasoning used ~730 of
+    # them, so reasoning is off (empty = omitted; qwen3 then doesn't reason).
+    judge_reasoning_effort: str = ""
+    judge_max_tokens: int = 1000
     torch_device: str = ""
     # fp16 inference on MPS for the fine-tuned transformers (8 GB RAM).
     model_fp16: bool = True

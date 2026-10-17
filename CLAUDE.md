@@ -329,6 +329,13 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `rag/generator.py` + `POST /draft` (gpt-oss-120b, JSON mode, temperature 0): answers only from numbered sources with [n] citations; tone from urgency and category; no promised actions without a source; draft → constrained refine;
   - citation parsing and validation;
   - `app.llm.JSONModeError` (Groq `json_validate_failed`) is retried as a bad attempt.
+  - Commit `0b5b9c0`.
+- P5.4 Faithfulness gate + abstain:
+  - `rag/faithfulness.py` + `POST /verify`: one judge call extracts atomic claims and judges each against its cited chunks; `faithfulness_score` = supported / all;
+  - abstain on no chunks, best retrieval score < floor, or score < 0.9 (`config/grounding.yaml`); judge responses cached on disk (`datasets/raw/llm_cache/judge/`);
+  - `/retrieve` reports `retrieval_floor` + `below_floor`;
+  - judge defaults changed for Groq's qwen OTPM limit;
+  - `JSONModeError` used by the judge, meeting extraction and style-aug.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -501,6 +508,18 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P5.4): Faithfulness gate:
+  - **One judge call per draft** (qwen3.8-27b, a different family from the drafter; temperature 0, JSON) does both the claim split and the support judgement: `{claims: [{claim, cited, supported, reason}]}`. Greetings, sign-offs, empathy and questions to the customer aren't claims. A claim that an action was or will be taken is supported only if a source says so. `faithfulness_score` = supported / all, and **1.0 when the draft makes no factual claims** (such a draft is still reviewed by an agent).
+  - **Abstain rules** (`config/grounding.yaml`): no chunks; best retrieval cosine < **retrieval_floor 0.7177**; `faithfulness_score` < **0.9**. Abstentions record the reason and the unsupported claims. The floor and empty-retrieval checks run before the judge, so they cost no tokens.
+  - **Floor from data** (`make retrieval-eval`): the 5% quantile of the best top-5 cosine over the 400 answerable WixQA questions, so 95% of answerable questions pass. **88.8% of 400 Tobi-Bueck val tickets** (generic IT support that the Wix KB doesn't cover) fall below it, so most of the demo tickets abstain for lack of KB coverage, as they should. Test was not used.
+  - `/retrieve` returns `retrieval_floor` and `below_floor`, so the pipeline skips drafting when the gate would abstain anyway.
+  - **Judge settings changed (Groq limits):** qwen3.8-27b is capped at **1,000 output tokens per minute** (HTTP 429 "Request too large … OTPM: Limit 1000"). With `judge_max_tokens` 4096 a judge request could never fit. With reasoning "low", one judgement used 726 reasoning tokens of 843 output tokens, and a longer draft was then cut off (`json_validate_failed`). Defaults are now **`JUDGE_MAX_TOKENS=1000` and `JUDGE_REASONING_EFFORT` empty (reasoning off; qwen3 doesn't reason when it's omitted)**. This supersedes the P0.3c "medium" choice. P7.2's judge validation against human labels (κ) will show whether reasoning-off costs accuracy. At ≤ 1,000 output tokens/min, the judge throughput is roughly one draft per minute (P7.2 runs are resumable and cached).
+  - Judge responses are cached on disk by sha256(model + messages) (`datasets/raw/llm_cache/judge/`, gitignored). A re-run (e.g. P7.2 across days) costs nothing for drafts already judged.
+  - `JSONModeError` is now handled the same way by the judge (2 attempts), meeting extraction and style-aug (string matching replaced).
+  - **Live smoke check (2026-10-17, real KB and LLMs):**
+    - 2 WixQA expert questions retrieved their gold article (best score 0.867 / 0.846) and drafted grounded replies citing [1] / [1][2] with **faithfulness 1.0** (4 and 5 claims). That run used the judge at the old "medium" setting. No invented actions; no placeholders.
+    - A 3rd question hit the qwen OTPM limit (which led to the settings change above).
+    - The re-run with the new settings was blocked by gpt-oss-120b's daily cap (style-aug had used it). So **the reasoning-off judge is not yet verified live**; it goes on the leftover-budget list.
 - 2026-10-17 (P5.3): Draft generator:
   - **Grounding rules in the prompt:** every factual statement ends with [n]; no outside knowledge; **never claim or promise an action** (refund issued, setting changed, escalation) unless a source says it happens. That's the SCRIBE failure in `results/examples/ungrounded_hallucination_01.md`. When the sources don't answer, say so and ask for what's missing. No placeholders; fixed sign-off "The Support Team".
   - **Tone:** urgency (critical, high, medium, low) plus a per-category hint (Billing: exact amounts and policies as sourced; Technical: numbered steps; ...).

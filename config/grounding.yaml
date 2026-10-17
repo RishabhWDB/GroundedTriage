@@ -1,0 +1,11 @@
+# Faithfulness gate (P5.4), read by ml-service rag.faithfulness.load_config.
+#
+# abstained when: no retrieved chunks; or the best retrieval score (cosine,
+# bge-small) < retrieval_floor; or faithfulness_score (supported / all claims,
+# judged by JUDGE_MODEL) < min_faithfulness. Otherwise grounded.
+gate:
+  min_faithfulness: 0.9
+  # From data (P5.4, `make retrieval-eval`): the 5% quantile of the best
+  # top-5 cosine of the 400 answerable WixQA questions, so 95% of answerable
+  # questions pass; 88.8% of 400 out-of-domain val tickets fall below it.
+  retrieval_floor: 0.7177

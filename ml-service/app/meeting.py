@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field
 
-from app.llm import LLM, LLMError
+from app.llm import LLM, JSONModeError, LLMError
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,11 @@ def extract(req: MeetingRequest, llm: LLM) -> MeetingExtraction:
     """Raises LLMError when the LLM fails or returns non-JSON twice."""
     messages = build_messages(req)
     for attempt in range(2):
-        text = llm.complete(messages, temperature=0.0, json_mode=True)
+        try:
+            text = llm.complete(messages, temperature=0.0, json_mode=True)
+        except JSONModeError as exc:
+            logger.warning("meeting extraction attempt %d: JSON mode failed: %s", attempt + 1, exc)
+            continue
         try:
             raw = json.loads(text)
             if not isinstance(raw, dict):

@@ -140,7 +140,8 @@ def test_build_llm_roles(monkeypatch):
     s = Settings(_env_file=None, groq_api_key="gk")
     draft, judge = build_llm(s, "draft"), build_llm(s, "judge")
     assert (draft.model, draft.reasoning_effort) == ("openai/gpt-oss-120b", "low")
-    assert (judge.model, judge.reasoning_effort) == ("qwen/qwen3.8-27b", "medium")
+    assert (judge.model, judge.reasoning_effort) == ("qwen/qwen3.8-27b", None)
+    assert judge.max_tokens == 1000  # Groq's qwen OTPM limit
     assert str(judge._client.base_url).startswith("https://api.groq.com/openai/v1")
     with pytest.raises(ValueError):
         build_llm(s, "other")

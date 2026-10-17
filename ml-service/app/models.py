@@ -36,6 +36,7 @@ class Registry:
         self._spam: SpamFilter | None = None
         self._spam_tried = False
         self._llm = None
+        self._judge = None
         self._embedder = None
         self._db = None
         # One psycopg connection, used under this lock: FastAPI runs sync handlers in threads.
@@ -108,6 +109,16 @@ class Registry:
 
                 self._llm = build_llm(self.settings, "draft")
             return self._llm
+
+    def judge(self):
+        """The faithfulness judge LLM (JUDGE_MODEL), built on first use; None without a key."""
+        with self._lock:
+            key = self.settings.judge_api_key or self.settings.groq_api_key
+            if self._judge is None and key:
+                from app.llm import build_llm
+
+                self._judge = build_llm(self.settings, "judge")
+            return self._judge
 
     def cascade(self) -> Cascade | None:
         fast = self.fast()

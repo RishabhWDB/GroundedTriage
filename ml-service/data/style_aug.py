@@ -35,7 +35,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.llm import LLM, LLMError, build_llm
+from app.llm import LLM, JSONModeError, LLMError, build_llm
 from app.settings import REPO_ROOT, get_settings
 from data.build import OUT_DIR
 from data.neardup import vectorizer
@@ -174,11 +174,8 @@ def generate(
                 if text is None:
                     try:
                         text = llm.complete(messages, temperature=0.9, json_mode=True)
-                    except LLMError as exc:
-                        # Groq JSON mode sometimes fails server-side (HTTP 400
-                        # json_validate_failed): a bad attempt, not a fatal error.
-                        if "json_validate_failed" not in str(exc):
-                            raise
+                    except JSONModeError:
+                        # Groq JSON mode sometimes fails server-side: a bad attempt.
                         logger.warning("batch at %d attempt %d: JSON mode failed", b, attempt + 1)
                         continue
                     cache.put(key, text)
