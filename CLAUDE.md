@@ -260,13 +260,18 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 - P3.11 OOD evaluation set and gate:
   - `data/ood.py` (`make ood-set`) → `datasets/ood/`: `twitter.csv` (149 rows, qwen pre-labels, `needs_review=true`), `enron_spam.csv` (20, CC0 copy of Enron1), the `team_written.csv` template and a README;
   - `eval/ood_eval.py` (`make ood-eval`) scores SCRIBE, the fast tier alone and the cascade under each spam rule on reviewed rows plus the 22 samples. It **replaces `sample-check`** (removed).
+  - Commit `2b1c8f7`.
+- P3.8a Style-augmentation data, first batch:
+  - `datasets/synthetic/style_aug.jsonl` **589 of 3,978 rows** (15%), stopped by Groq's daily cap;
+  - `make data` adds `train_style_aug` (589 rows, content `91da5bb5…`; other split hashes unchanged), and the export `e2552b04338b` is regenerated with it.
+  - Re-run `make style-aug` once a day until done (~8 more days), then `make data && make export-splits`.
   - Commit: backfilled in the next commit.
 
 ### In progress
 - Phase 3 rework after the review (2026-10-17): a two-stage spam filter plus a 5-class topic classifier, a style-augmentation file, and the OOD evaluation set. Run P3.6–P3.12 through, then print an updated Phase 3 review.
 
 ### To do
-- P3.8a Commit the generated `datasets/synthetic/style_aug.jsonl` and rebuild/re-export (when the Groq run finishes; several days on the free tier)
+- P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
 - P3.12 Re-run the fast tier, urgency eval and OOD eval; before/after; updated Phase 3 review
 - P4.1 Rule engine
 - P4.2 Mute + no-reply detection
@@ -426,7 +431,7 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - gpt-oss-120b, temperature 0.9, JSON mode, 8 rows per call; responses cached by request sha256.
   - Rows are rejected when the body is too short, has a placeholder, or has word-unigram cosine > 0.9 to the source **body**. The first run compared against subject+body; `--recheck` re-applied the body rule and removed 2 of 172.
   - Output rows: `id = aug-<source id>`, `aug_of`, the source's category and urgency, `origin=augmented`, the style spec. `data.build` keeps the rows whose source is in the current capped train and checks labels match.
-  - **Groq free-tier limits on this key:** 1,000 requests/day and 8,000 tokens/minute (from response headers), plus a daily token cap (about 200k/day for gpt-oss-120b on the free tier, my recollection, not confirmed). The pilot cost about 450 tokens per accepted row, so all 3,978 rows ≈ 1.8M tokens ≈ **~9 days on the free tier** (well under $1 on the paid dev tier). The run is resumable and is restarted until done; the PC's without-augmentation run doesn't need it.
+  - **Groq free-tier limits on this key:** 1,000 requests/day and 8,000 tokens/minute (from response headers), plus a **daily token cap of 200,000 for gpt-oss-120b (confirmed: HTTP 429 "tokens per day (TPD): Limit 200000")**. The cap is per model, so P5 drafting with gpt-oss-120b shares it. The pilot cost about 450 tokens per accepted row, so all 3,978 rows ≈ 1.8M tokens ≈ **~9 days on the free tier** (well under $1 on the paid dev tier). Day 1 (2026-10-17): 592 rows written, 589 after re-check. The run is resumable and is restarted until done; the PC's without-augmentation run doesn't need it.
   - Groq JSON mode sometimes returns HTTP 400 `json_validate_failed`; that's now a bad attempt (retried) instead of stopping the run.
 - 2026-10-17 (P3.7): **Two-task rebuild. This supersedes the P2.1h split hashes and export.**
   - Corpus: Tobi-Bueck 23,228 + SpamAssassin spam 1,553 + ham 4,089 + synthetic meetings 400, minus 18 cross-source duplicate bodies = 29,252 rows. Near-duplicate groups: 1,862 groups covering 4,328 rows (largest 14).

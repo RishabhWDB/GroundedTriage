@@ -26,6 +26,7 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 - **Topic task** (`train`/`val`/`test`, fast + deep tiers): the 5 topic categories Technical Issue, Billing, Feature Request, General Inquiry, Meeting Scheduling. Spam is decided by the binary spam filter, not the topic classifier.
 - Topic train only: classes capped at 5× the smallest real topic class = 8715 rows; removed {'Technical Issue': 628}. val/test are not resampled. Remaining imbalance is handled with class weights at training time (docs/model_artifacts.md).
 - **Spam-filter task** (`spam_train`/`spam_val`/`spam_test`, `is_spam`): every row of the split: spam (positives), ham and uncapped support tickets (negatives), so neither writing style nor source predicts the label on its own.
+- `train_style_aug` (optional, train only): 589 of a planned ~3978 informal-style paraphrases of `train` rows by gpt-oss-120b (`data/style_aug.py`, seed and prompt in the module; `origin=augmented`, `aug_of` = source id). For the with/without ablation; never in val/test.
 - `train_urgency`: the uncapped train rows with an urgency label (16258 rows). Same row pool as `train` before the cap, so it shares no rows with val/test.
 - Model input (`text` column): subject + blank line + body (body only when subject is empty) (`app/textinput.py`).
 - Urgency: only Tobi-Bueck rows are labelled (low, medium, high); spam and synthetic rows have none. No English 'critical' rows exist.
@@ -51,12 +52,12 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 
 ## Urgency labels per split (`train_urgency` is the urgency model's train file)
 
-| urgency   |   train |   val |   test |   train_urgency |
-|:----------|--------:|------:|-------:|----------------:|
-| (none)    |     280 |    60 |     60 |               0 |
-| high      |    6046 |  1394 |   1312 |            6365 |
-| low       |    3136 |   683 |    702 |            3228 |
-| medium    |    6448 |  1408 |   1471 |            6665 |
+| urgency   |   train |   val |   test |   train_urgency |   train_style_aug |
+|:----------|--------:|------:|-------:|----------------:|------------------:|
+| (none)    |     280 |    60 |     60 |               0 |                 9 |
+| high      |    6046 |  1394 |   1312 |            6365 |               222 |
+| low       |    3136 |   683 |    702 |            3228 |               110 |
+| medium    |    6448 |  1408 |   1471 |            6665 |               248 |
 
 ## Split files
 
@@ -69,6 +70,7 @@ Dropped: albertobircoci/support-ticket-priority-dataset-50k (no text column).
 | spam_train | 20476 | `6403bd7948b329dd735db614ecb346d42f4a6a57b5781630a487ddccc552c833` | `319c633f2aa42f034666c2988ea5f538a7bcc0e8f014e53b014a5f385a7fb3dc` |
 | spam_val | 4388 | `167280a32dcd15a9fb71f53c919036d11b9ec5f2e10e0e398f7bb910c01f6ce5` | `0e883067c5345d7c0cb01b6725a8145cd915e2b836206df64cf5085c6c9e6e3e` |
 | spam_test | 4388 | `20cfb399c45e45cf113d003e0f8710d2a147b1385c31b803fa03e84b438435ef` | `e6997f05fbb2cb20ea502438b93d62cef03b66024b3d78a8f235a635721b3272` |
+| train_style_aug | 589 | `09bb7957fe16bc0de37abe3749884c993e2db139568765dc7d2205cfbb20c5d0` | `91da5bb5b1851f2652a5bc8ae6c5fc506aac722d740abc667d3b7362cc701751` |
 
 The content hash is independent of the parquet library version; compare it on the PC
 to confirm the test split is identical.
