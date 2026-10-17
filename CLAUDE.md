@@ -60,7 +60,9 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Tune the cascade threshold τ on val (needs `models/deep_tier/`) | `make tune-tau` → `config/cascade.yaml`, `results/cascade/` |
 | Classify one ticket (ml-service running) | `curl -s localhost:8001/classify -H 'content-type: application/json' -d '{"ticket_id":"t1","subject":"Refund","body":"Charged twice"}'` |
 | Build the OOD set (Twitter pre-labelled for review, Enron spam, team template) | `make ood-set` → `datasets/ood/` (refuses to overwrite a reviewed file) |
-| **Required gate before accepting any model:** OOD eval of SCRIBE, fast tier and cascades | `make ood-eval` → `results/ood/` |
+| **Required gate before accepting any model:** OOD eval of SCRIBE, fast tier and cascades on ood-dev (choices are made here) | `make ood-eval` → `results/ood/dev/` |
+| Fast tier style-aug ablation (train + train_style_aug) | `make fast-tier-aug` → `models/fast_tier_aug/`, `results/fast_tier_aug/` |
+| **Final systems only:** score ood-test once (every run is logged) | `make ood-eval-test` → `results/ood/test/`, `results/ood/test_log.jsonl` |
 | Evaluate the proposed system | not implemented yet (P7) |
 
 ## 3. Status board
@@ -265,14 +267,19 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `datasets/synthetic/style_aug.jsonl` **589 of 3,978 rows** (15%), stopped by Groq's daily cap;
   - `make data` adds `train_style_aug` (589 rows, content `91da5bb5…`; other split hashes unchanged), and the export `e2552b04338b` is regenerated with it.
   - Re-run `make style-aug` once a day until done (~8 more days), then `make data && make export-splits`.
+  - Commit `4317f15` (type `data` was outside the commit-type convention; history isn't rewritten, and later data commits use `chore`).
+- P3.12 Retrain and re-evaluate after the rebuild:
+  - the fast tier picks calibration ∈ {none, sigmoid, isotonic} by val macro-F1 (none wins) and reports on the 5 topic classes; `make fast-tier-aug` gives the style-aug ablation;
+  - the **OOD set is split ood-dev 40% / ood-test 60%** (`ood_split` stored in the CSVs). `make ood-eval` scores ood-dev; `make ood-eval-test` is for final systems only and logs every run. Reports separate reviewed and PRELIMINARY (incl. `needs_review=true`) tables;
+  - spam rule default → `support_and_ham` (chosen on val + ood-dev);
+  - urgency eval re-run.
   - Commit: backfilled in the next commit.
 
 ### In progress
-- Phase 3 rework after the review (2026-10-17): a two-stage spam filter plus a 5-class topic classifier, a style-augmentation file, and the OOD evaluation set. Run P3.6–P3.12 through, then print an updated Phase 3 review.
+- none. Phase 3 rework (P3.6–P3.12) is done; waiting for Arya's review of the updated Phase 3 review. Daily: `make style-aug` until 3,978 rows (P3.8b).
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P3.12 Re-run the fast tier, urgency eval and OOD eval; before/after; updated Phase 3 review
 - P4.1 Rule engine
 - P4.2 Mute + no-reply detection
 - P4.3 Queues + SLA escalation
@@ -305,7 +312,9 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 |---|---|---|---|---|
 | `models/deep_tier/` | absent | — | — | — |
 | `models/urgency/` | absent | — | — | — |
-| `models/fast_tier/` | present (`fast-20261016012651-6f7999df`, `make fast-tier`) | TF-IDF word 1–2 + char_wb 3–5, LR C=16 balanced, isotonic-calibrated | in repo, 2026-10-16 | macro-F1 0.825, acc 0.788, ECE 0.083 |
+| `models/fast_tier/` | present (`fast-20261017043430-9848709e`, `make fast-tier`) | 5 topic classes; TF-IDF word 1–2 + char_wb 3–5, LR C=64 balanced, uncalibrated | in repo, 2026-10-17 | macro-F1 0.823, acc 0.795, ECE 0.070 |
+| `models/fast_tier_aug/` | present (`fast-20261017044330-9848709e`, ablation) | as above + 589 style-aug rows | in repo, 2026-10-17 | macro-F1 0.823, acc 0.795, ECE 0.077 |
+| `models/spam_filter/` | present (`spam-20261017045337-319c633f`, `make spam-filter`) | binary TF-IDF + LR C=16 balanced; rules `support_and_ham` (default) / `support` | in repo, 2026-10-17 | AP 0.996; see §8 |
 
 ## 5. Decisions log
 
@@ -404,6 +413,25 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P3.12, review addendum): **OOD dev/test protocol.**
+  - The OOD set is split **ood-dev 40% / ood-test 60%**, stratified by source × category. The order within each stratum is a seeded sha256 of `ood-split-v1|id`.
+  - The split is **stored** as `ood_split` in `twitter.csv` and `enron_spam.csv` (`python -m data.ood --splits` fills only a missing column), so relabelling during review never moves a row. The 22 samples are split the same way at load time (fixed labels). Team rows use a per-id hash, so adding rows never moves existing ones.
+  - **Variants, thresholds and rules are chosen on val + ood-dev only. ood-test is reported once per final system** (`make ood-eval-test`); every run is appended to `results/ood/test_log.jsonl`, so repeated looks are visible. ood-test has not been run.
+  - Every report has a table on reviewed rows and a separate **PRELIMINARY** table that includes `needs_review=true` rows (LLM pre-labels). Today all 149 Twitter rows are unreviewed, so the reviewed ood-dev rows are only 9 sample emails + 8 Enron spam.
+  - Split sizes: ood-dev 76 (Twitter 59, samples 9, Enron 8), ood-test 115 (Twitter 90, samples 13, Enron 12).
+- 2026-10-17 (P3.12): **Fast-tier calibration is now chosen, and "none" won.**
+  - After the 5-class rebuild, CalibratedClassifierCV (fitted on cross-validated predictions of the capped train) learned train's class priors (Technical 55%) and collapsed General Inquiry: sigmoid val macro-F1 0.703 (GI F1 0.12) and isotonic 0.687, against **0.823 uncalibrated**. The uncalibrated LR is also better calibrated (ECE 0.070 vs 0.098/0.102).
+  - The trainer now considers {none, sigmoid, isotonic} and picks by **val macro-F1** (the selection metric for every model here), with ECE as the tie-break. It previously picked by ECE alone. This is the Q3 revisit; prefit-on-half-of-val is not implemented (see the review).
+  - The P3.12 trainer and `sliced_metrics(labels=...)` also report on the 5 topic classes. The first P3.12 run averaged in Spam (support 0) and under-reported macro-F1 (0.586 instead of 0.703 for the calibrated model); C and calibration selection were unaffected, since a constant 0 doesn't change the ranking.
+  - C=64 for both variants (the grid edge again; C=16 was within 0.001).
+- 2026-10-17 (P3.12): **Choices on val + ood-dev:**
+  - **Spam rule `support_and_ham` is the default** (`SPAM_RULE`, and the card's `default_rule`). It still meets your constraint (support FPR ≤ 1%; 0.0 on val) and also caps ham FPR at 1%. On reviewed ood-dev it mutes **0/9** sample emails against **6/9** for `support`, and catches 7/8 Enron spam against 8/8. Preliminary Twitter: 7/57 muted against 52/57.
+  - **Fast tier: plain stays the default.** The augmented model (589 of 3,978 rows) ties on val (0.8232 vs 0.8226) and on reviewed ood-dev (2/9 each); it's ahead only on preliminary Twitter labels (23 vs 18 of 59). Revisit when the reviews and the full augmentation set exist.
+  - τ stays the untuned 0.7 (no deep tier).
+- 2026-10-17 (P3.12): **Finding: the topic model's style dependence is not only about Spam.**
+  - With Spam removed, human-written text now falls into **Technical Issue**, the largest train class. On preliminary Twitter labels the fast tier predicts Technical for 49 of 59 rows.
+  - Reviewed sample emails in ood-dev: fast tier 2/9 (the old 6-class model: 1/9, with 7 → Spam). SCRIBE zero-shot: 7/9.
+  - TF-IDF features learned on Tobi-Bueck's LLM style don't transfer to human support text. The deep tier (pretrained DeBERTa) and the full style augmentation are the planned remedies; both must pass `make ood-eval`.
 - 2026-10-17 (P3.11): OOD set:
   - **Twitter:** Kaggle `thoughtvector/customer-support-on-twitter`, licence **CC BY-NC-SA 4.0** (checked via the Kaggle API), so the 149 rows are committed with attribution (`datasets/ood/README.md`). Inbound thread-opening tweets; `@mentions` stripped (the first is kept as `brand`); English (langdetect); ≥ 60 chars; deduplicated. Seeded (4242) 600-candidate pool.
     - Pre-labels from the **judge model (qwen3.8-27b) with no reasoning**: a separate Groq rate-limit bucket from the gpt-oss style-aug run; 30 calls, 36k tokens.
@@ -650,18 +678,35 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 ## 8. Results so far
 
 - Ungrounded hallucination example: `results/examples/ungrounded_hallucination_01.md`. The SCRIBE baseline told a customer "I've processed a refund … within 3–5 business days" with no grounding. P7.2 collects more automatically.
+- **Fast tier after the rebuild (P3.12, val, 5 topic classes, uncalibrated LR C=64):** macro-F1 **0.823**, accuracy 0.795, ECE 0.070. Real only (no synthetic Meeting): macro-F1 0.778, accuracy 0.791. Per-class F1: Technical 0.842, Billing 0.738, Feature 0.961, General 0.573, Meeting 1.000.
+  - The calibrated variants scored 0.703 (sigmoid) and 0.687 (isotonic).
+  - Style-aug ablation (+589 rows): macro-F1 0.823, accuracy 0.795, ECE 0.077.
+  - Coverage at τ = 0.7: 82% of val at 0.860 accuracy.
+  - Not comparable with the P3.1 6-class 0.825 (different classes and split).
+- **OOD ood-dev (P3.12, `results/ood/dev/`; reviewed = 9 sample emails + 8 Enron spam):**
+
+  | system | reviewed correct | sample emails | Enron spam caught | reviewed non-spam muted | PRELIMINARY Twitter correct (59, LLM labels) |
+  |---|---|---|---|---|---|
+  | SCRIBE | 8/17 | 7/9 | 1/8 | 0/9 | 32/59 |
+  | fast tier alone | 2/17 | 2/9 | 0/8 | 0/9 | 18/59 |
+  | cascade, `support_and_ham` (default) | 9/17 | 2/9 | 7/8 | 0/9 | 17/59 (7 muted) |
+  | cascade, `support` | 9/17 | 1/9 | 8/8 | **6/9** | 2/59 (52 muted) |
+  | fast tier + aug (589) alone | 2/17 | 2/9 | 0/8 | 0/9 | 23/59 |
+
+  ood-test not run (no final system yet).
+- **Urgency heuristic on the new val (P3.12):** macro-F1 0.269, accuracy 0.410, MAE 0.625 (old split: 0.273 / 0.419 / 0.615; the heuristic is unchanged).
 - **Spam filter (P3.9, `results/spam_filter/`, `spam-20261017022247-319c633f`):** AP 0.9929 / ROC-AUC 0.9996 on spam_test (val 0.9958 / 0.9998).
   - Rule `support` (default; mute ≥ 0.0195, review ≥ 0.0052): spam recall 1.0 at mute; support FPR 0.0099 (val 0.0099); support in the review band 0.0449; **ham muted 0.2104** + 0.2594 in review (test).
   - Rule `support_and_ham` (mute ≥ 0.4365, review ≥ 0.0941): test spam recall 0.9783 at mute / 0.9957 with review; support FPR 0.0; ham FPR 0.0212; ham in review 0.0424.
 - Data audit after the P3.7 rebuild: 0 near-duplicate pairs train-pool~val, train-pool~test and val~test across both tasks (29,252-row corpus). Topic diagnostic TF-IDF+LR on val: macro-F1 0.777, accuracy 0.728 (5 classes).
-- **Fast tier on val (P3.1, `results/fast_tier/`, `fast-20261016012651-6f7999df`; val only, test untouched):**
+- **Fast tier on val (P3.1, 6-class, superseded by P3.12; `fast-20261016012651-6f7999df`; val only, test untouched):**
   - Macro-F1 **0.825**, accuracy 0.788 (n=3,775). Real only = without Meeting (n=3,715): macro-F1 **0.790**, accuracy 0.785.
   - Per-class F1: Technical 0.835, Billing 0.675, Feature 0.951, General Inquiry 0.491, Spam 1.000, Meeting 1.000. General Inquiry is the weak class (P 0.53 / R 0.45).
   - Real val tickets mentioning a meeting word (n=173): accuracy 0.873, 0 predicted Meeting.
   - Coverage (calibrated confidence ≥ τ → share / accuracy): 0.5 → 87% / 0.834; 0.6 → 68% / 0.899; 0.7 → 50% / 0.934; 0.8 → 31% / 0.977; 0.9 → 18% / 0.992.
   - Cost: training 7.9 min (4 C fits + 2 calibrated fits); load 0.5 s; single ticket p50 1.7 ms, p95 2.5 ms; batch 0.5 ms/ticket; peak RSS 612 MB (7.5 GB swap in use).
   - Not comparable with the baseline yet: different split (val vs test). P7.1 scores both on test.
-- **Out-of-domain sample check (P3.5a, `results/ood/sample_emails.md`, n=22 hand-written, not a metric):** fast tier / cascade 6/22 correct with 13 predicted Spam (gold Spam = 1); SCRIBE baseline 19/22 with 1 predicted Spam.
+- **Out-of-domain sample check (P3.5a, 6-class fast tier, before snapshot; `results/ood/sample_emails.md`, n=22 hand-written, not a metric):** fast tier / cascade 6/22 correct with 13 predicted Spam (gold Spam = 1); SCRIBE baseline 19/22 with 1 predicted Spam.
 - **Urgency heuristic on val (P3.3, `results/urgency/`, n=3,485 labelled rows):** macro-F1 **0.273**, accuracy 0.419, ordinal MAE 0.615, off by ≥ 2 on 3.2%.
   - It predicts medium for 84% of rows (2,922), so it's a conservative fallback, not a classifier. Gold is medium 1,429 / high 1,366 / low 690.
   - 74 rows are predicted critical; gold has no critical, so all 74 count as errors.

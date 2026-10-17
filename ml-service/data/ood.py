@@ -21,6 +21,14 @@ Sources (datasets/ood/, see datasets/ood/README.md):
   team (informal and meeting-request ones included); rows count as reviewed.
 - datasets/sample_emails.csv (the 22 hand-written samples) is added at
   evaluation time.
+
+Every row is in **ood-dev (40%)** or **ood-test (60%)**: variants, thresholds
+and anything else are chosen on val + ood-dev only; ood-test is reported once
+per final system (eval.ood_eval --test logs every run). The split is stored
+in the CSVs (`ood_split`, stratified by source x category at creation, seeded
+hash order), so relabelling during review never moves a row; the sample
+emails are split the same way at load time (fixed labels); team rows by a
+per-id hash, so adding rows never moves existing ones.
 """
 
 from __future__ import annotations
@@ -70,7 +78,10 @@ QUOTAS = {
 }
 N_ENRON = 20
 REVIEW_FIELDS = ["id", "source", "brand", "subject", "body", "llm_category", "category",
-                 "needs_review", "reviewer_notes"]  # fmt: skip
+                 "needs_review", "reviewer_notes", "ood_split"]  # fmt: skip
+ENRON_FIELDS = ["id", "source", "subject", "body", "category", "needs_review", "ood_split"]
+DEV_FRACTION = 0.4  # ood-dev for choosing variants/thresholds; ood-test is reported once
+SPLIT_SEED = "ood-split-v1"
 TEAM_FIELDS = ["id", "author", "subject", "body", "category", "notes"]
 
 _MENTION = re.compile(r"@\w+")
@@ -201,6 +212,40 @@ def enron_spam_rows(path: Path = ENRON_CSV_RAW, n: int = N_ENRON, seed: int = SE
     return sorted(random.Random(seed).sample(rows, min(n, len(rows))), key=lambda r: r["id"])
 
 
+def _rank(row_id: str) -> str:
+    return hashlib.sha256(f"{SPLIT_SEED}|{row_id}".encode()).hexdigest()
+
+
+def assign_splits(df: pd.DataFrame, by: list[str], dev_fraction: float = DEV_FRACTION) -> pd.Series:
+    """ood-dev / ood-test per row, stratified by `by`: within each stratum the
+    rows are ordered by a seeded hash of their id and the first
+    round(n * dev_fraction) go to ood-dev. Independent of row order."""
+    out = pd.Series("ood-test", index=df.index)
+    for _, g in df.groupby(by, sort=True):
+        order = sorted(g.index, key=lambda i: _rank(df.at[i, "id"]))
+        out.loc[order[: int(round(len(order) * dev_fraction))]] = "ood-dev"
+    return out
+
+
+def hash_split(row_id: str, dev_fraction: float = DEV_FRACTION) -> str:
+    """For rows added over time (team-written): a per-id draw, so adding rows
+    never moves existing ones."""
+    return "ood-dev" if int(_rank(row_id)[:8], 16) / 0xFFFFFFFF < dev_fraction else "ood-test"
+
+
+def persist_splits(path: Path, fields: list[str]) -> int:
+    """Fill a missing ood_split column (stratified by source x current
+    category) without touching anything else. Returns rows assigned."""
+    df = read_csv(path)
+    if not len(df):
+        return 0
+    if "ood_split" in df and df["ood_split"].isin(["ood-dev", "ood-test"]).all():
+        return 0
+    df["ood_split"] = assign_splits(df, ["source", "category"])
+    write_csv(path, df.to_dict("records"), fields)
+    return len(df)
+
+
 def write_csv(path: Path, rows: list[dict], fields: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -215,47 +260,62 @@ def read_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
-def load_ood(with_pending: bool = False) -> tuple[pd.DataFrame, dict]:
-    """All OOD rows that may be scored: reviewed Twitter rows, Enron spam (text
-    from the archive), team-written rows and the 22 sample emails. Returns
-    (frame with id/source/subject/body/category, counts incl. pending)."""
+def load_ood() -> tuple[pd.DataFrame, dict]:
+    """Every scorable OOD row: Twitter (reviewed or not), Enron spam, team rows
+    and the 22 sample emails. Columns: id, source, subject, body, category,
+    reviewed (False = needs_review=true: labels are LLM pre-labels and any
+    number on them is preliminary), ood_split (ood-dev | ood-test). Rows
+    labelled None are dropped."""
     frames, counts = [], {}
+    cols = ["id", "source", "subject", "body", "category", "reviewed", "ood_split"]
     tw = read_csv(TWITTER_CSV)
     if len(tw):
-        reviewed = tw["needs_review"].str.strip().str.lower() == "false"
-        counts["twitter_pending_review"] = int((~reviewed).sum())
-        keep = tw if with_pending else tw[reviewed]
-        keep = keep[keep["category"].isin(categories())]
-        frames.append(keep[["id", "source", "subject", "body", "category"]])
+        if "ood_split" not in tw:
+            raise ValueError(f"{TWITTER_CSV} has no ood_split: run `python -m data.ood --splits`")
+        tw["reviewed"] = tw["needs_review"].str.strip().str.lower() == "false"
+        counts["twitter_pending_review"] = int((~tw["reviewed"]).sum())
+        frames.append(tw[tw["category"].isin(categories())][cols])
     en = read_csv(ENRON_CSV)
     if len(en):
-        frames.append(en[["id", "source", "subject", "body", "category"]])
+        if "ood_split" not in en:
+            raise ValueError(f"{ENRON_CSV} has no ood_split: run `python -m data.ood --splits`")
+        frames.append(en.assign(reviewed=True)[cols])
     team = read_csv(TEAM_CSV)
     if len(team):
         team = team[team["category"].isin(categories()) & team["body"].str.strip().ne("")]
-        frames.append(team.assign(source="team")[["id", "source", "subject", "body", "category"]])
+        team = team.assign(source="team", reviewed=True)
+        frames.append(team.assign(ood_split=[hash_split(i) for i in team["id"]])[cols])
     sample = pd.read_csv(SAMPLE_CSV, dtype=str).fillna("").rename(columns=str.lower)
-    frames.append(
-        pd.DataFrame(
-            {
-                "id": [f"sample-{i:02d}" for i in range(len(sample))],
-                "source": "sample_emails",
-                "subject": sample["subject"],
-                "body": sample["body"],
-                "category": sample["label"],
-            }
-        )
+    sample = pd.DataFrame(
+        {
+            "id": [f"sample-{i:02d}" for i in range(len(sample))],
+            "source": "sample_emails",
+            "subject": sample["subject"],
+            "body": sample["body"],
+            "category": sample["label"],
+            "reviewed": True,
+        }
     )
+    sample["ood_split"] = assign_splits(sample, ["category"])
+    frames.append(sample[cols])
     df = pd.concat(frames, ignore_index=True)
-    counts.update(df["source"].value_counts().to_dict())
+    sizes = df.groupby(["source", "ood_split"]).size()
+    counts.update({f"{src}/{split}": int(n) for (src, split), n in sizes.items()})
     return df, counts
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--force", action="store_true", help="overwrite a (possibly reviewed) CSV")
+    ap.add_argument(
+        "--splits", action="store_true", help="only add a missing ood_split column (keeps reviews)"
+    )
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    if args.splits:
+        n = persist_splits(TWITTER_CSV, REVIEW_FIELDS) + persist_splits(ENRON_CSV, ENRON_FIELDS)
+        logger.info("assigned ood_split to %d rows", n)
+        return 0
     if TWITTER_CSV.exists() and not args.force:
         logger.error("%s exists (may hold your review); use --force to overwrite", TWITTER_CSV)
         return 1
@@ -273,13 +333,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     logger.info("candidate pre-labels: %s", cands["llm_category"].value_counts().to_dict())
     picked = pick_by_quota(cands)
-    rows = [
-        {**r, "category": r["llm_category"], "needs_review": "true", "reviewer_notes": ""}
-        for r in picked.to_dict("records")
-    ]
+    picked["category"] = picked["llm_category"]
+    picked["ood_split"] = assign_splits(picked, ["source", "category"])
+    rows = [{**r, "needs_review": "true", "reviewer_notes": ""} for r in picked.to_dict("records")]
     write_csv(TWITTER_CSV, rows, REVIEW_FIELDS)
-    enron = enron_spam_rows()
-    write_csv(ENRON_CSV, enron, ["id", "source", "subject", "body", "category", "needs_review"])
+    enron = pd.DataFrame(enron_spam_rows())
+    enron["ood_split"] = assign_splits(enron, ["source", "category"])
+    write_csv(ENRON_CSV, enron.to_dict("records"), ENRON_FIELDS)
     if not TEAM_CSV.exists():
         write_csv(TEAM_CSV, [], TEAM_FIELDS)
     sha = hashlib.sha256(ENRON_CSV_RAW.read_bytes()).hexdigest()

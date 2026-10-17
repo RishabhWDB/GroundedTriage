@@ -80,7 +80,7 @@ def test_train_load_and_rules(tmp_path):
     )
     m = train(tmp_path / "model", tmp_path / "out", d, grid=(1.0,))
     card = json.loads((tmp_path / "model" / CARD_FILE).read_text())
-    assert card["default_rule"] == "support" and set(card["rules"]) == {
+    assert card["default_rule"] == "support_and_ham" and set(card["rules"]) == {
         "support",
         "support_and_ham",
     }
@@ -93,7 +93,7 @@ def test_train_load_and_rules(tmp_path):
     assert (tmp_path / "out" / "report.md").exists()
 
     f = SpamFilter.load(tmp_path / "model")
-    assert f is not None and f.rule == "support" and f.version.endswith(":support")
+    assert f is not None and f.rule == "support_and_ham" and f.version.endswith(":support_and_ham")
     alt = SpamFilter.load(tmp_path / "model", rule="support_and_ham")
     assert alt.spam_threshold == card["rules"]["support_and_ham"]["spam_threshold"]
     assert SpamFilter.load(tmp_path / "model", rule="nope") is None

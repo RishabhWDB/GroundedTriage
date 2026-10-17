@@ -1,9 +1,9 @@
 {
   "card": {
-    "version": "spam-20261017022247-319c633f",
+    "version": "spam-20261017045337-319c633f",
     "task": "spam",
     "model": "tfidf(word 1-2 + char_wb 3-5) + LR (balanced), binary is_spam",
-    "trained_at": "2026-10-17T02:22:47+00:00",
+    "trained_at": "2026-10-17T04:53:37+00:00",
     "trained_on": {
       "spam_train_content_sha256": "319c633f2aa42f034666c2988ea5f538a7bcc0e8f014e53b014a5f385a7fb3dc"
     },
@@ -12,7 +12,7 @@
     "spam_threshold": 0.019484791904687885,
     "review_threshold": 0.005204929504543544,
     "threshold_rule": "lowest scores with support-ticket FPR <= 0.01 (mute) and <= 0.05 (review) on spam_val",
-    "default_rule": "support",
+    "default_rule": "support_and_ham",
     "rules": {
       "support": {
         "spam_threshold": 0.019484791904687885,
@@ -35,17 +35,17 @@
     {
       "C": 1.0,
       "val_average_precision": 0.9907,
-      "fit_s": 16.9
+      "fit_s": 15.8
     },
     {
       "C": 4.0,
       "val_average_precision": 0.9937,
-      "fit_s": 15.6
+      "fit_s": 16.8
     },
     {
       "C": 16.0,
       "val_average_precision": 0.9958,
-      "fit_s": 16.3
+      "fit_s": 16.5
     }
   ],
   "val": {
@@ -195,11 +195,11 @@
     }
   },
   "run": {
-    "git_commit": "7d07510",
+    "git_commit": "4317f15",
     "machine": "arm64 Darwin 25.5.0",
     "python": "3.11.14",
-    "peak_rss_mb": 852.9,
-    "swap_usage_at_end": "total = 9216.00M  used = 8128.06M  free = 1087.94M  (encrypted)",
+    "peak_rss_mb": 891.2,
+    "swap_usage_at_end": "total = 7168.00M  used = 6720.12M  free = 447.88M  (encrypted)",
     "date": "2026-10-17",
     "split": "spam_val+spam_test"
   }

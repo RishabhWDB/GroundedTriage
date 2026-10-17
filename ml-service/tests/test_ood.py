@@ -30,17 +30,18 @@ def test_pick_by_quota_keeps_candidate_order():
     assert got["id"].tolist() == ["tw-0", "tw-2", "tw-3", "tw-5"]
 
 
-def test_load_ood_scores_only_reviewed(tmp_path, monkeypatch):
+def test_load_ood_marks_reviewed_and_splits(tmp_path, monkeypatch):
     tw = tmp_path / "twitter.csv"
+    base = {"source": "twitter", "brand": "x", "subject": "", "reviewer_notes": ""}
     ood.write_csv(
         tw,
         [
-            {"id": "tw-1", "source": "twitter", "brand": "x", "subject": "", "body": "refund pls",
-             "llm_category": "Billing", "category": "Billing", "needs_review": "false",
-             "reviewer_notes": ""},
-            {"id": "tw-2", "source": "twitter", "brand": "x", "subject": "", "body": "app broken",
-             "llm_category": "Technical Issue", "category": "Technical Issue",
-             "needs_review": "true", "reviewer_notes": ""},
+            {**base, "id": "tw-1", "body": "refund pls", "llm_category": "Billing",
+             "category": "Billing", "needs_review": "false", "ood_split": "ood-dev"},
+            {**base, "id": "tw-2", "body": "app broken", "llm_category": "Technical Issue",
+             "category": "Technical Issue", "needs_review": "true", "ood_split": "ood-test"},
+            {**base, "id": "tw-3", "body": "lol", "llm_category": "None",
+             "category": "None", "needs_review": "false", "ood_split": "ood-test"},
         ],
         ood.REVIEW_FIELDS,
     )  # fmt: skip
@@ -52,11 +53,43 @@ def test_load_ood_scores_only_reviewed(tmp_path, monkeypatch):
     monkeypatch.setattr(ood, "TEAM_CSV", team)
     monkeypatch.setattr(ood, "ENRON_CSV", tmp_path / "none.csv")
     df, counts = ood.load_ood()
-    assert counts["twitter_pending_review"] == 1 and counts["twitter"] == 1
-    assert counts["team"] == 1 and counts["sample_emails"] == 22
-    assert "tw-2" not in set(df["id"])
-    df_all, _ = ood.load_ood(with_pending=True)
-    assert "tw-2" in set(df_all["id"])
+    assert counts["twitter_pending_review"] == 1
+    assert "tw-3" not in set(df["id"])  # category None is dropped
+    r = df.set_index("id")
+    assert bool(r.loc["tw-1", "reviewed"]) and not bool(r.loc["tw-2", "reviewed"])
+    assert r.loc["tw-1", "ood_split"] == "ood-dev" and r.loc["t1", "ood_split"] == ood.hash_split(
+        "t1"
+    )
+    samples = df[df["source"] == "sample_emails"]
+    assert len(samples) == 22 and samples["reviewed"].all()
+    assert set(df["ood_split"]) <= {"ood-dev", "ood-test"}
+
+
+def test_assign_splits_is_stratified_stable_and_order_free():
+    df = pd.DataFrame(
+        {"id": [f"r{i}" for i in range(50)], "source": "s",
+         "category": ["A"] * 30 + ["B"] * 20}
+    )  # fmt: skip
+    a = ood.assign_splits(df, ["source", "category"])
+    b = ood.assign_splits(df.sample(frac=1, random_state=3), ["source", "category"])
+    assert (a == b.loc[a.index]).all()
+    dev = df[a == "ood-dev"]
+    assert (dev["category"] == "A").sum() == 12 and (dev["category"] == "B").sum() == 8
+    relabelled = df.assign(category="A")
+    # Persisted splits don't move on relabel; recomputing would, which is why they are stored.
+    assert ood.assign_splits(relabelled, ["source", "category"]).eq("ood-dev").sum() == 20
+
+
+def test_persist_splits_keeps_reviews(tmp_path):
+    p = tmp_path / "tw.csv"
+    rows = [{"id": f"tw-{i}", "source": "twitter", "brand": "", "subject": "", "body": "b",
+             "llm_category": "Billing", "category": "Billing", "needs_review": "false",
+             "reviewer_notes": "checked"} for i in range(10)]  # fmt: skip
+    ood.write_csv(p, rows, [f for f in ood.REVIEW_FIELDS if f != "ood_split"])
+    assert ood.persist_splits(p, ood.REVIEW_FIELDS) == 10
+    df = ood.read_csv(p)
+    assert (df["ood_split"] == "ood-dev").sum() == 4 and (df["reviewer_notes"] == "checked").all()
+    assert ood.persist_splits(p, ood.REVIEW_FIELDS) == 0  # idempotent
 
 
 def test_score_counts_muted_customers():
@@ -68,5 +101,8 @@ def test_score_counts_muted_customers():
     assert s["non_spam_in_review"] == 1 and s["correct"] == 2
     bs = by_source(df, ["Spam", "Spam", "Technical Issue"], None)
     assert bs["b"]["correct"] == 1 and bs["all"]["n"] == 3
-    m = {"rows": 3, "counts": {}, "gold": {}, "systems": {"fast_only": bs}, "versions": {}}
-    assert "| fast_only | all | 3 | 2 |" in report_markdown(m)
+    m = {"split": "ood-dev", "rows": 3, "reviewed_rows": 3, "pending_rows": 0,
+         "pending_by_source": {}, "gold_reviewed": {}, "reviewed": {"fast_only": bs},
+         "preliminary_incl_unreviewed": {"fast_only": bs}, "versions": {}}  # fmt: skip
+    md = report_markdown(m)
+    assert "| fast_only | all | 3 | 2 |" in md and "PRELIMINARY" in md and "ood-dev" in md

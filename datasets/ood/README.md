@@ -1,8 +1,17 @@
 # OOD evaluation set (human-written, never trained on)
 
-Built by `make ood-set` (`ml-service/data/ood.py`); scored by `make ood-eval`,
-which is a **required gate before any model is accepted** and is reported next to
-test in P7. Only reviewed rows are scored.
+Built by `make ood-set` (`ml-service/data/ood.py`). **Required gate before any model is
+accepted**; reported next to test in P7.
+
+**Two halves.** Every row is in `ood-dev` (40%) or `ood-test` (60%), column `ood_split`
+(stratified by source × category with a seeded hash order; stored in the CSVs so your
+relabelling never moves a row). Variants, thresholds and rules are chosen on val + ood-dev
+only (`make ood-eval`); ood-test is reported once per final system (`make ood-eval-test`,
+every run logged in `results/ood/test_log.jsonl`). Team-written rows get their half from a
+per-id hash; the 22 sample emails are split at load time (their labels are fixed).
+
+**Unreviewed rows** (`needs_review=true`) carry LLM pre-labels. Reports show a table on
+reviewed rows and a separate one marked **PRELIMINARY** that includes them.
 
 | file | rows | labels | what to do |
 |---|---|---|---|

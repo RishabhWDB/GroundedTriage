@@ -110,8 +110,9 @@ def report_markdown(m: dict) -> str:
         "",
         "### Alternative rule `support_and_ham`: same FPR limits on support tickets **and** ham",
         "",
-        "Stored in the model card; the service uses it with `SPAM_RULE=support_and_ham` "
-        "(default `support`, the rule above).",
+        "**The default since P3.12** (chosen on val + ood-dev: it meets the support-FPR limit "
+        "and mutes no reviewed human-written ood-dev email); `SPAM_RULE=support` selects the "
+        "rule above.",
         "",
         f"mute ≥ {m['alternative_support_and_ham']['spam_threshold']:.4f}, review ≥ "
         f"{m['alternative_support_and_ham']['review_threshold']:.4f}",
@@ -217,7 +218,7 @@ def train(
             for name, df, sc in (("val", val, val_scores), ("test", test, test_scores))
         },
     }
-    card["default_rule"] = "support"
+    card["default_rule"] = "support_and_ham"  # chosen on val + ood-dev (P3.12)
     card["rules"] = {
         "support": {
             "spam_threshold": card["spam_threshold"],

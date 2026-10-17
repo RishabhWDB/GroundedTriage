@@ -1,17 +1,19 @@
 {
   "card": {
-    "version": "fast-20261016012651-6f7999df",
+    "version": "fast-20261017043430-9848709e",
     "task": "category",
-    "model": "tfidf(word 1-2 + char_wb 3-5) + logistic regression (balanced), isotonic-calibrated",
-    "trained_at": "2026-10-16T01:26:51+00:00",
+    "model": "tfidf(word 1-2 + char_wb 3-5) + LR (balanced), none-calibrated",
+    "trained_at": "2026-10-17T04:34:30+00:00",
     "trained_on": {
-      "export_tag": "c6539fff94a1",
-      "train_content_sha256": "6f7999dffc759ec1da5dc55e4e07b2a7eef3de13282ef828ec25625f384fbb18"
+      "export_tag": "e2552b04338b",
+      "train_content_sha256": "9848709ed9f36dc15ae28e7fd81aee1c11be90cbb0280a4d050aad3256690bbe"
     },
-    "train_rows": 13651,
-    "C": 16.0,
+    "train_rows": 15910,
+    "style_aug": false,
+    "style_aug_rows": 0,
+    "C": 64.0,
     "calibration": {
-      "method": "isotonic",
+      "method": "none",
       "folds": 5,
       "ensemble": false
     },
@@ -21,62 +23,54 @@
       "Feature Request",
       "General Inquiry",
       "Meeting Scheduling",
-      "Spam",
       "Technical Issue"
     ],
     "val_metrics": {
-      "macro_f1": 0.8252,
-      "accuracy": 0.7881,
-      "macro_f1_real_only": 0.7902,
-      "ece": 0.0831
+      "macro_f1": 0.8226,
+      "accuracy": 0.7946,
+      "macro_f1_real_only": 0.7783,
+      "ece": 0.0701
     }
   },
   "val": {
     "overall": {
-      "n": 3775,
-      "accuracy": 0.7881,
-      "macro_f1": 0.8252,
-      "macro_precision": 0.8375,
-      "macro_recall": 0.8162,
-      "weighted_f1": 0.7821,
+      "n": 3545,
+      "accuracy": 0.7946,
+      "macro_f1": 0.8226,
+      "macro_precision": 0.8274,
+      "macro_recall": 0.8187,
+      "weighted_f1": 0.7959,
       "labels": [
         "Technical Issue",
         "Billing",
         "Feature Request",
         "General Inquiry",
-        "Spam",
         "Meeting Scheduling"
       ],
       "per_class": {
         "Technical Issue": {
-          "precision": 0.8022,
-          "recall": 0.8707,
-          "f1": 0.835,
+          "precision": 0.8411,
+          "recall": 0.8427,
+          "f1": 0.8419,
           "support": 2003
         },
         "Billing": {
-          "precision": 0.7391,
-          "recall": 0.6207,
-          "f1": 0.6748,
+          "precision": 0.7704,
+          "recall": 0.7079,
+          "f1": 0.7378,
           "support": 493
         },
         "Feature Request": {
-          "precision": 0.9493,
-          "recall": 0.9519,
-          "f1": 0.9506,
+          "precision": 0.9726,
+          "recall": 0.9492,
+          "f1": 0.9608,
           "support": 374
         },
         "General Inquiry": {
-          "precision": 0.5345,
-          "recall": 0.4537,
-          "f1": 0.4908,
+          "precision": 0.553,
+          "recall": 0.5935,
+          "f1": 0.5725,
           "support": 615
-        },
-        "Spam": {
-          "precision": 1.0,
-          "recall": 1.0,
-          "f1": 1.0,
-          "support": 230
         },
         "Meeting Scheduling": {
           "precision": 1.0,
@@ -87,49 +81,42 @@
       }
     },
     "origin_real": {
-      "n": 3715,
-      "accuracy": 0.7847,
-      "macro_f1": 0.7902,
-      "macro_precision": 0.805,
-      "macro_recall": 0.7794,
-      "weighted_f1": 0.7786,
+      "n": 3485,
+      "accuracy": 0.7911,
+      "macro_f1": 0.7783,
+      "macro_precision": 0.7843,
+      "macro_recall": 0.7733,
+      "weighted_f1": 0.7924,
       "labels": [
         "Technical Issue",
         "Billing",
         "Feature Request",
-        "General Inquiry",
-        "Spam"
+        "General Inquiry"
       ],
       "per_class": {
         "Technical Issue": {
-          "precision": 0.8022,
-          "recall": 0.8707,
-          "f1": 0.835,
+          "precision": 0.8411,
+          "recall": 0.8427,
+          "f1": 0.8419,
           "support": 2003
         },
         "Billing": {
-          "precision": 0.7391,
-          "recall": 0.6207,
-          "f1": 0.6748,
+          "precision": 0.7704,
+          "recall": 0.7079,
+          "f1": 0.7378,
           "support": 493
         },
         "Feature Request": {
-          "precision": 0.9493,
-          "recall": 0.9519,
-          "f1": 0.9506,
+          "precision": 0.9726,
+          "recall": 0.9492,
+          "f1": 0.9608,
           "support": 374
         },
         "General Inquiry": {
-          "precision": 0.5345,
-          "recall": 0.4537,
-          "f1": 0.4908,
+          "precision": 0.553,
+          "recall": 0.5935,
+          "f1": 0.5725,
           "support": 615
-        },
-        "Spam": {
-          "precision": 1.0,
-          "recall": 1.0,
-          "f1": 1.0,
-          "support": 230
         }
       }
     },
@@ -153,62 +140,54 @@
       }
     },
     "without_meeting_scheduling": {
-      "n": 3715,
-      "accuracy": 0.7847,
-      "macro_f1": 0.7902,
-      "macro_precision": 0.805,
-      "macro_recall": 0.7794,
-      "weighted_f1": 0.7786,
+      "n": 3485,
+      "accuracy": 0.7911,
+      "macro_f1": 0.7783,
+      "macro_precision": 0.7843,
+      "macro_recall": 0.7733,
+      "weighted_f1": 0.7924,
       "labels": [
         "Technical Issue",
         "Billing",
         "Feature Request",
-        "General Inquiry",
-        "Spam"
+        "General Inquiry"
       ],
       "per_class": {
         "Technical Issue": {
-          "precision": 0.8022,
-          "recall": 0.8707,
-          "f1": 0.835,
+          "precision": 0.8411,
+          "recall": 0.8427,
+          "f1": 0.8419,
           "support": 2003
         },
         "Billing": {
-          "precision": 0.7391,
-          "recall": 0.6207,
-          "f1": 0.6748,
+          "precision": 0.7704,
+          "recall": 0.7079,
+          "f1": 0.7378,
           "support": 493
         },
         "Feature Request": {
-          "precision": 0.9493,
-          "recall": 0.9519,
-          "f1": 0.9506,
+          "precision": 0.9726,
+          "recall": 0.9492,
+          "f1": 0.9608,
           "support": 374
         },
         "General Inquiry": {
-          "precision": 0.5345,
-          "recall": 0.4537,
-          "f1": 0.4908,
+          "precision": 0.553,
+          "recall": 0.5935,
+          "f1": 0.5725,
           "support": 615
-        },
-        "Spam": {
-          "precision": 1.0,
-          "recall": 1.0,
-          "f1": 1.0,
-          "support": 230
         }
       }
     },
     "real_meeting_mentions": {
-      "n": 173,
-      "accuracy": 0.8728,
+      "n": 144,
+      "accuracy": 0.7847,
       "predicted_meeting": 0,
       "gold_counts": {
-        "Technical Issue": 71,
-        "Spam": 43,
-        "Feature Request": 26,
-        "General Inquiry": 18,
-        "Billing": 15
+        "Technical Issue": 80,
+        "General Inquiry": 29,
+        "Feature Request": 24,
+        "Billing": 11
       },
       "pattern": "\\b(?:meeting|call|zoom|teams|webex|schedul\\w*|reschedul\\w*|calendar|appointment)\\b"
     }
@@ -219,52 +198,38 @@
       "Billing",
       "Feature Request",
       "General Inquiry",
-      "Spam",
       "Meeting Scheduling"
     ],
     "matrix": [
       [
-        1744,
-        65,
-        12,
-        182,
-        0,
-        0
-      ],
-      [
-        131,
-        306,
-        2,
-        54,
-        0,
-        0
-      ],
-      [
-        7,
-        4,
-        356,
-        7,
-        0,
-        0
-      ],
-      [
-        292,
-        39,
+        1688,
+        76,
         5,
-        279,
-        0,
+        234,
         0
       ],
       [
-        0,
-        0,
-        0,
-        0,
-        230,
+        90,
+        349,
+        1,
+        53,
         0
       ],
       [
-        0,
+        8,
+        3,
+        355,
+        8,
+        0
+      ],
+      [
+        221,
+        25,
+        4,
+        365,
+        0
+      ],
+      [
         0,
         0,
         0,
@@ -274,282 +239,274 @@
     ]
   },
   "calibration": {
-    "n": 3775,
-    "ece": 0.0831,
+    "n": 3545,
+    "ece": 0.0701,
     "bins": [
-      {
-        "lo": 0.2667,
-        "hi": 0.3333,
-        "n": 5,
-        "accuracy": 0.4,
-        "mean_confidence": 0.3015
-      },
       {
         "lo": 0.3333,
         "hi": 0.4,
-        "n": 49,
-        "accuracy": 0.3469,
-        "mean_confidence": 0.377
+        "n": 16,
+        "accuracy": 0.1875,
+        "mean_confidence": 0.379
       },
       {
         "lo": 0.4,
         "hi": 0.4667,
-        "n": 213,
-        "accuracy": 0.5164,
-        "mean_confidence": 0.4371
+        "n": 58,
+        "accuracy": 0.3966,
+        "mean_confidence": 0.4338
       },
       {
         "lo": 0.4667,
         "hi": 0.5333,
-        "n": 472,
-        "accuracy": 0.5127,
-        "mean_confidence": 0.5017
+        "n": 144,
+        "accuracy": 0.4653,
+        "mean_confidence": 0.505
       },
       {
         "lo": 0.5333,
         "hi": 0.6,
-        "n": 460,
-        "accuracy": 0.6283,
-        "mean_confidence": 0.5663
+        "n": 170,
+        "accuracy": 0.5,
+        "mean_confidence": 0.5667
       },
       {
         "lo": 0.6,
         "hi": 0.6667,
-        "n": 452,
-        "accuracy": 0.7832,
-        "mean_confidence": 0.6336
+        "n": 171,
+        "accuracy": 0.5848,
+        "mean_confidence": 0.633
       },
       {
         "lo": 0.6667,
         "hi": 0.7333,
-        "n": 476,
-        "accuracy": 0.8235,
-        "mean_confidence": 0.6999
+        "n": 178,
+        "accuracy": 0.6067,
+        "mean_confidence": 0.6987
       },
       {
         "lo": 0.7333,
         "hi": 0.8,
-        "n": 491,
-        "accuracy": 0.8941,
-        "mean_confidence": 0.7682
+        "n": 249,
+        "accuracy": 0.7028,
+        "mean_confidence": 0.7679
       },
       {
         "lo": 0.8,
         "hi": 0.8667,
-        "n": 360,
-        "accuracy": 0.9583,
-        "mean_confidence": 0.829
+        "n": 272,
+        "accuracy": 0.7537,
+        "mean_confidence": 0.8359
       },
       {
         "lo": 0.8667,
         "hi": 0.9333,
-        "n": 264,
-        "accuracy": 0.9583,
-        "mean_confidence": 0.9005
+        "n": 441,
+        "accuracy": 0.7664,
+        "mean_confidence": 0.9019
       },
       {
         "lo": 0.9333,
         "hi": 1.0,
-        "n": 533,
-        "accuracy": 0.9981,
-        "mean_confidence": 0.9772
+        "n": 1846,
+        "accuracy": 0.928,
+        "mean_confidence": 0.984
       }
     ]
   },
   "calibration_uncalibrated_lr": {
-    "n": 3775,
-    "ece": 0.0381,
+    "n": 3545,
+    "ece": 0.0701,
     "bins": [
-      {
-        "lo": 0.2667,
-        "hi": 0.3333,
-        "n": 6,
-        "accuracy": 0.1667,
-        "mean_confidence": 0.3176
-      },
       {
         "lo": 0.3333,
         "hi": 0.4,
-        "n": 53,
-        "accuracy": 0.4528,
-        "mean_confidence": 0.3787
+        "n": 16,
+        "accuracy": 0.1875,
+        "mean_confidence": 0.379
       },
       {
         "lo": 0.4,
         "hi": 0.4667,
-        "n": 129,
-        "accuracy": 0.4884,
-        "mean_confidence": 0.4371
+        "n": 58,
+        "accuracy": 0.3966,
+        "mean_confidence": 0.4338
       },
       {
         "lo": 0.4667,
         "hi": 0.5333,
-        "n": 243,
-        "accuracy": 0.4198,
-        "mean_confidence": 0.5035
+        "n": 144,
+        "accuracy": 0.4653,
+        "mean_confidence": 0.505
       },
       {
         "lo": 0.5333,
         "hi": 0.6,
-        "n": 274,
-        "accuracy": 0.5438,
-        "mean_confidence": 0.5671
+        "n": 170,
+        "accuracy": 0.5,
+        "mean_confidence": 0.5667
       },
       {
         "lo": 0.6,
         "hi": 0.6667,
-        "n": 284,
-        "accuracy": 0.6127,
-        "mean_confidence": 0.6349
+        "n": 171,
+        "accuracy": 0.5848,
+        "mean_confidence": 0.633
       },
       {
         "lo": 0.6667,
         "hi": 0.7333,
-        "n": 276,
-        "accuracy": 0.663,
-        "mean_confidence": 0.701
+        "n": 178,
+        "accuracy": 0.6067,
+        "mean_confidence": 0.6987
       },
       {
         "lo": 0.7333,
         "hi": 0.8,
-        "n": 316,
-        "accuracy": 0.6899,
-        "mean_confidence": 0.7671
+        "n": 249,
+        "accuracy": 0.7028,
+        "mean_confidence": 0.7679
       },
       {
         "lo": 0.8,
         "hi": 0.8667,
-        "n": 401,
-        "accuracy": 0.803,
-        "mean_confidence": 0.8335
+        "n": 272,
+        "accuracy": 0.7537,
+        "mean_confidence": 0.8359
       },
       {
         "lo": 0.8667,
         "hi": 0.9333,
-        "n": 443,
-        "accuracy": 0.8488,
-        "mean_confidence": 0.9011
+        "n": 441,
+        "accuracy": 0.7664,
+        "mean_confidence": 0.9019
       },
       {
         "lo": 0.9333,
         "hi": 1.0,
-        "n": 1350,
-        "accuracy": 0.9615,
-        "mean_confidence": 0.9831
+        "n": 1846,
+        "accuracy": 0.928,
+        "mean_confidence": 0.984
       }
     ]
   },
   "coverage": [
     {
       "tau": 0.4,
-      "accepted_share": 0.9857,
-      "accepted_accuracy": 0.7944
+      "accepted_share": 0.9955,
+      "accepted_accuracy": 0.7974
     },
     {
       "tau": 0.5,
-      "accepted_share": 0.8678,
-      "accepted_accuracy": 0.8342
+      "accepted_share": 0.9642,
+      "accepted_accuracy": 0.8092
     },
     {
       "tau": 0.6,
-      "accepted_share": 0.6824,
-      "accepted_accuracy": 0.8987
+      "accepted_share": 0.8906,
+      "accepted_accuracy": 0.8359
     },
     {
       "tau": 0.7,
-      "accepted_share": 0.5001,
-      "accepted_accuracy": 0.9343
+      "accepted_share": 0.8164,
+      "accepted_accuracy": 0.8597
     },
     {
       "tau": 0.8,
-      "accepted_share": 0.3065,
-      "accepted_accuracy": 0.9767
+      "accepted_share": 0.7219,
+      "accepted_accuracy": 0.8816
     },
     {
       "tau": 0.85,
-      "accepted_share": 0.2286,
-      "accepted_accuracy": 0.9815
+      "accepted_share": 0.6677,
+      "accepted_accuracy": 0.8935
     },
     {
       "tau": 0.9,
-      "accepted_share": 0.1751,
-      "accepted_accuracy": 0.9924
+      "accepted_share": 0.589,
+      "accepted_accuracy": 0.91
     },
     {
       "tau": 0.95,
-      "accepted_share": 0.1261,
-      "accepted_accuracy": 1.0
+      "accepted_share": 0.4742,
+      "accepted_accuracy": 0.9369
     }
   ],
   "c_selection": [
     {
       "C": 1.0,
-      "val_macro_f1": 0.8052,
-      "val_accuracy": 0.7356,
-      "fit_s": 32.6
+      "val_macro_f1": 0.7779,
+      "val_accuracy": 0.7303,
+      "fit_s": 22.1
     },
     {
       "C": 4.0,
-      "val_macro_f1": 0.8219,
-      "val_accuracy": 0.7587,
-      "fit_s": 33.3
+      "val_macro_f1": 0.8095,
+      "val_accuracy": 0.7715,
+      "fit_s": 27.0
     },
     {
       "C": 16.0,
-      "val_macro_f1": 0.8296,
-      "val_accuracy": 0.7709,
-      "fit_s": 33.7
+      "val_macro_f1": 0.8183,
+      "val_accuracy": 0.7882,
+      "fit_s": 30.3
     },
     {
       "C": 64.0,
-      "val_macro_f1": 0.8287,
-      "val_accuracy": 0.7706,
-      "fit_s": 28.7
+      "val_macro_f1": 0.8226,
+      "val_accuracy": 0.7946,
+      "fit_s": 27.2
     }
   ],
   "calibration_selection": [
     {
+      "method": "none",
+      "val_ece": 0.0701,
+      "val_macro_f1": 0.8226,
+      "fit_s": 27.7
+    },
+    {
       "method": "sigmoid",
-      "val_ece": 0.0892,
-      "val_macro_f1": 0.8283,
-      "fit_s": 180.1
+      "val_ece": 0.0984,
+      "val_macro_f1": 0.703,
+      "fit_s": 178.6
     },
     {
       "method": "isotonic",
-      "val_ece": 0.0831,
-      "val_macro_f1": 0.8252,
-      "fit_s": 161.0
+      "val_ece": 0.1021,
+      "val_macro_f1": 0.6867,
+      "fit_s": 145.2
     }
   ],
   "training": {
-    "total_s": 473.3,
-    "calibrated_fit_s": 161.0,
-    "artifact_mb": 4.2
+    "total_s": 462.6,
+    "calibrated_fit_s": 27.7,
+    "artifact_mb": 2.34
   },
   "latency": {
-    "load_s": 0.49,
+    "load_s": 0.29,
     "single_ticket_ms": {
       "n": 100,
-      "mean_ms": 1.7745,
-      "p50_ms": 1.6911,
-      "p95_ms": 2.4707,
-      "max_ms": 5.829
+      "mean_ms": 1.0346,
+      "p50_ms": 1.0494,
+      "p95_ms": 1.3086,
+      "max_ms": 1.6028
     },
     "batch_all_val": {
-      "tickets": 3775,
-      "wall_s": 1.9,
-      "ms_per_ticket": 0.502
+      "tickets": 3545,
+      "wall_s": 1.23,
+      "ms_per_ticket": 0.347
     }
   },
   "run": {
-    "git_commit": "d38973c",
+    "git_commit": "4317f15",
     "machine": "arm64 Darwin 25.5.0",
     "python": "3.11.14",
-    "peak_rss_mb": 611.6,
-    "swap_usage_at_end": "total = 8192.00M  used = 7516.62M  free = 675.38M  (encrypted)",
-    "date": "2026-10-16",
+    "peak_rss_mb": 609.2,
+    "swap_usage_at_end": "total = 8192.00M  used = 7355.38M  free = 836.62M  (encrypted)",
+    "date": "2026-10-17",
     "split": "val",
-    "rows": 3775,
-    "split_content_sha256": "cac237f430e4d9378505d9226480c36817315890800a6eb764dff67396a21be7"
+    "rows": 3545,
+    "split_content_sha256": "8401c42557bbf2f298536d6f3f9f9cd6b97532a71a71f426d94522d1d0f0b05e"
   }
 }

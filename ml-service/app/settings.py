@@ -31,7 +31,9 @@ class Settings(BaseSettings):
     # fp16 inference on MPS for the fine-tuned transformers (8 GB RAM).
     model_fp16: bool = True
     # Spam filter operating point: a key of models/spam_filter/model_card.json "rules".
-    spam_rule: str = "support"
+    # support_and_ham was chosen on val + ood-dev (P3.12): it meets the support
+    # FPR <= 1% limit and also caps human-written ham at 1%.
+    spam_rule: str = "support_and_ham"
     ml_port: int = 8001
     models_dir: Path = REPO_ROOT / "models"
 

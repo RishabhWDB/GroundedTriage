@@ -73,14 +73,19 @@ def classification_metrics(
     }
 
 
-def sliced_metrics(df: pd.DataFrame, gold: str = "gold", pred: str = "pred") -> dict:
-    """The reporting-rule slices over a frame with gold/pred/origin columns."""
-    out = {"overall": classification_metrics(df[gold], df[pred], categories())}
+def sliced_metrics(
+    df: pd.DataFrame, gold: str = "gold", pred: str = "pred", labels: Sequence[str] | None = None
+) -> dict:
+    """The reporting-rule slices over a frame with gold/pred/origin columns.
+    labels: the label set of the task (default: all 6 categories; the topic
+    models use the 5 topic categories)."""
+    labels = list(labels or categories())
+    out = {"overall": classification_metrics(df[gold], df[pred], labels)}
     for origin, g in df.groupby("origin", sort=True):
         out[f"origin_{origin}"] = classification_metrics(g[gold], g[pred])
     no_meet = df[df[gold] != MEETING]
     out["without_meeting_scheduling"] = classification_metrics(
-        no_meet[gold], no_meet[pred], [c for c in categories() if c != MEETING]
+        no_meet[gold], no_meet[pred], [c for c in labels if c != MEETING]
     )
     mention = df[
         (df["origin"] == "real") & (df[gold] != MEETING) & df["text"].str.contains(MEETING_WORDS)

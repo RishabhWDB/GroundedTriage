@@ -92,7 +92,7 @@ def test_train_script_on_toy_splits(tmp_path):
     m = train(tmp_path / "model", tmp_path / "results", data, grid=(1.0, 4.0), folds=3, latency_n=5)
     assert m["val"]["overall"]["macro_f1"] > 0.7  # toy data, tiny calibration folds
     assert {r["C"] for r in m["c_selection"]} == {1.0, 4.0}
-    assert {r["method"] for r in m["calibration_selection"]} == {"sigmoid", "isotonic"}
+    assert {r["method"] for r in m["calibration_selection"]} == {"none", "sigmoid", "isotonic"}
     card = json.loads((tmp_path / "model" / CARD_FILE).read_text())
     assert card["version"].startswith("fast-") and card["val_metrics"]["macro_f1"] > 0.7
     for f in ("metrics.json", "report.md", "confusion_matrix.png", "reliability.png"):

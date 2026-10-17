@@ -286,7 +286,7 @@ def test_classify_endpoint_with_spam_filter(tmp_path):
     card = {"version": "spam-toy", "default_rule": "support",
             "rules": {"support": {"spam_threshold": 0.5, "review_threshold": 0.3}}}  # fmt: skip
     (sf / CARD_FILE).write_text(json.dumps(card))
-    reg = Registry(Settings(models_dir=tmp_path / "models"))
+    reg = Registry(Settings(models_dir=tmp_path / "models", spam_rule="support"))
     app.dependency_overrides[get_registry] = lambda: reg
     try:
         client = TestClient(app)
