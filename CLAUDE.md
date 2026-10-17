@@ -296,6 +296,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - Fake-clock unit tests and a DB integration test.
   - Commit `c110e3a`.
 - P4.4a Meeting extraction: `app/meeting.py` + `POST /extract_meeting` (gpt-oss-120b, JSON mode, temperature 0; relative dates resolved against `received_at`; validated: unparseable, past or >1-year starts, durations outside 5–480 min and unknown timezones become null with a note). The registry builds the LLM lazily (503 without `GROQ_API_KEY`). Tested with `FakeLLM`; **not run live** (that day's gpt-oss TPD was spent on style-aug).
+  - Commit `53a4187`.
+- P4.4b Scheduling logic: `internal/scheduler` (`Calendar` interface, `FakeCalendar`, `Scheduler.Schedule` → `booked | counter_offer | no_slot`). Tests: free, busy → counter-offer, outside hours/weekend/overrun, no time, past, fully booked, calendar error, booked slot becomes busy, DST week.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -458,6 +460,11 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P4.4b): Scheduling policy (`scheduler.DefaultConfig`):
+  - Mon–Fri 09:00–17:00 in `GOOGLE_TIMEZONE`; 30-minute default duration and slot step; **2 hours' minimum lead**; 14-day search horizon.
+  - A requested slot is **booked** (event created, requester invited) only when it's at least 2 hours ahead, falls wholly inside one workday's hours and overlaps no busy interval.
+  - Otherwise it's a **counter-offer** (no event created; the reply proposes it) with the first free aligned slot: after the requested start when it was busy, otherwise after now + lead. Without a free slot in the horizon → **no_slot**. The reason is recorded either way.
+  - Day boundaries use local wall-clock times, so DST weeks keep 09:00–17:00. One FreeBusy call per request covers the whole search window.
 - 2026-10-17 (P4.3): SLA and escalation:
   - **The SLA clock starts at routing time** (`now` + the priority's target), not at `received_at`, so back-filled or re-ingested history doesn't arrive already breached. Muted routes have no SLA.
   - The escalation job (every worker poll) takes open routes past `sla_due_at`: priority −1 (4→3→2→1) and a fresh deadline for the new priority. At P1 the deadline is re-armed and audited as `sla.breached_p1`; otherwise `sla.escalated` (old/new priority, old/new due, escalation count).
