@@ -285,6 +285,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `config/routing_rules.yaml` (first match; required default last);
   - `internal/routing` `ParseRules`/`LoadRules` (strict YAML, validated against the taxonomy, urgency scale, actions and queues), `RuleSet.Evaluate` → `model.Route` (reason = matched rule), `Engine` with hot reload (content-hash polling; an invalid edit keeps the old rules).
   - Table-driven tests cover every shipped rule plus the default.
+  - Commit `36147b5`.
+- P4.2 Mute + no-reply detection: `routing.DetectNoReply(ticket)` → (bool, reason). Spam (filter) and no-reply route to `mute` with the reason in `Route.reason` (e.g. `rule no-reply: newsletter (unsubscribe)`).
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -292,7 +294,6 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 
 ### To do
 - P3.8b Finish `style_aug.jsonl` (daily `make style-aug` runs), rebuild, re-export
-- P4.2 Mute + no-reply detection
 - P4.3 Queues + SLA escalation
 - P4.4 Meeting scheduler
 - P5.1 KB ingestion
@@ -449,6 +450,15 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P4.2): No-reply detection is conservative and ordered; the first hit is the reason:
+  1. sender local part `noreply`/`no-reply`/`do-not-reply`/`donotreply`/`mailer-daemon`/`postmaster`/`bounce(s)`/`notification(s)`/`newsletter(s)`/`news`/`marketing`/`mailer` (plus `+tag` variants);
+  2. automated subject (`[Automated]`, `Automatic reply`, `Out of office`, `Undeliverable`, …);
+  3. automated body phrases (`this is an automated message`, `do not reply to this email`, …);
+  4. newsletter footers (`unsubscribe`, `view in browser`, `you are receiving this email because`, …);
+  5. an `FYI` subject whose body has no question mark;
+  6. a bot-like sender (`alerts`, `bot`, `system`, `status`, …) only together with the word "automated".
+  - A bot-like sender alone isn't enough: `alerts@monitoring…` "production database down" stays actionable, and the critical rule comes before no-reply anyway.
+  - Possible spam is never muted; it goes to the `possible_spam` queue.
 - 2026-10-17 (P4.1): Routing rules:
   - Conditions: `ingest_status`, `category`, `urgency`, `tier`, `low_confidence`, `possible_spam`, `no_reply`, and `min_confidence` (inclusive) / `max_confidence` (exclusive). They only read the classification contract, so the rules work with whatever models exist (no dependence on the deferred decisions).
   - Actions: `mute | queue | reply | schedule`; queues must be declared. Priority 1 (most urgent) to 4; when omitted it comes from urgency (critical 1, high 2, medium 3, low 4), or 3 without a classification. SLA is added in P4.3.
