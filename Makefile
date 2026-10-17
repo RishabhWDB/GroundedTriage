@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: kb retrieval-eval rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
+.PHONY: kb retrieval-eval judge-sample judge-label judge-score rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -145,6 +145,15 @@ rag-floor-sweep: ## P7.2: floor sweep (keep 85/90/95/98%) on p72_dev, retrieval 
 
 rag-eval: ## P7.2: grounded vs ungrounded replies on p72_test + out-of-KB (cached, resumable; re-run daily) -> results/rag/
 	cd $(ML_DIR) && $(VPY) -m eval.rag_eval $(ARGS)
+
+judge-sample: ## P7.2: sample ~80 judged claims from the RAG run for hand-labelling -> datasets/judge_labels/claims.csv
+	cd $(ML_DIR) && $(VPY) -m eval.judge_labels sample $(ARGS)
+
+judge-label: ## P7.2: label the sampled claims interactively (y/n/u; resumable)
+	cd $(ML_DIR) && $(VPY) -m eval.judge_labels label
+
+judge-score: ## P7.2: judge vs human accuracy + Cohen's kappa (ARGS=--with-llm adds per-claim qwen and gpt-oss) -> results/rag/judge_validation.*
+	cd $(ML_DIR) && $(VPY) -m eval.judge_labels score $(ARGS)
 
 seed: ## Seed demo data (implemented in P8.1)
 	@echo "seed: not implemented yet (P8.1)"; exit 1

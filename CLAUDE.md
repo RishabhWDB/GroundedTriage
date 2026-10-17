@@ -43,6 +43,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Ingest the WixQA help-centre KB into pgvector on DATABASE_URL (idempotent; ~17 min first time) | `make kb` (or `cd ml-service && .venv/bin/python -m rag.kb --folder <dir>` for .md/.html docs) → `results/kb/ingest.json` |
 | Retrieval eval on WixQA QA pairs (recall@1/3/5, MRR; dense vs hybrid; floor analysis) | `make retrieval-eval` → `results/retrieval/` |
 | P7.2 RAG eval: plan (expected days; retrieval only) / floor sweep on p72_dev / the run (cached, resumable; re-run daily at the Groq cap) | `make rag-eval-plan` / `make rag-floor-sweep` / `make rag-eval` (`ARGS="--limit N"`) → `results/rag/` |
+| Judge validation: sample claims from the RAG run / label them (interactive) / score judges vs human (κ) | `make judge-sample` / `make judge-label` / `make judge-score ARGS=--with-llm` → `results/rag/judge_validation.*` |
 | Seed | `make seed` (not implemented until P8.1) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
@@ -400,6 +401,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - resumable: every LLM call cached on disk (`app.llm.CachingLLM` for drafts, `JudgeCache`), finished rows appended to `datasets/raw/rag_eval/progress.jsonl`, stops cleanly at the daily cap, other LLM errors skip the item until the next run;
   - judge: a draft whose claim list overflows max_tokens is judged in two halves (`rag.faithfulness.split_halves`, `TruncatedError`), also in the live gate;
   - `make rag-eval-plan` (printed before starting), `make rag-floor-sweep` (p72_dev), `make rag-eval` (daily).
+  - Commit `f950ada`.
+- P7.2b Judge-validation labelling (`eval/judge_labels.py`): `sample` draws ~80 claims from the run, half judged-unsupported / half supported, alternating systems; each row shows the claim with its cited source text (all retrieved chunks when uncited), and the judge's verdicts go to a separate file that labelling never shows. `label` is an interactive y/n/unsure CLI that saves after each answer; `score` gives accuracy, Cohen's κ and confusion counts for the gate judge and, with `--with-llm`, a per-claim qwen and gpt-oss-120b verdict (cached). Below 60 labels it's marked PRELIMINARY. §3a item 10.
   - Commit: backfilled in the next commit.
 
 ### In progress
@@ -435,6 +438,8 @@ Keep this list current: add items as they arise, remove them when done. Nothing 
 | 8 | Google Calendar for the meeting scheduler (optional; the worker runs without it): in Google Cloud, enable the Calendar API, create an OAuth client of type **Desktop app**, save its JSON as `credentials.json` (gitignored), add yourself as a test user, set `GOOGLE_TIMEZONE` | repo root, `.env` | `make calendar-auth` → `token.json`; the worker then uses Google automatically (or set `MEETING_CALENDAR=google`). Test-mode tokens expire after 7 days, so re-run it then |
 
 | 9 | **Set a real `API_KEY` in `.env`** (any long random string, e.g. `openssl rand -hex 24`). It's still the `.env.example` placeholder, and `make api` refuses to start with it | `.env` | `make api` (the UI asks for the same key) |
+
+| 10 | **Hand-label judge claims** (judge validation, P7.2): for each claim, answer whether the shown sources support it (y/n/u). The judge's verdicts are hidden. About 80 claims, ~30–40 min; resumable (q quits). Ready once Claude has run `make judge-sample` on the first day of P7.2 rows | `datasets/judge_labels/claims.csv` (via the CLI) | `make judge-label` → `make judge-score ARGS=--with-llm` (κ for qwen and gpt-oss-120b; gate-judge κ < 0.6 → revisit the judge) |
 
 Claude's own background item: `make rag-eval` once per day until all 556 rows are done (P7.2 has priority), then `make style-aug` once per day (Groq free cap) until 3,978 rows, then `make data && make export-splits` (P3.8b).
 
