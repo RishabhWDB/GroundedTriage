@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: demo demo-status demo-reset demo-expect kb retrieval-eval monitoring-ref judge-sample judge-label judge-score rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
+.PHONY: render-validate models-pack models-fetch demo demo-status demo-reset demo-expect kb retrieval-eval monitoring-ref judge-sample judge-label judge-score rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -65,11 +65,11 @@ test-integration: ## Integration tests against TEST_DATABASE_URL (never DATABASE
 lint: ## gofmt check, go vet, ruff check + format check
 	@out=$$(gofmt -l cmd internal migrations); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 	go vet ./...
-	cd $(ML_DIR) && $(VBIN)/ruff check . && $(VBIN)/ruff format --check .
+	cd $(ML_DIR) && $(VBIN)/ruff check . ../scripts && $(VBIN)/ruff format --check . ../scripts
 
 fmt:
 	gofmt -w cmd internal migrations
-	cd $(ML_DIR) && $(VBIN)/ruff format . && $(VBIN)/ruff check --fix .
+	cd $(ML_DIR) && $(VBIN)/ruff format . ../scripts && $(VBIN)/ruff check --fix . ../scripts
 
 migrate: ## Apply pending migrations to DATABASE_URL (idempotent; up only)
 	go run ./cmd/migrate up
@@ -158,10 +158,19 @@ judge-score: ## P7.2: judge vs human accuracy + Cohen's kappa (ARGS=--with-llm a
 monitoring-ref: ## P7.3: regenerate the PSI reference distribution (val category shares) -> config/monitoring.yaml
 	cd $(ML_DIR) && $(VPY) -m eval.monitoring_ref
 
+render-validate: ## P8.2: validate render.yaml against Render's published schema + repo checks (needs network)
+	$(VPY) scripts/validate_render.py
+
+models-pack: ## P8.2: bundle model dirs for MODELS_URL (ARGS="fast_tier spam_filter [deep_tier urgency]") -> models-bundle.tar.gz + its sha256
+	cd $(ML_DIR) && $(VPY) -m app.artifacts pack $(ARGS) --out ../models-bundle.tar.gz
+
+models-fetch: ## P8.2: install MODELS_URL (checked against MODELS_SHA256) into MODELS_DIR; no-op when unset or already present
+	cd $(ML_DIR) && $(VPY) -m app.artifacts fetch
+
 seed: demo ## Alias of make demo
 
-demo: ## P8.1: load the 25 demo tickets (Ids demo-*) into DATABASE_URL (additive), then run the worker once
-	go run ./cmd/demo load
+demo: ## P8.1: load the 25 demo tickets (Ids demo-*), run the pipeline once, print expected vs actual, then make dev (DEMO_NO_DEV=1 stops before)
+	./scripts/demo.sh
 
 demo-status: ## P8.1: expected vs actual outcome per demo ticket
 	go run ./cmd/demo status

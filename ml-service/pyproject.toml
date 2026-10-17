@@ -55,6 +55,8 @@ dev = [
     "ruff>=0.6",
     "pytest>=8",
     "honcho>=2.0",
+    # render.yaml validation (P8.2, scripts/validate_render.py).
+    "jsonschema>=4.20",
 ]
 
 [tool.setuptools.packages.find]

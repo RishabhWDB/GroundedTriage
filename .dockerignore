@@ -1,0 +1,20 @@
+# Keep secrets, local state and large data out of image build contexts.
+.env
+.env.*
+!.env.example
+.git
+.idea
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+models/
+models-bundle.tar.gz
+datasets/raw/
+datasets/processed/
+datasets/export/
+datasets/out/
+credentials.json
+token.json
+summary.md
+ml-service/.hf

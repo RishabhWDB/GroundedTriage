@@ -339,3 +339,28 @@ func TestDailyMetrics(t *testing.T) {
 		t.Fatalf("no store: %s", rec.Body)
 	}
 }
+
+func TestRequireHTTPS(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(RequireHTTPS())
+	r.GET("/x", func(c *gin.Context) { c.String(200, "ok") })
+	req := httptest.NewRequest("GET", "http://demo.example/x?a=1", nil)
+	req.Header.Set("X-Forwarded-Proto", "http")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusPermanentRedirect || rec.Header().Get("Location") != "https://demo.example/x?a=1" {
+		t.Fatalf("http: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	for _, proto := range []string{"https", ""} {
+		req := httptest.NewRequest("GET", "/x", nil)
+		if proto != "" {
+			req.Header.Set("X-Forwarded-Proto", proto)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != 200 || !strings.Contains(rec.Header().Get("Strict-Transport-Security"), "max-age=") {
+			t.Fatalf("proto %q: %d %v", proto, rec.Code, rec.Header())
+		}
+	}
+}

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # recall@1 on WixQA (0.43 -> 0.36 expert-written) and tripled latency.
     retrieval_rerank: bool = False
     models_dir: Path = REPO_ROOT / "models"
+    # Optional model bundle (P8.2): https URL of a `python -m app.artifacts pack`
+    # .tar.gz and its sha256; `python -m app.artifacts fetch` installs it into models_dir.
+    models_url: str = ""
+    models_sha256: str = ""
 
 
 @lru_cache

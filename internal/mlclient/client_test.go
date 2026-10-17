@@ -164,3 +164,12 @@ func TestObserveOncePerCallWithRetries(t *testing.T) {
 		t.Fatalf("stages = %v, err = %v (health is not observed; one call despite a retry)", stages, lastErr)
 	}
 }
+
+func TestNewAddsSchemeToHostPort(t *testing.T) {
+	if got := New("groundedtriage-ml:10000").BaseURL; got != "http://groundedtriage-ml:10000" {
+		t.Fatalf("BaseURL = %q", got)
+	}
+	if got := New("https://ml.example/").BaseURL; got != "https://ml.example" {
+		t.Fatalf("BaseURL = %q", got)
+	}
+}

@@ -30,7 +30,11 @@ type Client struct {
 }
 
 // New returns a Client with defaults suited to a local ml-service.
+// A URL without a scheme (Render's "host:port" service reference) gets http://.
 func New(baseURL string) *Client {
+	if !strings.Contains(baseURL, "://") {
+		baseURL = "http://" + baseURL
+	}
 	return &Client{
 		BaseURL:    strings.TrimRight(baseURL, "/"),
 		HTTP:       &http.Client{},

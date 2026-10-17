@@ -45,7 +45,8 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | P7.2 RAG eval: plan (expected days; retrieval only) / floor sweep on p72_dev / the run (cached, resumable; re-run daily at the Groq cap) | `make rag-eval-plan` / `make rag-floor-sweep` / `make rag-eval` (`ARGS="--limit N"`) → `results/rag/` |
 | Judge validation: sample claims from the RAG run / label them (interactive) / score judges vs human (κ) | `make judge-sample` / `make judge-label` / `make judge-score ARGS=--with-llm` → `results/rag/judge_validation.*` |
 | Monitoring reference distribution for PSI (after a data rebuild) | `make monitoring-ref` → `config/monitoring.yaml` |
-| Demo tickets (P8.1): load (additive, Ids `demo-*`) / expected vs actual / reset ONLY demo rows (typed confirmation) / re-measure expectations | `make demo` (= `make seed`) → `go run ./cmd/worker -once` → `make demo-status`; `make demo-reset`; `make demo-expect` (see `datasets/demo/README.md`) |
+| Demo (P8.1): load the 25 demo tickets, run the pipeline once, show expected vs actual, then start everything / status / reset ONLY demo rows (typed confirmation) / re-measure expectations | `make demo` (= `make seed`; `DEMO_NO_DEV=1` stops before `make dev`); `make demo-status`; `make demo-reset`; `make demo-expect` (see `datasets/demo/README.md`) |
+| Cloud deploy (P8.2): validate the Render blueprint / bundle models for `MODELS_URL` / install a bundle | `make render-validate` / `make models-pack ARGS="fast_tier spam_filter"` / `make models-fetch` (see `docs/deploy.md`) |
 | DB latency diagnostic (region, TCP, fresh vs warm round-trips, pool reuse) | `go run ./cmd/dbping` (`-env TEST_DATABASE_URL` for the test DB) |
 | Kaggle auth check | `cd ml-service && .venv/bin/python -m data.kaggle_auth` |
 | Worker: one poll + classify / loop | `go run ./cmd/worker -once` / `make worker` (loop, `WORKER_POLL_INTERVAL`, default 60s; classifies via `ML_SERVICE_URL`) |
@@ -412,12 +413,22 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - `internal/monitoring` (`PSI`, `Compute`, `Job`): after every poll the worker recomputes yesterday and today (UTC) → `metrics_daily`: `category_psi` (vs `config/monitoring.yaml`, alert > 0.2, none below 30 classified tickets), `abstain_rate`, `sla_breach_rate`, `latency_p95_ms.<stage>` (ml-service calls + ingest_to_classified / ingest_to_draft from timestamps);
   - `GET /metrics/daily?days=` (OpenAPI documented) and a dashboard monitoring table that flags PSI alerts;
   - `make monitoring-ref` regenerates the reference.
+  - Commit `03ee73b`.
   - Commit: backfilled in the next commit.
 
 - P8.1 Demo setup:
   - `datasets/demo/demo_tickets.csv`: 25 hand-written tickets (15 WixQA `demo`-split questions rewritten as emails, 4 out-of-KB, 2 meeting, 2 spam, 2 non-KB billing), with the measured best retrieval score and expected outcome per row (`eval/demo_expect.py`, `make demo-expect`; no LLM calls) and a README;
   - `cmd/demo` (`make demo` = `make seed`, `make demo-status`, `make demo-reset`) and `store.Demo`: load is additive and refuses untagged rows; reset deletes only CSV tickets with Id `demo-*` (cascading their classifications, routes, drafts, meetings, plus their audit rows) in one transaction after typing `reset demo`; status prints expected vs actual;
   - integration test: reset leaves a real CSV row, a Zendesk `demo-77` and `xdemo-01` untouched. Read-only check on Mumbai: 0 demo rows yet.
+  - Commit `eb19a27`.
+- P8.2 Cloud deploy (+ the rest of P8.1's `make demo`):
+  - `render.yaml`: api (web, HTTPS, generated `API_KEY`), worker, ml-service as a **private** service (CPU torch, bundle fetched, bge-small pre-downloaded), Singapore region, secrets as `sync: false`; `make render-validate` (`scripts/validate_render.py`) validates it against Render's published JSON schema plus repo checks: **valid**;
+  - `app/artifacts.py`: `MODELS_URL` + `MODELS_SHA256` → hash-checked, safe-extracted bundle into `MODELS_DIR` (idempotent marker); `make models-pack` (deterministic tar.gz) / `make models-fetch`. CPU-only bundle (fast tier + spam filter) is 6.5 MB;
+  - Go: `API_HOST` / `PORT` fallback, `REQUIRE_HTTPS` (308 to https on `X-Forwarded-Proto: http` + HSTS), `mlclient.New` accepts Render's bare `host:port`;
+  - `docs/deploy.md` (steps, secrets, key rotation, CPU-only profile, costs, what's unverified); `.env.example` documents the new variables and key rotation;
+  - `make demo` now runs `scripts/demo.sh`: load → start the ml-service if needed → `worker -once` (fake calendar) → `demo status` → `make dev`;
+  - optional `docker-compose.yml` + `deploy/{go,ml}.Dockerfile` + `.dockerignore`: **not verified** (Docker daemon not running).
+  - Commit: backfilled in the next commit.
 ### In progress
 - Phase 7 in Arya's order: P7.2 (RAG eval, multi-day at the free cap) → P7.3 monitoring → P8 parts not tied to final numbers → stop with the consolidated manual checklist. P7.1 / P7.4 wait for Arya's artifacts and labels.
 
@@ -492,6 +503,13 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
 
 ## 5. Decisions log
 
+- 2026-10-17 (P8.2): **Deploy design.**
+  - The ml-service has no auth, so on Render it is a **private service** (`pserv`), reachable only from the api and the worker via `fromService … hostport`. `mlclient.New` adds `http://` to a bare host:port.
+  - **Models from a URL:** `MODELS_URL` + mandatory `MODELS_SHA256`. The download must be https and ≤ 2 GiB; the hash is checked before extraction; extraction allows regular files and directories only (no links, absolute paths or `..`, plus Python's `data` filter); whole artifact directories are replaced, never merged; a marker file makes it idempotent. `pack` is deterministic (sorted members, zeroed owners and mtimes, fixed gzip header).
+  - **HTTPS:** TLS is the platform's; `REQUIRE_HTTPS=true` redirects requests the proxy saw as http (308) and adds HSTS. Requests without `X-Forwarded-Proto` (internal health checks) pass. The API key is generated by Render and never appears in config or the page.
+  - **Plans:** Render has no free plan for workers or private services; ml is `standard` (2 GB) for torch + bge-small. Region Singapore (closest to Supabase ap-south-1).
+  - **Validation:** `scripts/validate_render.py` uses Render's own JSON schema (downloaded at run time) plus repo checks; a planted invalid plan, a dangling `fromService` and an inline secret were all caught. No deploy was made (Arya's account).
+  - `make demo` (P8.1 spec: seed, run the pipeline, start everything) is `scripts/demo.sh`. It isn't run end to end here: it writes to DATABASE_URL, processes the 21 older sample tickets too, and spends ~5k gpt-oss tokens per draft from the cap the P7.2 run is using. It's on Arya's checklist.
 - 2026-10-17 (P8.1): **Demo data is tagged by Id, not a separate schema.** Every demo row has `Id = demo-NN` (CSV external_id), so `make demo-reset` can delete exactly those (`source='csv' and external_id like 'demo-%'`) with cascades, after a typed confirmation and a row-count check inside the transaction. A separate schema would need its own migrations, KB copy and search_path in every service. The 21 older sample tickets are not demo-tagged and are never touched by reset.
   - The expected outcome per row is **measured** (`make demo-expect`: retrieval only, against the live KB) rather than assumed. Measured 2026-10-17: all 15 WixQA rows clear the floor 0.7177 (scores 0.7575–0.8969); for 4 of them the gold article isn't in the top 5 (demo-05, 08, 09, 10). The out-of-KB rows score 0.5883–0.6717 → abstain. demo-24 (duplicate charge, 0.7415) is drafted and left to the judge; demo-25 (VAT invoices, 0.7157) abstains. Meeting rows → schedule, spam → mute.
   - Not loaded into Mumbai yet: loading and running the worker are Arya's demo-day steps (checklist), since the worker also processes the 21 older tickets.

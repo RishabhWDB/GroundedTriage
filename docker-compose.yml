@@ -1,0 +1,36 @@
+# OPTIONAL one-command containerised demo (P8.1). It points at Supabase via
+# DATABASE_URL from .env; there is no local Postgres. The native path
+# (make setup && make migrate && make demo) is the supported one.
+#
+#   docker compose up --build        # then open http://127.0.0.1:8080/
+#   docker compose run --rm demo     # load the demo tickets (Ids demo-*)
+services:
+  ml:
+    build: {context: ., dockerfile: deploy/ml.Dockerfile}
+    env_file: .env
+    environment:
+      MODELS_DIR: /app/models
+    volumes:
+      - ./models:/app/models
+  api:
+    build: {context: ., dockerfile: deploy/go.Dockerfile}
+    env_file: .env
+    environment:
+      API_HOST: 0.0.0.0
+      ML_SERVICE_URL: http://ml:8001
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on: [ml]
+  worker:
+    build: {context: ., dockerfile: deploy/go.Dockerfile}
+    entrypoint: ["/app/bin/worker"]
+    env_file: .env
+    environment:
+      ML_SERVICE_URL: http://ml:8001
+      MEETING_CALENDAR: fake
+    depends_on: [ml]
+  demo:
+    build: {context: ., dockerfile: deploy/go.Dockerfile}
+    entrypoint: ["/app/bin/demo", "load"]
+    env_file: .env
+    profiles: [tools]

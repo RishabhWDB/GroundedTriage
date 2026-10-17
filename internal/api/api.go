@@ -128,6 +128,22 @@ func RequireAPIKey(key string) gin.HandlerFunc {
 	}
 }
 
+// RequireHTTPS is for deployments behind a TLS-terminating proxy (Render):
+// a request the proxy saw as plain HTTP (X-Forwarded-Proto: http) is
+// redirected to https, and every response carries HSTS. Requests without the
+// header (e.g. the platform's internal health checks) pass through.
+func RequireHTTPS() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "http") {
+			c.Redirect(http.StatusPermanentRedirect, "https://"+c.Request.Host+c.Request.URL.RequestURI())
+			c.Abort()
+			return
+		}
+		c.Header("Strict-Transport-Security", "max-age=31536000")
+		c.Next()
+	}
+}
+
 // Register adds the API routes to r (GET /health is the caller's).
 func (s *Server) Register(r gin.IRouter) {
 	g := r.Group("/", RequireAPIKey(s.APIKey))

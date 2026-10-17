@@ -32,9 +32,12 @@ func getenv(key, def string) string {
 	return def
 }
 
-func newRouter(ml *mlclient.Client, srv *api.Server) *gin.Engine {
+func newRouter(ml *mlclient.Client, srv *api.Server, requireHTTPS bool) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
+	if requireHTTPS {
+		r.Use(api.RequireHTTPS())
+	}
 	if srv != nil {
 		srv.Register(r)
 		ui.Register(r)
@@ -86,8 +89,11 @@ func main() {
 		APIKey:    key,
 		UploadDir: getenv("UPLOAD_DIR", "datasets/out/uploads"),
 	}
-	addr := "127.0.0.1:" + getenv("API_PORT", "8080")
-	srv := &http.Server{Addr: addr, Handler: newRouter(ml, apiSrv), ReadHeaderTimeout: 10 * time.Second}
+	// Locally the API binds 127.0.0.1; a cloud host sets API_HOST=0.0.0.0 and
+	// REQUIRE_HTTPS=true (TLS is terminated by the platform's proxy).
+	addr := getenv("API_HOST", "127.0.0.1") + ":" + getenv("API_PORT", getenv("PORT", "8080"))
+	handler := newRouter(ml, apiSrv, os.Getenv("REQUIRE_HTTPS") == "true")
+	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		log.Printf("api listening on http://%s", addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
