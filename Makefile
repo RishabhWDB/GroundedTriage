@@ -13,7 +13,7 @@ ML_PORT ?= 8001
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
 
-.PHONY: setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier urgency-eval tune-tau sample-check
+.PHONY: setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier urgency-eval tune-tau sample-check style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -106,6 +106,12 @@ tune-tau: ## P3.4: sweep the cascade threshold on val (needs models/deep_tier/) 
 
 sample-check: ## Out-of-domain check on the 22 hand-written sample emails (cascade + SCRIBE) -> results/ood/
 	cd $(ML_DIR) && $(VPY) -m eval.sample_check --with-baseline
+
+style-aug: ## P3.8: informal-style paraphrases of ~25% of train via Groq (resumable; days on the free tier) -> datasets/synthetic/style_aug.jsonl
+	cd $(ML_DIR) && $(VPY) -m data.style_aug
+
+spam-filter: ## P3.9: train the binary spam filter, thresholds on spam_val -> models/spam_filter/, results/spam_filter/
+	cd $(ML_DIR) && $(VPY) -m triage.train_spam_filter
 
 seed: ## Seed demo data (implemented in P8.1)
 	@echo "seed: not implemented yet (P8.1)"; exit 1

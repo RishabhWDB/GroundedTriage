@@ -174,3 +174,31 @@ def test_spam_splits_share_the_topic_assignment():
     ]  # fmt: skip
     a = content_sha256(splits["spam_test"])
     assert a == content_sha256(splits["spam_test"].copy())
+
+
+def test_style_aug_split_keeps_train_sources_only():
+    from data.build import style_aug_split
+
+    splits, _ = assemble(frames())
+    train = splits["train"]
+    src = train.iloc[:3]
+    aug = pd.DataFrame(
+        {
+            "id": [f"aug-{i}" for i in src["id"]] + ["aug-gone"],
+            "aug_of": [*src["id"], "not-in-train"],
+            "source_dataset": "style_aug",
+            "origin": "augmented",
+            "category": [*src["category"], "Billing"],
+            "urgency": [*src["urgency"], None],
+            "subject": "hey",
+            "body": "informal rewrite",
+        }
+    )
+    out = style_aug_split(train, aug)
+    assert list(out["aug_of"]) == sorted(src["id"]) or set(out["aug_of"]) == set(src["id"])
+    assert (out["origin"] == "augmented").all() and (out["text"] == "hey\n\ninformal rewrite").all()
+    assert content_sha256(out) != content_sha256(out.assign(aug_of="x"))
+    bad = aug.iloc[:1].assign(category="Spam")
+    with pytest.raises(ValueError, match="disagree"):
+        style_aug_split(train, bad)
+    assert style_aug_split(train, aug.iloc[:0]).empty

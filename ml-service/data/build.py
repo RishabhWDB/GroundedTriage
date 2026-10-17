@@ -51,6 +51,8 @@ OUT_DIR = REPO_ROOT / "datasets" / "processed"
 CARD_PATH = REPO_ROOT / "datasets" / "README.md"
 COLUMNS = ["id", "source_dataset", "origin", "category", "urgency", "subject", "body", "text"]
 SPAM_COLUMNS = [*COLUMNS, "is_spam"]
+AUG_COLUMNS = [*COLUMNS, "aug_of"]
+STYLE_AUG_PATH = REPO_ROOT / "datasets" / "synthetic" / "style_aug.jsonl"
 HAM = "Ham"  # stratum label for ham rows (no topic category)
 TOPIC_SPLITS = ("train", "val", "test")
 SPAM_SPLITS = {"train": "spam_train", "val": "spam_val", "test": "spam_test"}
@@ -133,7 +135,13 @@ def cap_train(
 
 def content_sha256(df: pd.DataFrame) -> str:
     """Hash of the split's content, independent of parquet/pyarrow versions."""
-    cols = SPAM_COLUMNS if "is_spam" in df.columns else COLUMNS
+    cols = (
+        SPAM_COLUMNS
+        if "is_spam" in df.columns
+        else AUG_COLUMNS
+        if "aug_of" in df.columns
+        else COLUMNS
+    )
     h = hashlib.sha256()
     for row in df[cols].itertuples(index=False):
         vals = [None if pd.isna(v) else v.item() if isinstance(v, np.generic) else v for v in row]
@@ -198,6 +206,20 @@ def assemble(frames: list[pd.DataFrame]) -> tuple[dict[str, pd.DataFrame], dict]
     }
 
 
+def style_aug_split(train: pd.DataFrame, aug: pd.DataFrame) -> pd.DataFrame:
+    """train_style_aug: augmented rows whose source row is in the (capped)
+    train split, with labels re-checked against that source."""
+    if aug.empty:
+        return pd.DataFrame(columns=AUG_COLUMNS)
+    src = train.set_index("id")
+    aug = aug[aug["aug_of"].isin(src.index)].copy()
+    if (aug["category"].to_numpy() != src.loc[aug["aug_of"], "category"].to_numpy()).any():
+        raise ValueError("style_aug rows disagree with their source category")
+    aug["urgency"] = aug["urgency"].where(aug["urgency"].notna(), None)
+    aug["text"] = [model_input(s, b) for s, b in zip(aug["subject"], aug["body"], strict=True)]
+    return aug[AUG_COLUMNS].sort_values("id").reset_index(drop=True)
+
+
 def _counts(splits: dict[str, pd.DataFrame], col: str) -> pd.DataFrame:
     return (
         pd.DataFrame({k: v[col].value_counts(dropna=False) for k, v in splits.items()})
@@ -227,7 +249,8 @@ def write_card(splits, info, stats, manifest) -> str:
         pd.DataFrame(
             {
                 k: splits[k]["urgency"].fillna("(none)").value_counts()
-                for k in (*TOPIC_SPLITS, "train_urgency")
+                for k in (*TOPIC_SPLITS, "train_urgency", "train_style_aug")
+                if k in splits
             }
         )
         .fillna(0)
@@ -263,6 +286,13 @@ def write_card(splits, info, stats, manifest) -> str:
         f"- **Topic task** (`train`/`val`/`test`, fast + deep tiers): the 5 topic categories {', '.join(info['topic_categories'])}. Spam is decided by the binary spam filter, not the topic classifier.",
         f"- Topic train only: classes capped at {CAP_RATIO}× the smallest real topic class = {info['train_cap']} rows; removed {info['train_cap_removed']}. val/test are not resampled. Remaining imbalance is handled with class weights at training time (docs/model_artifacts.md).",
         "- **Spam-filter task** (`spam_train`/`spam_val`/`spam_test`, `is_spam`): every row of the split: spam (positives), ham and uncapped support tickets (negatives), so neither writing style nor source predicts the label on its own.",
+        *(
+            [
+                f"- `train_style_aug` (optional, train only): {info['style_aug_rows']} of a planned ~{info['style_aug_target']} informal-style paraphrases of `train` rows by gpt-oss-120b (`data/style_aug.py`, seed and prompt in the module; `origin=augmented`, `aug_of` = source id). For the with/without ablation; never in val/test."
+            ]
+            if "style_aug_rows" in info
+            else []
+        ),
         f"- `train_urgency`: the uncapped train rows with an urgency label ({len(splits['train_urgency'])} rows). Same row pool as `train` before the cap, so it shares no rows with val/test.",
         f"- Model input (`text` column): {MODEL_INPUT_FORMAT} (`app/textinput.py`).",
         f"- Urgency: only Tobi-Bueck rows are labelled ({', '.join(trained_urgency_levels())}); spam and synthetic rows have none. No English 'critical' rows exist.",
@@ -303,6 +333,11 @@ def main() -> int:
     syn_df = load_synthetic()
     splits, info = assemble([tb_df, sa_df, ham_df, syn_df])
     info["synthetic_rows"] = len(syn_df)
+    if STYLE_AUG_PATH.exists():
+        aug = pd.read_json(STYLE_AUG_PATH, lines=True, dtype={"urgency": object})
+        splits["train_style_aug"] = style_aug_split(splits["train"], aug)
+        info["style_aug_rows"] = len(splits["train_style_aug"])
+        info["style_aug_target"] = round(len(splits["train"]) * 0.25)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     manifest = {"seed": SEED, "fractions": FRACTIONS, "cap_ratio": CAP_RATIO, "splits": {}, **info}

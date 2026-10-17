@@ -46,6 +46,7 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
 | Build splits + dataset card (downloads raw data on first run) | `make data` |
 | Data audit (synthetic diversity, train→test near-dups, subject shortcut) | `make data-audit` → `results/data_audit/report.md` |
 | Hard Meeting stress-test CSV (Groq; refuses to overwrite a reviewed file without `--force`) | `make stress-set` → `datasets/stress/meeting_stress.csv` |
+| Informal-style paraphrases of 25% of train (Groq; resumable; days on the free tier) | `make style-aug` (`--recheck` drops near-copies) → `datasets/synthetic/style_aug.jsonl`, then `make data` |
 | Bundle splits for the GPU PC | `make export-splits` → `datasets/export/groundedtriage-splits-<test hash>.tar.gz` |
 | Regenerate synthetic meeting emails (Groq; cached, resumable) | `make synthetic-meetings` |
 | Install torch + transformers for the deep tier / urgency model | `make setup-models` |
@@ -238,13 +239,17 @@ Everything runs natively on macOS arm64, with no Docker. Copy `.env.example` to 
   - the audit covers both tasks (0 cross-split near-duplicate pairs);
   - the export ships only manifest splits;
   - `docs/model_artifacts.md` is 5-class. Export tag **`e2552b04338b`**.
+  - Commit `7d07510`.
+- P3.8 Style augmentation generator (data in a follow-up commit):
+  - `data/style_aug.py` (`make style-aug`, resumable): 25% of each topic train class (3,978 rows), seeded order, gpt-oss-120b informal paraphrases, 8 per call; near-copy check (body cosine > 0.9 rejected); `--recheck`; JSON-mode failures retried;
+  - `data.build.style_aug_split` → `train_style_aug.parquet` (rows whose source is in train, labels checked).
   - Commit: backfilled in the next commit.
 
 ### In progress
 - Phase 3 rework after the review (2026-10-17): a two-stage spam filter plus a 5-class topic classifier, a style-augmentation file, and the OOD evaluation set. Run P3.6–P3.12 through, then print an updated Phase 3 review.
 
 ### To do
-- P3.8 Optional `train_style_aug` (gpt-oss-120b informal paraphrases of ~25% of train)
+- P3.8a Commit the generated `datasets/synthetic/style_aug.jsonl` and rebuild/re-export (when the Groq run finishes; several days on the free tier)
 - P3.9 Binary spam filter (train, threshold at ≤ 1% support FPR on val, review band)
 - P3.10 Cascade + contract: spam filter first (`tier=spam_filter`, possible-spam flag), migration
 - P3.11 OOD evaluation set (Twitter customer support, team-written template, non-SpamAssassin spam) + `make ood-eval` gate
@@ -380,6 +385,14 @@ Arya fine-tunes these on a separate GPU PC; this repo only loads them. **Never w
   - The CSV is committed at `datasets/stress/meeting_stress.csv` with columns `intended_category`, `category` (editable), `needs_review` (all `true`) and `reviewer_notes`. **It's evaluation-only, never trained on, and not in the PC export.** No number on it is reported until Arya has reviewed every row; `load_reviewed()` enforces this.
   - Checks: 100 unique bodies (median 459 chars); 0 near-duplicates with the 25,164-row corpus and 0 within the set.
   - Also tracked: **real** test tickets that mention a meeting word but aren't Meeting Scheduling. That's 196 rows (Technical 83, Spam 50, Feature 27, Billing 19, General 17), selected by the audit's `MEETING_WORDS` regex. P2.3 and P7 report this slice. The regex also matches e.g. "call 1-888…" in spam.
+- 2026-10-17 (P3.8): Style augmentation:
+  - Selection: 25% of each class of the capped topic `train` (`select`, seed **2026**) = **3,978 rows**, shuffled so any prefix is a stratified sample.
+  - Prompt fixed in the module: keep the same request, product and facts; replace `<name>`/`<acc_num>`-style tokens with invented values; no stock phrases. Each row gets a seeded style spec: register (6), length (2), greeting (5), typos (3), subject style (3).
+  - gpt-oss-120b, temperature 0.9, JSON mode, 8 rows per call; responses cached by request sha256.
+  - Rows are rejected when the body is too short, has a placeholder, or has word-unigram cosine > 0.9 to the source **body**. The first run compared against subject+body; `--recheck` re-applied the body rule and removed 2 of 172.
+  - Output rows: `id = aug-<source id>`, `aug_of`, the source's category and urgency, `origin=augmented`, the style spec. `data.build` keeps the rows whose source is in the current capped train and checks labels match.
+  - **Groq free-tier limits on this key:** 1,000 requests/day and 8,000 tokens/minute (from response headers), plus a daily token cap (about 200k/day for gpt-oss-120b on the free tier, my recollection, not confirmed). The pilot cost about 450 tokens per accepted row, so all 3,978 rows ≈ 1.8M tokens ≈ **~9 days on the free tier** (well under $1 on the paid dev tier). The run is resumable and is restarted until done; the PC's without-augmentation run doesn't need it.
+  - Groq JSON mode sometimes returns HTTP 400 `json_validate_failed`; that's now a bad attempt (retried) instead of stopping the run.
 - 2026-10-17 (P3.7): **Two-task rebuild. This supersedes the P2.1h split hashes and export.**
   - Corpus: Tobi-Bueck 23,228 + SpamAssassin spam 1,553 + ham 4,089 + synthetic meetings 400, minus 18 cross-source duplicate bodies = 29,252 rows. Near-duplicate groups: 1,862 groups covering 4,328 rows (largest 14).
   - One group-aware 70/15/15 assignment, stratified by **label × origin** (label = category, or "Ham"). Both tasks are cut from it, so a row in one task's train is never in the other task's val/test. **Each stratum now has its own RNG** (seeded by seed + a hash of the stratum), so adding a stratum never reshuffles the others. This change, plus ham joining the near-duplicate corpus, **reshuffled the test split**: only 641 of the 3,545 new topic test rows were in the old test.
