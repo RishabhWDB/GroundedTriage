@@ -13,13 +13,13 @@ Each finished part is one commit tagged `[P<phase>.<part>]`; `git log --oneline`
 - **Phase 4** routing: rule engine, no-reply, SLA escalation, meeting extraction/scheduling/Google Calendar/meeting step: P4.1–P4.3, P4.4a–d.
 - **Phase 5** RAG: KB ingestion, retriever, generator, faithfulness gate, Go reply step, reranker (rejected): P5.1–P5.6.
 - **Phase 6** review: queries, REST API, UI, outbound, dashboard, review follow-ups: P6.1a, P6.1b, P6.2–P6.5.
-- **Phase 7 so far:** P7.1a val-tuned SCRIBE wording (`make scribe-tune`, not run yet), P7.2a RAG eval harness, P7.2b judge-labelling CLI, P7.2c dropped-DB-connection fix, P7.2d Groq 429 message fix, P7.2e crash-safe writes + one-job memory guard (after the OOM reboot), P7.3 monitoring.
+- **Phase 7 so far:** P7.1a val-tuned SCRIBE wording (`make scribe-tune`, not run yet), P7.2a RAG eval harness, P7.2b judge-labelling CLI, P7.2c dropped-DB-connection fix, P7.2d Groq 429 message fix, P7.2e crash-safe writes + one-job memory guard (after the OOM reboot), P7.2f eval PC support (CUDA device selection, Linux/WSL2 job guard, `docs/pc_setup.md`, two-machine rule), P7.3 monitoring.
 - **Phase 8 so far:** P8.1 demo set + load/status/reset, P8.2 Render deploy + model bundles, P8.3a docs skeleton (finalised after P7.4), P8.3b CLAUDE.md split into `docs/`.
 
 ## In progress
 
 - Phase 7 in Arya's order: P7.2 (RAG eval, multi-day at the free cap) → P7.3 monitoring (done) → P8 parts not tied to final numbers (done) → stop with the consolidated manual checklist. P7.1 / P7.4 wait for Arya's artifacts and labels.
-- **Paused after the 2026-10-17 OOM reboot, awaiting Arya's go-ahead** to resume P7.2 (`make rag-eval`) or run `make scribe-tune`, one job at a time. Recovery and scribe-tune are committed (P7.2e, P7.1a). Uncommitted:
+- **Evals move to the eval PC (2026-10-18; P7.2f).** The Mac runs only the app. Next: Arya sets up the PC and copies the bundle (`docs/pc_setup.md`, manual item 13), then on the PC, one job at a time: `make rag-eval` (P7.2, day 2) → `make scribe-tune` (P7.1). On the Mac the guard refused both on 2026-10-18 07:10 (memory pressure warn), so neither ran. Uncommitted (copied to the PC in the bundle):
   - `ml-service/eval/compare.py` (P7.1 comparison harness): lint-clean, untested, no make targets yet (`compare`, `compare-final`, `report` planned);
   - `results/rag/{metrics.json,report.md}` from the day-1 stop (23 of 556 rows; PRELIMINARY, rewritten by each run).
 - P7.2 day-1 status: stopped at the rolling daily cap after 23 of 556 rows (style-aug had used the earlier part of the 24 h window); resumed 21:11 IST, then the reboot.
@@ -32,7 +32,7 @@ Each finished part is one commit tagged `[P<phase>.<part>]`; `git log --oneline`
 - P7.4 Results report (`results/REPORT.md`; see report_notes.md).
 - P8.3 Finalise docs with the P7.4 numbers.
 
-**Claude's background item:** `make rag-eval` once per day until all 556 rows are done (P7.2 has priority), then `make style-aug` once per day (Groq free cap) until 3,978 rows, then `make data && make export-splits` (P3.8b). One job at a time (memory rules).
+**Claude's background item (on the eval PC, from 2026-10-18):** `make rag-eval` once per day until all 556 rows are done (P7.2 has priority), then `make style-aug` once per day (Groq free cap) until 3,978 rows, then `make data && make export-splits` (P3.8b). One job at a time (memory rules).
 
 ## Blocked / needs input
 
@@ -56,6 +56,7 @@ Keep this list current: add items as they arise, remove them when done.
 | 10 | **Hand-label judge claims** (judge validation, P7.2): for each claim, answer whether the shown sources support it (y/n/u). The judge's verdicts are hidden. About 80 claims, ~30–40 min; resumable (q quits). Ready once Claude has run `make judge-sample` on the first day of P7.2 rows | `datasets/judge_labels/claims.csv` (via the CLI) | `make judge-label` → `make judge-score ARGS=--with-llm` (κ for qwen and gpt-oss-120b; gate-judge κ < 0.6 → revisit the judge) |
 | 11 | Demo day: `make demo` (loads demo rows, runs the worker once — this also processes the 21 older sample tickets in DATABASE_URL and spends ~5k gpt-oss tokens per draft) | DATABASE_URL | `make demo-status`; `make demo-reset` afterwards if wanted |
 | 12 | Deploy to Render (your account) following `docs/deploy.md` | Render | — |
+| 13 | **Set up the eval PC** (WSL2 driver check, Python 3.11, Go, `make setup` + `make setup-baseline`, CUDA check) and copy the 187.8 MB bundle + `.env` from the Mac | `docs/pc_setup.md` | on the PC: `make lint && make test` → `make ood-eval` (smoke) → `make rag-eval` → `make scribe-tune` |
 
 ## Deferred decisions (decide in Phase 7)
 

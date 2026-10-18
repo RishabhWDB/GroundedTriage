@@ -1,4 +1,4 @@
-# GroundedTriage — native macOS (arm64) dev workflow. No Docker required.
+# GroundedTriage — native workflow (macOS arm64 app, WSL2 Ubuntu + CUDA eval PC). No Docker required.
 SHELL := /bin/bash
 
 PYTHON ?= python3.11
@@ -21,7 +21,7 @@ ML_PORT ?= 8001
 .PHONY: scribe-tune render-validate models-pack models-fetch demo demo-status demo-reset demo-expect kb retrieval-eval monitoring-ref judge-sample judge-label judge-score rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
-	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
+	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (macOS: brew install python@3.11; Ubuntu: docs/pc_setup.md)"; exit 1; }
 	test -d $(VENV) || $(PYTHON) -m venv $(VENV)
 	$(VPY) -m pip install --upgrade pip
 	cd $(ML_DIR) && $(VPY) -m pip install -e ".[dev,data]"

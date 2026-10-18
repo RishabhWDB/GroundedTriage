@@ -3,7 +3,7 @@
 
 Validation is cheap and happens at construction (file checks, label_map,
 model_card). Weights load lazily on the first predict() and stay resident
-(one model per role; 8 GB RAM). On MPS the model runs in fp16 unless
+(one model per role; 8 GB RAM). On MPS or CUDA the model runs in fp16 unless
 MODEL_FP16=false. Any problem, at validation or at load, makes the
 artifact unavailable with a logged reason; nothing here raises to the
 service.
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from app.device import select_device
+from app.device import select_device, use_fp16
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +162,7 @@ class HFClassifier:
                 raise ArtifactError(
                     f"model has {model.config.num_labels} outputs, label_map has {len(self.labels)}"
                 )
-            if self.device == "mps" and self._fp16:
+            if use_fp16(self.device, self._fp16):
                 model = model.half()
             model.to(self.device).eval()
         except Exception as exc:  # bad weights, tokenizer, device
@@ -174,7 +174,7 @@ class HFClassifier:
             self.task,
             self.version,
             self.device,
-            self.device == "mps" and self._fp16,
+            use_fp16(self.device, self._fp16),
             time.perf_counter() - t0,
         )
         return True

@@ -8,7 +8,7 @@ GroundedTriage is a capstone: an agentic support-triage system that extends SCRI
 
 ## Install, run, test
 
-Native macOS arm64, no Docker. Copy `.env.example` to `.env` and fill it in (put values containing `$` in single quotes).
+No Docker. Two machines: the **Mac** (macOS arm64, 8 GB) runs only the final app (`make dev`, `make demo`); the **eval PC** (Windows WSL2 Ubuntu, RTX 3050 4 GB, CUDA) runs all training-adjacent work and evaluation (setup and the files to copy: `docs/pc_setup.md`). Copy `.env.example` to `.env` and fill it in (put values containing `$` in single quotes).
 
 | Task | Command |
 |---|---|
@@ -34,6 +34,7 @@ Every other target (data, training, evals, demo, deploy) and the manual UI test:
 
 ## Rules and conventions
 
+- **Two-machine rule:** `git pull` before starting on either machine; push when done (Arya pushes; Claude still never pushes, so Claude ends a session with everything committed and tells Arya to push). Never work on both machines at once. While evals run, the PC owns `results/` (and `datasets/raw/` caches): don't change or commit them on the Mac. Untracked eval inputs move by copy, not git (`docs/pc_setup.md` §4).
 - **Commits:** `<type>(<scope>): <summary>  [P<phase>.<part>]` with a bullet body; types `feat|fix|test|docs|chore|refactor` only. One commit per part. **Never push, branch or rewrite history; Arya pushes.** `make lint` **and** `make test` must both pass before committing.
 - **Status updates and phase reviews:** print them in chat and also write them to `summary.md` (gitignored), rewritten each time with only the latest update. Keep `docs/status.md` current (finished parts, in progress, Arya's manual checklist).
 - **Never write training code for the deep tier or urgency model.** Arya trains them on a GPU PC; this repo only loads them (contract: `docs/model_artifacts.md`).
@@ -48,12 +49,12 @@ Every other target (data, training, evals, demo, deploy) and the manual UI test:
 - **Groq budget:** gpt-oss-120b has 200k tokens/day shared by all jobs. P7.2 first, then style-aug. Every LLM batch job must be cached and resumable.
 - **Dependencies:** add Python deps in the part that first needs them; heavy ML deps stay optional extras. Env vars are documented in `.env.example`.
 
-### Memory rules (8 GB M1)
+### Memory rules (8 GB M1; 4 GB VRAM on the PC)
 
 - **At most ONE model-loading or LLM-batch job at a time; never run evals in parallel**, and never start a job in the background while another runs (including a long `make rag-eval` / `make style-aug`).
-- **Before any model job, check memory** (`sysctl kern.memorystatus_vm_pressure_level`, `memory_pressure -Q`) and **refuse to start if pressure is warn/critical** or free memory is < 20%. Log peak RSS and swap afterwards.
+- **Before any model job, check memory** (macOS: `sysctl kern.memorystatus_vm_pressure_level`, `memory_pressure -Q`; Linux/WSL2: `/proc/pressure/memory`, `/proc/meminfo`, `nvidia-smi`) and **refuse to start if pressure is warn/critical** or free memory is < 20%. Log peak RSS and swap afterwards.
 - **Stop `make dev` services when the step doesn't need them; kill leftover python processes when a job finishes.**
-- **Jobs cap their own memory:** lazy loading, bounded batch sizes, unload after use, checkpoint long passes. At most one transformer per role, fp16 on MPS, record RSS + swap in every eval run. The SCRIBE baseline (BART-MNLI ~1.6 GB) never loads inside the ml-service.
+- **Jobs cap their own memory:** lazy loading, bounded batch sizes, unload after use, checkpoint long passes. At most one transformer per role, fp16 on MPS/CUDA, record RSS + swap in every eval run. The SCRIBE baseline (BART-MNLI ~1.6 GB) never loads inside the ml-service.
 - `scripts/jobguard.py` enforces this on every model/LLM make target (lock, pressure check, service check, process-group cleanup, peak RSS log in `datasets/raw/jobguard.jsonl`). Run those jobs through make, not `python -m`, so the guard applies. `JOBGUARD_FORCE=1` is Arya's call only.
 - **Crash-safe writes:** whole files (caches, splits, manifests, reviewed CSVs, tuned configs) via `app/fileio.atomic_write_text` / `atomic_path`; append-only JSONL via `open_append` + `append_line` and read via `read_jsonl`. New writers must use these.
 
@@ -75,6 +76,7 @@ Every other target (data, training, evals, demo, deploy) and the manual UI test:
 ## Further reading
 
 - `docs/status.md`: read at the start of every session and after finishing a part (done list, in progress, Arya's manual checklist, deferred Phase 7 decisions, model artifacts present).
+- `docs/pc_setup.md`: read before setting up or syncing the eval PC (WSL2, CUDA check, make targets, the files to copy from the Mac and their sizes).
 - `docs/commands.md`: read when you need any make target, script or curl beyond the table above, or to run the manual UI test.
 - `docs/decisions.md`: read the section for an area before changing its code or config (ingestion, data/splits, classification, evaluation protocol, routing/meetings, RAG, review/API/UI/outbound, monitoring, demo/deploy, LLM limits).
 - `docs/results.md`: read before comparing a new run with earlier numbers, making a Phase 7 decision, or writing results.

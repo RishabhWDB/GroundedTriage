@@ -1,6 +1,6 @@
 # Command reference
 
-Read when you need a make target or script beyond the core ones in CLAUDE.md. Model-loading and LLM-batch targets run under `scripts/jobguard.py` (see CLAUDE.md → memory rules). Everything runs natively on macOS arm64; copy `.env.example` to `.env` first.
+Read when you need a make target or script beyond the core ones in CLAUDE.md. Model-loading and LLM-batch targets run under `scripts/jobguard.py` (see CLAUDE.md → memory rules). Everything runs natively (no Docker): app targets on the Mac, model/eval targets on the WSL2 eval PC (`docs/pc_setup.md`); copy `.env.example` to `.env` first.
 
 ## Services and checks
 

@@ -121,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         src.add_argument("--split", choices=["train", "val", "test"], default="test")
         src.add_argument("--csv", help="SCRIBE-format CSV (Sender,Subject,Body[,Label])")
         p.add_argument("--limit", type=int, default=None)
-        p.add_argument("--device", default=None, help="cpu | mps (default: auto)")
+        p.add_argument("--device", default=None, help="cpu | mps | cuda (default: auto)")
         p.set_defaults(fn=fn)
         if name == "classify":
             p.add_argument("--out", help="write predictions as JSON lines")
@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--batch-size", type=int, default=4, help="4 was fastest on M1 MPS")
     p.add_argument("--latency-n", type=int, default=100, help="single-ticket latency sample")
     p.add_argument("--out", default=None, help="output dir (default results/baseline)")
-    p.add_argument("--device", default=None, help="cpu | mps (default: auto)")
+    p.add_argument("--device", default=None, help="cpu | mps | cuda (default: auto)")
     p.add_argument(
         "--stress-only",
         action="store_true",

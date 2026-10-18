@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     judge_reasoning_effort: str = ""
     judge_max_tokens: int = 1000
     torch_device: str = ""
-    # fp16 inference on MPS for the fine-tuned transformers (8 GB RAM).
+    # fp16 inference on MPS/CUDA for the fine-tuned transformers (8 GB RAM / 4 GB VRAM).
     model_fp16: bool = True
     # Spam filter operating point: a key of models/spam_filter/model_card.json "rules".
     # support_and_ham was chosen on val + ood-dev (P3.12): it meets the support

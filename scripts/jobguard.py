@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Job guard for model-loading and LLM-batch make targets (8 GB M1; added after
-the 2026-10-17 out-of-memory reboot). Stdlib only.
+"""Job guard for model-loading and LLM-batch make targets (8 GB M1, and the
+WSL2 eval PC; added after the 2026-10-17 out-of-memory reboot). Stdlib only.
 
     jobguard.py --name rag-eval --cwd ml-service -- .venv/bin/python -m eval.rag_eval
     jobguard.py --name dev --check-only -- honcho start     # servers: checks, no lock
 
 Before starting:
-- memory: refuses when macOS reports memory pressure warn/critical
-  (kern.memorystatus_vm_pressure_level >= 2) or free memory < JOBGUARD_MIN_FREE_PCT
-  (default 20%, from `memory_pressure -Q`);
+- memory: refuses when memory pressure is warn/critical or free memory is below
+  JOBGUARD_MIN_FREE_PCT (default 20%).
+  macOS: kern.memorystatus_vm_pressure_level >= 2; free from `memory_pressure -Q`.
+  Linux/WSL2: PSI /proc/pressure/memory when the kernel has it (some avg10 >= 10%
+  is warn, full avg10 >= 10% is critical; no pressure check without PSI); free is
+  MemAvailable / MemTotal from /proc/meminfo (under WSL2 that is the VM's memory,
+  capped by .wslconfig). GPU memory (nvidia-smi) is recorded, not checked;
 - services: refuses while the ml-service (uvicorn app.main) or honcho (make dev)
   runs, unless --allow-services; stop them when the step doesn't need them;
 - one job at a time: an exclusive flock on datasets/raw/.jobguard.lock; a second
@@ -17,8 +21,9 @@ JOBGUARD_FORCE=1 skips the memory and service checks (never the lock).
 
 While running: the command is its own process group; Ctrl-C/TERM are forwarded.
 After it exits: leftover processes in the group (tokenizer/multiprocessing
-workers) get SIGTERM then SIGKILL, and peak RSS + swap are printed and appended
-to datasets/raw/jobguard.jsonl. Exit status is the command's.
+workers) get SIGTERM then SIGKILL, and peak RSS + swap (+ GPU memory when
+nvidia-smi exists) are printed and appended to datasets/raw/jobguard.jsonl.
+Exit status is the command's.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ import json
 import os
 import re
 import resource
+import shutil
 import signal
 import subprocess
 import sys
@@ -44,6 +50,10 @@ SERVICE_PATTERNS = {
     "make dev (honcho)": "honcho start",
 }
 PRESSURE_NAMES = {1: "normal", 2: "warn", 4: "critical"}
+MEMINFO = Path("/proc/meminfo")
+PSI_MEMORY = Path("/proc/pressure/memory")
+# PSI avg10 (% of the last 10 s that tasks stalled on memory) mapped onto the macOS levels.
+PSI_WARN_SOME, PSI_CRITICAL_FULL = 10.0, 10.0
 
 
 def _run(cmd: list[str]) -> str:
@@ -53,7 +63,14 @@ def _run(cmd: list[str]) -> str:
         return ""
 
 
-def memory_state() -> dict:
+def _read(path: Path) -> str:
+    try:
+        return path.read_text()
+    except OSError:
+        return ""
+
+
+def macos_memory_state() -> dict:
     level = _run(["sysctl", "-n", "kern.memorystatus_vm_pressure_level"]).strip()
     free = re.search(r"free percentage:\s*(\d+)%", _run(["memory_pressure", "-Q"]))
     swap = re.search(r"used = ([\d.]+)M", _run(["sysctl", "-n", "vm.swapusage"]))
@@ -62,6 +79,73 @@ def memory_state() -> dict:
         "free_pct": int(free.group(1)) if free else None,
         "swap_used_mb": float(swap.group(1)) if swap else None,
     }
+
+
+def parse_meminfo(text: str) -> dict[str, int]:
+    """/proc/meminfo as {field: kB}."""
+    out = {}
+    for line in text.splitlines():
+        m = re.match(r"(\w+):\s+(\d+)", line)
+        if m:
+            out[m.group(1)] = int(m.group(2))
+    return out
+
+
+def parse_psi(text: str) -> dict[str, float]:
+    """/proc/pressure/memory as {"some": avg10, "full": avg10}."""
+    return {
+        m.group(1): float(m.group(2))
+        for m in re.finditer(r"^(some|full)\s+avg10=([\d.]+)", text, re.MULTILINE)
+    }
+
+
+def psi_level(psi: dict[str, float]) -> int | None:
+    if not psi:
+        return None
+    if psi.get("full", 0.0) >= PSI_CRITICAL_FULL:
+        return 4
+    return 2 if psi.get("some", 0.0) >= PSI_WARN_SOME else 1
+
+
+def linux_memory_state(meminfo: str | None = None, psi: str | None = None) -> dict:
+    mem = parse_meminfo(_read(MEMINFO) if meminfo is None else meminfo)
+    stalls = parse_psi(_read(PSI_MEMORY) if psi is None else psi)
+    total, avail = mem.get("MemTotal"), mem.get("MemAvailable")
+    swap = None
+    if "SwapTotal" in mem and "SwapFree" in mem:
+        swap = round((mem["SwapTotal"] - mem["SwapFree"]) / 1024, 2)
+    return {
+        "pressure_level": psi_level(stalls),
+        "free_pct": int(100 * avail / total) if total and avail is not None else None,
+        "swap_used_mb": swap,
+        "psi_avg10": stalls or None,
+    }
+
+
+def gpu_memory_used_mb() -> float | None:
+    """Memory used on the first NVIDIA GPU (None without nvidia-smi)."""
+    if not shutil.which("nvidia-smi"):
+        return None
+    out = _run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"])
+    first = out.strip().splitlines()[:1]
+    try:
+        return float(first[0]) if first else None
+    except ValueError:
+        return None
+
+
+def memory_state() -> dict:
+    m = linux_memory_state() if sys.platform.startswith("linux") else macos_memory_state()
+    gpu = gpu_memory_used_mb()
+    if gpu is not None:
+        m["gpu_used_mb"] = gpu
+    return m
+
+
+def peak_children_rss_mb() -> float:
+    """Peak RSS of the largest finished child (ru_maxrss: bytes on macOS, KiB on Linux)."""
+    rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    return rss / (2**20 if sys.platform == "darwin" else 1024)
 
 
 def memory_refusal(m: dict, min_free: int) -> str | None:
@@ -173,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, forward)
     rc = proc.wait()
     leftovers = kill_group(proc.pid)
-    peak_mb = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 2**20  # bytes on macOS
+    peak_mb = peak_children_rss_mb()
     after = memory_state()
     rec = {
         "at": datetime.now(UTC).isoformat(),
@@ -190,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         f.write(json.dumps(rec) + "\n")
     print(f"{tag}: exit {rc} after {rec['seconds']} s; peak RSS {rec['peak_rss_mb']} MB; "
           f"swap used {after['swap_used_mb']} MB"
+          + (f"; GPU used {after['gpu_used_mb']} MB" if "gpu_used_mb" in after else "")
           + ("; killed leftover processes" if leftovers else ""), file=sys.stderr)  # fmt: skip
     return rc
 

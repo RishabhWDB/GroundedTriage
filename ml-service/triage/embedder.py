@@ -3,7 +3,7 @@ embedding fast tier (P3.13) and, later, KB retrieval (P5).
 
 bge recipe: CLS-token pooling, L2-normalised. Inputs are truncated to
 max_length tokens. Weights load lazily on the first encode() (one model per
-process; 8 GB RAM) and run in fp16 on MPS (MODEL_FP16), fp32 on CPU.
+process; 8 GB RAM) and run in fp16 on MPS/CUDA (MODEL_FP16), fp32 on CPU.
 
 EmbeddingCache stores vectors keyed by sha256(model | max_length | text) in
 one .npz per model, so the training/eval texts are embedded once.
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from app.device import select_device
+from app.device import select_device, use_fp16
 from app.fileio import atomic_path
 from app.settings import REPO_ROOT, get_settings
 
@@ -60,7 +60,7 @@ class Embedder:
         self.device = select_device(self._device_override)
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         model = AutoModel.from_pretrained(self.model_name)
-        if self.device == "mps" and self._fp16:
+        if use_fp16(self.device, self._fp16):
             model = model.half()
         self._model = model.to(self.device).eval()
         self.load_s = time.perf_counter() - t0

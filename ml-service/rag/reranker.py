@@ -3,7 +3,7 @@ cross-encoder/ms-marco-MiniLM-L-6-v2 (22M parameters) and keep the top-k.
 
 The reranker only decides the order. Each returned chunk keeps its cosine
 score, so the faithfulness gate's retrieval floor means the same thing with
-or without reranking. Weights load lazily on first use (fp16 on MPS, fp32 on
+or without reranking. Weights load lazily on first use (fp16 on MPS/CUDA, fp32 on
 CPU); inputs are (query, chunk text) pairs truncated to 512 tokens.
 """
 
@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 
-from app.device import select_device
+from app.device import select_device, use_fp16
 from app.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ class CrossEncoderReranker:
         self.device = select_device(self._device_override)
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
-        if self.device == "mps" and self._fp16:
+        if use_fp16(self.device, self._fp16):
             model = model.half()
         self._model = model.to(self.device).eval()
         self.load_s = time.perf_counter() - t0
