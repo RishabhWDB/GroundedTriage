@@ -18,7 +18,7 @@ ML_PORT ?= 8001
 # runs, leftover processes killed and peak RSS logged afterwards. Servers (dev,
 # ml, demo) only get the memory + lock check. See CLAUDE.md §6 "Memory rules".
 
-.PHONY: render-validate models-pack models-fetch demo demo-status demo-reset demo-expect kb retrieval-eval monitoring-ref judge-sample judge-label judge-score rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
+.PHONY: scribe-tune render-validate models-pack models-fetch demo demo-status demo-reset demo-expect kb retrieval-eval monitoring-ref judge-sample judge-label judge-score rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
 
 setup: ## Create the Python venv, install deps, fetch Go modules
 	@command -v $(PYTHON) >/dev/null || { echo "$(PYTHON) not found (brew install python@3.11)"; exit 1; }
@@ -162,6 +162,9 @@ judge-score: ## P7.2: judge vs human accuracy + Cohen's kappa (ARGS=--with-llm a
 
 monitoring-ref: ## P7.3: regenerate the PSI reference distribution (val category shares) -> config/monitoring.yaml
 	cd $(ML_DIR) && $(VPY) -m eval.monitoring_ref
+
+scribe-tune: ## P7.1: tune ONLY SCRIBE's zero-shot wording on a stratified val sample (candidates in config/scribe_candidates.yaml) -> config/scribe_tuned.yaml
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m eval.scribe_tune $(ARGS)
 
 render-validate: ## P8.2: validate render.yaml against Render's published schema + repo checks (needs network)
 	$(VPY) scripts/validate_render.py

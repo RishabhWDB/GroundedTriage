@@ -1,0 +1,42 @@
+# Candidate zero-shot wordings for "SCRIBE (val-tuned descriptions)", the
+# strengthened baseline of the Phase 2 review (P7.1). Written on 2026-10-17
+# BEFORE any candidate was scored. Only these wordings and templates are
+# searched (eval/scribe_tune.py, on a stratified val sample); the regex rules,
+# the model (bart-large-mnli) and the sentiment stage stay exactly as SCRIBE.
+# The first description of each class is the untuned one from taxonomy.yaml.
+version: 1
+templates:
+  - "This email is {}."
+  - "This customer support email is {}."
+  - "The sender of this message is writing about {}."
+descriptions:
+  Technical Issue:
+    - "a technical problem with a product or service: errors, bugs, crashes, outages, slow performance, failed integrations, or login and account access problems"
+    - "a technical problem"
+    - "a bug report, an error message, an outage or something that is not working"
+    - "a request for technical support to fix a problem with software, a device, a server or an account"
+  Billing:
+    - "a question or problem about billing, invoices, charges, payments, refunds, subscriptions, returns or exchanges"
+    - "billing or payments"
+    - "an invoice, a charge on their card, a payment, a refund or a subscription price"
+    - "money: a payment, a refund, an invoice or a billing error"
+  Feature Request:
+    - "a request to add, change or improve a product feature, configuration or integration"
+    - "a feature request"
+    - "a suggestion for a new feature or an improvement to the product"
+    - "asking for a change to how the product works or for a new capability"
+  General Inquiry:
+    - "a general question or request for information, sales or pre-sales enquiry, or feedback that is not about a technical problem or billing"
+    - "a general question"
+    - "asking for information about products, services, pricing or policies"
+    - "a general enquiry, feedback or a sales question"
+  Spam:
+    - "unsolicited bulk or promotional email, scams, phishing, or prize and lottery messages"
+    - "spam"
+    - "an advertisement, a scam or unwanted marketing"
+    - "junk mail selling something or trying to trick the reader"
+  Meeting Scheduling:
+    - "a request to schedule, reschedule or confirm a meeting, call, demo or onboarding session"
+    - "scheduling a meeting"
+    - "arranging a time for a call or a meeting"
+    - "booking, moving or confirming an appointment, call or demo"
