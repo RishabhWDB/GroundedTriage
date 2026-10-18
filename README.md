@@ -4,7 +4,7 @@ GroundedTriage is an agentic support-triage system. It ingests tickets from emai
 
 It is a capstone project that extends **SCRIBE** (Procedia CS 283, 2026). SCRIBE combines regex rules, BART-MNLI zero-shot classification, sentiment-as-priority and ungrounded LLaMA-3 replies over CSV input.
 
-> **Status:** the system is complete through serving, monitoring and deployment config. The headline evaluation, `results/REPORT.md` (P7.4), is generated once the fine-tuned models and human labels exist. `CLAUDE.md` holds the live status board, every design decision, and the results measured so far.
+> **Status:** the system is complete through serving, monitoring and deployment config. The headline evaluation, `results/REPORT.md` (P7.4), is generated once the fine-tuned models and human labels exist. `docs/status.md` holds the live status board, `docs/decisions.md` every design decision, and `docs/results.md` the results measured so far.
 
 ## SCRIBE vs GroundedTriage
 

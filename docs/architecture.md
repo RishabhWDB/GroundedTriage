@@ -4,7 +4,7 @@ GroundedTriage is two processes around one database:
 - a **Go** side (`cmd/api`, `cmd/worker`) for I/O, state, routing, review and sending;
 - a **Python ml-service** (FastAPI) for every model and LLM call.
 
-They share the contracts `Ticket`, `Classification`, `Route`, `RetrievedChunk` and `ReplyDraft`. Each is defined once per language (`internal/model`, `ml-service/app/schemas.py`) and kept in sync by tests. The full, dated decision log with the numbers behind each choice is in `CLAUDE.md` §5. This page is the per-layer summary.
+They share the contracts `Ticket`, `Classification`, `Route`, `RetrievedChunk` and `ReplyDraft`. Each is defined once per language (`internal/model`, `ml-service/app/schemas.py`) and kept in sync by tests. The full, dated decision log with the numbers behind each choice is in `docs/decisions.md`. This page is the per-layer summary.
 
 ## Layer 1: ingestion and preprocessing (`internal/ingest`, `internal/preprocess`, `internal/pipeline/poller.go`)
 
@@ -64,7 +64,7 @@ They share the contracts `Ticket`, `Classification`, `Route`, `RetrievedChunk` a
 
 - **Database safety:** migrations are up-only and additive. Tests run only on `TEST_DATABASE_URL`, in a schema per package. Demo data is tagged (`demo-*`) and is the only data `make demo-reset` can delete.
 - **External services sit behind interfaces with fakes** (Groq, IMAP/SMTP, Zendesk, Google Calendar, the ml-service), so unit tests run offline.
-- **Honest limits** (`CLAUDE.md` §3c):
+- **Honest limits** (`docs/report_notes.md`):
   - wall-clock SLAs;
   - a single shared API key;
   - Zendesk ingests the first message only;

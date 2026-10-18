@@ -56,7 +56,7 @@ The ml-service has no authentication of its own. It is a **private service**, so
    curl -H "X-API-Key: $API_KEY" "https://<api-host>/tickets?limit=5"
    ```
 
-   Then open `https://<api-host>/`, enter the key, and follow the manual UI test in `CLAUDE.md` §2.
+   Then open `https://<api-host>/`, enter the key, and follow the manual UI test in `docs/commands.md`.
 
 ## 3. Security settings (Phase 6 review)
 
@@ -66,7 +66,7 @@ The ml-service has no authentication of its own. It is a **private service**, so
   - Every browser then gets a 401 and is sent back to the key prompt; give the new key to the agents.
   - Locally, change `API_KEY` in `.env` and restart `make api`.
   - Rotate after anyone who knew the key leaves, and whenever it may have been shared in a screenshot or chat.
-- **One shared key** is the capstone's access model. Per-user accounts and RBAC are future work (CLAUDE.md §3c).
+- **One shared key** is the capstone's access model. Per-user accounts and RBAC are future work (`docs/report_notes.md`).
 - **Secrets** stay in Render's environment, never in `render.yaml`. `make render-validate` fails if a secret-looking key gets an inline value.
 
 ## 4. CPU-only profile (fast tier only)
