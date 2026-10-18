@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import csv
 
+from app.fileio import atomic_path
 from app.settings import REPO_ROOT, get_settings
 from app.textinput import model_input
 from rag.faithfulness import load_config
@@ -68,7 +69,7 @@ def main() -> int:
             }
             hit = "gold in top-5" if golds[gold] & {c.doc_id for c in res.chunks} else "gold missed"
         print(f"{r['Id']}  {r['Label']:<18} {res.max_score:.4f}  {r['Expected_Outcome']:<13} {hit}")
-    with open(PATH, "w", newline="") as f:
+    with atomic_path(PATH) as tmp, open(tmp, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         w.writerows(rows)

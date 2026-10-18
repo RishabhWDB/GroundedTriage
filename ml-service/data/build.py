@@ -34,6 +34,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from app.fileio import atomic_path, atomic_write_text
 from app.settings import REPO_ROOT
 from app.taxonomy import categories, filter_categories, topic_categories, trained_urgency_levels
 from app.textinput import MODEL_INPUT_FORMAT, model_input
@@ -355,7 +356,8 @@ def main() -> int:
     manifest = {"seed": SEED, "fractions": FRACTIONS, "cap_ratio": CAP_RATIO, "splits": {}, **info}
     for name, df in splits.items():
         path = OUT_DIR / f"{name}.parquet"
-        df.to_parquet(path, index=False)
+        with atomic_path(path) as tmp:
+            df.to_parquet(tmp, index=False)
         manifest["splits"][name] = {
             "rows": len(df),
             "file_sha256": file_sha256(path),
@@ -367,9 +369,9 @@ def main() -> int:
         "spamassassin_ham": {"archive_sha256": ham_st.archive_sha256},
         "synthetic_meetings": {"file_sha256": file_sha256(synthetic_meetings.OUT_PATH)},
     }
-    (OUT_DIR / "manifest.json").write_text(json.dumps(manifest, indent=2, default=int))
+    atomic_write_text(OUT_DIR / "manifest.json", json.dumps(manifest, indent=2, default=int))
     stats = {"tobi_bueck": asdict(tb_st), "spamassassin": asdict(sa_st), "ham": asdict(ham_st)}
-    CARD_PATH.write_text(write_card(splits, info, stats, manifest))
+    atomic_write_text(CARD_PATH, write_card(splits, info, stats, manifest))
     for name, m in manifest["splits"].items():
         logger.info("%s: %d rows, content sha256 %s", name, m["rows"], m["content_sha256"][:12])
     return 0

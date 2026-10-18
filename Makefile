@@ -12,6 +12,11 @@ ML_PORT ?= 8001
 # .env is NOT included here: make would parse it as Makefile syntax and break on
 # `$`, `#` and URL-encoded passwords. Programs load .env themselves (Go: godotenv,
 # Python: python-dotenv / pydantic-settings; honcho reads it for `make dev`).
+#
+# Model-loading and LLM-batch targets run under scripts/jobguard.py: one job at a
+# time (flock), refused under memory pressure or while make dev / the ml-service
+# runs, leftover processes killed and peak RSS logged afterwards. Servers (dev,
+# ml, demo) only get the memory + lock check. See CLAUDE.md §6 "Memory rules".
 
 .PHONY: render-validate models-pack models-fetch demo demo-status demo-reset demo-expect kb retrieval-eval monitoring-ref judge-sample judge-label judge-score rag-eval rag-eval-plan rag-floor-sweep calendar-auth setup setup-models setup-baseline baseline baseline-eval baseline-stress dev api worker ml test test-go test-py test-integration lint fmt migrate migrate-status migrate-verify seed data data-audit synthetic-meetings stress-set export-splits fast-tier fast-tier-aug fast-tier-emb fast-tier-emb-aug urgency-eval tune-tau ood-set ood-eval ood-eval-test style-aug spam-filter
 
@@ -30,16 +35,16 @@ setup-baseline: ## Install the optional SCRIBE baseline extra (torch + transform
 	cd $(ML_DIR) && $(VPY) -m pip install -e ".[dev,data,baseline,eval]"
 
 baseline: ## SCRIBE baseline CLI, e.g. make baseline ARGS="classify --split test --limit 10"
-	cd $(ML_DIR) && $(VPY) -m baseline $(ARGS)
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m baseline $(ARGS)
 
 baseline-eval: ## P2.3: run the SCRIBE baseline on the test split -> results/baseline/ (~90 min on M1 under swap; resumable)
-	cd $(ML_DIR) && $(VPY) -m baseline evaluate --split test
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m baseline evaluate --split test
 
 baseline-stress: ## Score the reviewed Meeting stress set into results/baseline/metrics.json (needs a finished baseline-eval)
-	cd $(ML_DIR) && $(VPY) -m baseline evaluate --stress-only
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m baseline evaluate --stress-only
 
 dev: ## Start api, worker and ml-service together (honcho + Procfile)
-	$(VBIN)/honcho start
+	$(VPY) scripts/jobguard.py --name $@ --check-only --allow-services -- $(VBIN)/honcho start
 
 api:
 	go run ./cmd/api
@@ -48,7 +53,7 @@ worker:
 	go run ./cmd/worker
 
 ml:
-	cd $(ML_DIR) && $(VBIN)/uvicorn app.main:app --host 127.0.0.1 --port $(ML_PORT) --reload
+	$(VPY) scripts/jobguard.py --name $@ --check-only --allow-services --cwd $(ML_DIR) -- $(VBIN)/uvicorn app.main:app --host 127.0.0.1 --port $(ML_PORT) --reload
 
 test: test-go test-py ## Unit tests (slow + integration skipped)
 
@@ -81,70 +86,70 @@ migrate-verify: ## Read-only check: vector extension, all tables, HNSW index
 	go run ./cmd/migrate verify
 
 data: ## Build datasets/processed splits + manifest + dataset card (downloads raw data on first run)
-	cd $(ML_DIR) && $(VPY) -m data.build
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m data.build
 
 synthetic-meetings: ## (Re)generate synthetic meeting emails via Groq; cached, resumable
-	cd $(ML_DIR) && $(VPY) -m data.synthetic_meetings
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m data.synthetic_meetings
 
 data-audit: ## Synthetic diversity, train/test leakage and subject-shortcut checks -> results/data_audit/
-	cd $(ML_DIR) && $(VPY) -m data.audit
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m data.audit
 
 stress-set: ## Generate the hard Meeting Scheduling stress-test CSV (eval only; needs human review)
-	cd $(ML_DIR) && $(VPY) -m data.stress_meetings
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m data.stress_meetings
 
 export-splits: ## Bundle splits + taxonomy + card for the GPU PC (datasets/export/)
 	cd $(ML_DIR) && $(VPY) -m data.export
 
 fast-tier: ## P3.1: train the TF-IDF+LR fast tier on train, report on val -> models/fast_tier/, results/fast_tier/
-	cd $(ML_DIR) && $(VPY) -m triage.train_fast_tier
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m triage.train_fast_tier
 
 fast-tier-emb: ## P3.13: bge-small embeddings + LR fast tier (cached embeddings) -> models/fast_tier_emb/, results/fast_tier_emb/
-	cd $(ML_DIR) && $(VPY) -m triage.train_emb_fast_tier
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m triage.train_emb_fast_tier
 
 fast-tier-emb-aug: ## P3.13 ablation: embedding fast tier on train + train_style_aug
-	cd $(ML_DIR) && $(VPY) -m triage.train_emb_fast_tier --style-aug
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m triage.train_emb_fast_tier --style-aug
 
 fast-tier-aug: ## Ablation: fast tier on train + train_style_aug -> models/fast_tier_aug/, results/fast_tier_aug/
-	cd $(ML_DIR) && $(VPY) -m triage.train_fast_tier --style-aug
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m triage.train_fast_tier --style-aug
 
 urgency-eval: ## P3.3: score the urgency heuristic (and model, if present) on val -> results/urgency/
-	cd $(ML_DIR) && $(VPY) -m triage.eval_urgency
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m triage.eval_urgency
 
 tune-tau: ## P3.4: sweep the cascade threshold on val (needs models/deep_tier/) -> config/cascade.yaml, results/cascade/
-	cd $(ML_DIR) && $(VPY) -m triage.tune_threshold
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m triage.tune_threshold
 
 ood-set: ## P3.11: build the OOD set (Twitter pre-labelled for review, Enron spam, team template) -> datasets/ood/
-	cd $(ML_DIR) && $(VPY) -m data.ood
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m data.ood
 
 ood-eval: ## Required gate: score SCRIBE, fast tier and cascades on ood-dev (choices are made here) -> results/ood/dev/
-	cd $(ML_DIR) && $(VPY) -m eval.ood_eval --with-baseline
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m eval.ood_eval --with-baseline
 
 ood-eval-test: ## Final systems only: score ood-test once (logged to results/ood/test_log.jsonl) -> results/ood/test/
-	cd $(ML_DIR) && $(VPY) -m eval.ood_eval --with-baseline --test
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m eval.ood_eval --with-baseline --test
 
 style-aug: ## P3.8: informal-style paraphrases of ~25% of train via Groq (resumable; days on the free tier) -> datasets/synthetic/style_aug.jsonl
-	cd $(ML_DIR) && $(VPY) -m data.style_aug
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m data.style_aug
 
 spam-filter: ## P3.9: train the binary spam filter, thresholds on spam_val -> models/spam_filter/, results/spam_filter/
-	cd $(ML_DIR) && $(VPY) -m triage.train_spam_filter
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m triage.train_spam_filter
 
 calendar-auth: ## P4.4: one-time Google OAuth (installed app) for the meeting scheduler -> GOOGLE_TOKEN_FILE
 	go run ./cmd/calendar-auth
 
 kb: ## P5.1: ingest the WixQA help-centre KB into kb_documents/kb_chunks on DATABASE_URL (idempotent) -> results/kb/
-	cd $(ML_DIR) && $(VPY) -m rag.kb --wixqa
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m rag.kb --wixqa
 
 retrieval-eval: ## P5.2: recall@1/3/5 + MRR on WixQA QA pairs, dense vs hybrid -> results/retrieval/
-	cd $(ML_DIR) && $(VPY) -m eval.retrieval
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m eval.retrieval
 
 rag-eval-plan: ## P7.2: sizing + expected days at the Groq free cap (retrieval only, no LLM calls) -> results/rag/plan.json
-	cd $(ML_DIR) && $(VPY) -m eval.rag_eval --plan
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m eval.rag_eval --plan
 
 rag-floor-sweep: ## P7.2: floor sweep (keep 85/90/95/98%) on p72_dev, retrieval only -> results/rag/floor_sweep.json
-	cd $(ML_DIR) && $(VPY) -m eval.rag_eval --sweep
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m eval.rag_eval --sweep
 
 rag-eval: ## P7.2: grounded vs ungrounded replies on p72_test + out-of-KB (cached, resumable; re-run daily) -> results/rag/
-	cd $(ML_DIR) && $(VPY) -m eval.rag_eval $(ARGS)
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m eval.rag_eval $(ARGS)
 
 judge-sample: ## P7.2: sample ~80 judged claims from the RAG run for hand-labelling -> datasets/judge_labels/claims.csv
 	cd $(ML_DIR) && $(VPY) -m eval.judge_labels sample $(ARGS)
@@ -153,7 +158,7 @@ judge-label: ## P7.2: label the sampled claims interactively (y/n/u; resumable)
 	cd $(ML_DIR) && $(VPY) -m eval.judge_labels label
 
 judge-score: ## P7.2: judge vs human accuracy + Cohen's kappa (ARGS=--with-llm adds per-claim qwen and gpt-oss) -> results/rag/judge_validation.*
-	cd $(ML_DIR) && $(VPY) -m eval.judge_labels score $(ARGS)
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m eval.judge_labels score $(ARGS)
 
 monitoring-ref: ## P7.3: regenerate the PSI reference distribution (val category shares) -> config/monitoring.yaml
 	cd $(ML_DIR) && $(VPY) -m eval.monitoring_ref
@@ -170,7 +175,7 @@ models-fetch: ## P8.2: install MODELS_URL (checked against MODELS_SHA256) into M
 seed: demo ## Alias of make demo
 
 demo: ## P8.1: load the 25 demo tickets (Ids demo-*), run the pipeline once, print expected vs actual, then make dev (DEMO_NO_DEV=1 stops before)
-	./scripts/demo.sh
+	$(VPY) scripts/jobguard.py --name $@ --check-only --allow-services -- ./scripts/demo.sh
 
 demo-status: ## P8.1: expected vs actual outcome per demo ticket
 	go run ./cmd/demo status
@@ -179,4 +184,4 @@ demo-reset: ## P8.1: delete ONLY demo-tagged tickets (+ their classifications, r
 	go run ./cmd/demo reset
 
 demo-expect: ## P8.1: re-measure each demo ticket's retrieval score and expected outcome (no LLM calls) -> datasets/demo/demo_tickets.csv
-	cd $(ML_DIR) && $(VPY) -m eval.demo_expect
+	$(VPY) scripts/jobguard.py --name $@ --cwd $(ML_DIR) -- $(VPY) -m eval.demo_expect

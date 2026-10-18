@@ -33,6 +33,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
+from app.fileio import atomic_write_text
 from app.llm import LLM, JSONModeError, LLMError, TruncatedError
 from app.schemas import ReplyDraft, RetrievedChunk
 from app.settings import REPO_ROOT
@@ -108,8 +109,7 @@ class JudgeCache:
         return json.loads(p.read_text())["response"] if p.exists() else None
 
     def put(self, key: str, response: str) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        (self.root / f"{key}.json").write_text(json.dumps({"response": response}))
+        atomic_write_text(self.root / f"{key}.json", json.dumps({"response": response}))
 
 
 def judge_messages(body: str, chunks: list[RetrievedChunk]) -> list[dict[str, str]]:

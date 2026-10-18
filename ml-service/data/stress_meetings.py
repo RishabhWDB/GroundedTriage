@@ -28,6 +28,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.fileio import atomic_path
 from app.llm import LLM, LLMError, build_llm
 from app.settings import REPO_ROOT, get_settings
 from data.synthetic_meetings import Cache, parse_response
@@ -225,8 +226,7 @@ def generate(llm: LLM, model: str, cache: Cache, attempts: int = 3) -> list[dict
 
 
 def write_csv(rows: list[dict], path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", newline="", encoding="utf-8") as f:
+    with atomic_path(path) as tmp, open(tmp, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         w.writerows(rows)

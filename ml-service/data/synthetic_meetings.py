@@ -23,6 +23,7 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from app.fileio import atomic_path, atomic_write_text
 from app.llm import LLM, LLMError, build_llm
 from app.settings import REPO_ROOT, get_settings
 
@@ -187,8 +188,7 @@ class Cache:
         return json.loads(p.read_text())["response"] if p.exists() else None
 
     def put(self, key: str, response: str) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        (self.root / f"{key}.json").write_text(json.dumps({"response": response}))
+        atomic_write_text(self.root / f"{key}.json", json.dumps({"response": response}))
 
 
 def generate(
@@ -252,8 +252,7 @@ def main() -> int:
     except LLMError as exc:
         logger.error("generation stopped: %s (cached batches are kept; re-run to resume)", exc)
         return 1
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUT_PATH, "w", encoding="utf-8") as f:
+    with atomic_path(OUT_PATH) as tmp, open(tmp, "w", encoding="utf-8") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     logger.info("wrote %d rows to %s; token usage: %s", len(rows), OUT_PATH, llm.usage)

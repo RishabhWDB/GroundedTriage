@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from app.fileio import append_line, open_append, read_jsonl
 from app.interfaces import TicketText
 from app.settings import REPO_ROOT
 from app.taxonomy import categories
@@ -70,12 +71,11 @@ def run_predictions(
 ) -> pd.DataFrame:
     done: dict[str, dict] = {}
     if partial.exists():
-        for line in partial.read_text().splitlines():
-            r = json.loads(line)
+        for r in read_jsonl(partial):
             done[r["id"]] = r
         logger.info("resuming: %d predictions already in %s", len(done), partial.name)
     todo = df[~df["id"].isin(done)]
-    with open(partial, "a") as f:
+    with open_append(partial) as f:
         for start in range(0, len(todo), batch_size):
             batch = todo.iloc[start : start + batch_size]
             preds, total, stage = _timed(clf, _tickets(batch))
@@ -94,9 +94,8 @@ def run_predictions(
                         f"batch_{k}_ms_per_ticket": round(v * 1000 / n, 3) for k, v in stage.items()
                     },
                 }
-                f.write(json.dumps(rec) + "\n")
+                append_line(f, rec)
                 done[row.id] = rec
-            f.flush()
             if (start // batch_size) % 10 == 0:
                 logger.info("%d/%d", len(done), len(df))
     return pd.DataFrame([done[i] for i in df["id"]])

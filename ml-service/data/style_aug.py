@@ -35,6 +35,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from app.fileio import append_line, atomic_write_text, open_append, read_jsonl
 from app.llm import LLM, JSONModeError, LLMError, build_llm
 from app.settings import REPO_ROOT, get_settings
 from data.build import OUT_DIR
@@ -137,9 +138,7 @@ def too_similar(originals: list[str], rewrites: list[str]) -> list[bool]:
 
 
 def load_done(path: Path = OUT_PATH) -> dict[str, dict]:
-    if not path.exists():
-        return {}
-    return {r["aug_of"]: r for r in map(json.loads, path.read_text().splitlines())}
+    return {r["aug_of"]: r for r in read_jsonl(path)}
 
 
 def generate(
@@ -158,8 +157,7 @@ def generate(
     if limit is not None:
         todo = todo[:limit]
     stats = {"selected": len(picked), "already_done": len(done), "written": 0, "rejected": 0}
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with open(out, "a", encoding="utf-8") as f:
+    with open_append(out) as f:
         for b in range(0, len(todo), BATCH_SIZE):
             idx = todo[b : b + BATCH_SIZE]
             rows = [picked.iloc[i].to_dict() for i in idx]
@@ -203,9 +201,8 @@ def generate(
                     "body": e["body"],
                     "style": asdict(s),
                 }
-                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                append_line(f, rec, ensure_ascii=False)
                 stats["written"] += 1
-            f.flush()
             if (b // BATCH_SIZE) % 10 == 0:
                 logger.info("%d/%d rows this run", b + len(idx), len(todo))
     stats["total_done"] = len(load_done(out))
@@ -222,7 +219,7 @@ def recheck(train: pd.DataFrame, path: Path = OUT_PATH) -> int:
     keep = [r for r in done if r["aug_of"] in src.index]
     similar = too_similar([src[r["aug_of"]] for r in keep], [r["body"] for r in keep])
     kept = [r for r, s in zip(keep, similar, strict=True) if not s]
-    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept))
+    atomic_write_text(path, "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept))
     return len(done) - len(kept)
 
 

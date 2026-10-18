@@ -47,6 +47,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from app.fileio import append_line, open_append, read_jsonl
 from app.interfaces import CategoryPrediction, TicketText
 from app.llm import CachingLLM, LLMError, build_llm
 from app.settings import REPO_ROOT, get_settings
@@ -225,10 +226,7 @@ def call(fn, *args, **kw):
 
 
 def load_progress(path: Path) -> dict[tuple[str, str], dict]:
-    if not path.exists():
-        return {}
-    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    return {(r["item_id"], r["system"]): r for r in rows}
+    return {(r["item_id"], r["system"]): r for r in read_jsonl(path)}
 
 
 def run(
@@ -251,7 +249,7 @@ def run(
     scribe = ScribeDrafter(drafter)
     status: dict = {"processed": 0, "stopped": None, "errors": []}
     todo = items if limit is None else items[:limit]
-    with open(progress_path, "a") as f:
+    with open_append(progress_path) as f:
         for it in todo:
             if all((it.id, s) in done for s in ("grounded", "ungrounded")):
                 continue
@@ -295,7 +293,7 @@ def run(
                             claims=[c.model_dump() for c in claims],
                         )
                     done[(it.id, "grounded")] = finish(row, it, embed)
-                    f.write(json.dumps(done[(it.id, "grounded")]) + "\n")
+                    append_line(f, done[(it.id, "grounded")])
                     f.flush()
                 if (it.id, "ungrounded") not in done:
                     pred = CategoryPrediction(
@@ -319,7 +317,7 @@ def run(
                         "claims": [c.model_dump() for c in claims],
                     }
                     done[(it.id, "ungrounded")] = finish(row, it, embed)
-                    f.write(json.dumps(done[(it.id, "ungrounded")]) + "\n")
+                    append_line(f, done[(it.id, "ungrounded")])
                     f.flush()
             except DailyCapReached as exc:
                 status["stopped"] = f"daily cap: {str(exc)[:160]}"

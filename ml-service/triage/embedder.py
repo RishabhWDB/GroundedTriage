@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 
 from app.device import select_device
+from app.fileio import atomic_path
 from app.settings import REPO_ROOT, get_settings
 
 logger = logging.getLogger(__name__)
@@ -118,8 +119,6 @@ class EmbeddingCache:
         return np.stack([self._vecs[k] for k in keys])
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         keys = list(self._vecs)
-        tmp = self.path.with_suffix(".tmp.npz")
-        np.savez(tmp, keys=np.array(keys), vecs=np.stack([self._vecs[k] for k in keys]))
-        tmp.replace(self.path)
+        with atomic_path(self.path) as tmp:
+            np.savez(tmp, keys=np.array(keys), vecs=np.stack([self._vecs[k] for k in keys]))

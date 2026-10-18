@@ -32,6 +32,7 @@ import random
 import sys
 from pathlib import Path
 
+from app.fileio import atomic_path, atomic_write_text
 from app.settings import REPO_ROOT
 
 LABEL_DIR = REPO_ROOT / "datasets" / "judge_labels"
@@ -134,13 +135,10 @@ def read_labels(path: Path = LABELS) -> list[dict]:
 
 
 def write_labels(rows: list[dict], path: Path = LABELS) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", newline="") as f:
+    with atomic_path(path) as tmp, open(tmp, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         w.writerows(rows)
-    tmp.replace(path)
 
 
 def label(path: Path = LABELS, ask=input, show=print) -> int:
@@ -272,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
             print("no judged claims yet; run `make rag-eval` first", file=sys.stderr)
             return 1
         write_labels(rows)
-        VERDICTS.write_text(json.dumps(verdicts, indent=2, sort_keys=True))
+        atomic_write_text(VERDICTS, json.dumps(verdicts, indent=2, sort_keys=True))
         print(f"wrote {len(rows)} claims to {LABELS} (judge supported: {sum(verdicts.values())})")
         return 0
     if args.cmd == "label":

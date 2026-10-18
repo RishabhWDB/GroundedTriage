@@ -45,6 +45,7 @@ from pathlib import Path
 import pandas as pd
 from langdetect import DetectorFactory, LangDetectException, detect
 
+from app.fileio import atomic_path
 from app.llm import LLM, LLMError, build_llm
 from app.settings import REPO_ROOT, get_settings
 from app.taxonomy import categories
@@ -247,8 +248,7 @@ def persist_splits(path: Path, fields: list[str]) -> int:
 
 
 def write_csv(path: Path, rows: list[dict], fields: list[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", newline="", encoding="utf-8") as f:
+    with atomic_path(path) as tmp, open(tmp, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         w.writerows(rows)

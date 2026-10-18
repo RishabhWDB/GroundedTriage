@@ -19,6 +19,8 @@ from typing import Protocol
 
 import httpx
 
+from app.fileio import atomic_write_text
+
 logger = logging.getLogger(__name__)
 
 Message = dict[str, str]
@@ -265,8 +267,5 @@ class CachingLLM:
         self.misses += 1
         text = self.llm.complete(messages, temperature=temperature, json_mode=json_mode,
                                  max_tokens=max_tokens)  # fmt: skip
-        self.root.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"response": text}))
-        tmp.replace(path)
+        atomic_write_text(path, json.dumps({"response": text}))
         return text
